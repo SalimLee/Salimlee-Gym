@@ -1,0 +1,8 @@
+export { Header } from './Header'
+export { Hero } from './Hero'
+export { Stats } from './Stats'
+export { Services } from './Services'
+export { Pricing } from './Pricing'
+export { Contact } from './Contact'
+export { Footer } from './Footer'
+export { BookingModal } from './BookingModal'

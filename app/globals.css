@@ -1,0 +1,88 @@
+@import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-dark-950 text-dark-50 antialiased;
+    font-family: 'Barlow', sans-serif;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-dark-900;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-brand-600 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-brand-500;
+  }
+
+  /* Date picker styling */
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+    cursor: pointer;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply px-8 py-4 bg-gradient-to-r from-brand-500 to-brand-600 
+           text-dark-950 font-black rounded-lg 
+           hover:shadow-lg hover:shadow-brand-500/50 
+           transition-all duration-300 transform hover:scale-105
+           focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-dark-950;
+  }
+
+  .btn-secondary {
+    @apply px-8 py-4 border-2 border-brand-500/50 text-brand-500 
+           font-black rounded-lg hover:bg-brand-500/10 
+           transition-all duration-300
+           focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-dark-950;
+  }
+
+  .btn-ghost {
+    @apply px-8 py-4 border-2 border-dark-700 text-dark-300 
+           font-black rounded-lg hover:bg-dark-800 
+           transition-all duration-300;
+  }
+
+  .card {
+    @apply bg-dark-900/50 rounded-xl border border-brand-600/20 
+           hover:border-brand-500/50 transition-all duration-300;
+  }
+
+  .input-field {
+    @apply w-full px-4 py-3 bg-dark-800 border border-brand-600/20 
+           rounded-lg focus:border-brand-500 focus:outline-none 
+           focus:ring-2 focus:ring-brand-500/20
+           text-dark-100 placeholder:text-dark-500;
+  }
+
+  .section-title {
+    @apply text-5xl md:text-6xl font-black tracking-tight;
+  }
+
+  .gradient-text {
+    @apply bg-gradient-to-r from-brand-400 to-brand-600 bg-clip-text text-transparent;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
