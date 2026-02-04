@@ -8,7 +8,6 @@ import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { SERVICES } from '@/lib/constants'
 import { Service } from '@/types'
-// import { getSupabaseClient } from '@/lib/supabase/client'
 
 // Validation Schema
 const bookingSchema = z.object({
@@ -32,6 +31,7 @@ interface BookingModalProps {
 export function BookingModal({ isOpen, onClose, selectedService }: BookingModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitSuccess, setSubmitSuccess] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
 
   const {
     register,
@@ -48,34 +48,36 @@ export function BookingModal({ isOpen, onClose, selectedService }: BookingModalP
 
   const onSubmit = async (data: BookingFormData) => {
     setIsSubmitting(true)
+    setSubmitError(null)
     
     try {
-      // TODO: Supabase Integration
-      // const supabase = getSupabaseClient()
-      // const { error } = await supabase.from('bookings').insert({
-      //   name: data.name,
-      //   email: data.email,
-      //   phone: data.phone || null,
-      //   service: data.service,
-      //   people: parseInt(data.people),
-      //   preferred_date: data.date || null,
-      //   message: data.message || null,
-      //   status: 'pending',
-      // })
-      // if (error) throw error
+      // API aufrufen für Email-Versand
+      const response = await fetch('/api/booking', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
 
-      // Temporär: Alert anzeigen
-      console.log('Buchung:', data)
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Fehler beim Senden')
+      }
+
       setSubmitSuccess(true)
       
       setTimeout(() => {
         reset()
         setSubmitSuccess(false)
         onClose()
-      }, 2000)
+      }, 3000)
     } catch (error) {
       console.error('Buchungsfehler:', error)
-      alert('Ein Fehler ist aufgetreten. Bitte versuche es erneut.')
+      setSubmitError(
+        error instanceof Error 
+          ? error.message 
+          : 'Ein Fehler ist aufgetreten. Bitte versuche es erneut.'
+      )
     } finally {
       setIsSubmitting(false)
     }
@@ -84,6 +86,7 @@ export function BookingModal({ isOpen, onClose, selectedService }: BookingModalP
   const handleClose = () => {
     reset()
     setSubmitSuccess(false)
+    setSubmitError(null)
     onClose()
   }
 
@@ -101,10 +104,20 @@ export function BookingModal({ isOpen, onClose, selectedService }: BookingModalP
             </svg>
           </div>
           <h3 className="text-2xl font-black mb-2">Vielen Dank!</h3>
-          <p className="text-dark-400">Wir melden uns in Kürze bei dir.</p>
+          <p className="text-dark-400">
+            Wir haben dir eine Bestätigung per E-Mail geschickt.<br />
+            Wir melden uns in Kürze bei dir!
+          </p>
         </div>
       ) : (
         <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-4">
+          {/* Error Message */}
+          {submitError && (
+            <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
+              ⚠️ {submitError}
+            </div>
+          )}
+
           {/* Name */}
           <div>
             <label className="block text-sm font-bold mb-2 text-dark-300">
@@ -217,7 +230,17 @@ export function BookingModal({ isOpen, onClose, selectedService }: BookingModalP
               size="lg"
               disabled={isSubmitting}
             >
-              {isSubmitting ? 'WIRD GESENDET...' : 'BUCHUNG ABSENDEN'}
+              {isSubmitting ? (
+                <span className="flex items-center justify-center gap-2">
+                  <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  WIRD GESENDET...
+                </span>
+              ) : (
+                'BUCHUNG ABSENDEN'
+              )}
             </Button>
             <Button
               type="button"
