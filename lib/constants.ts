@@ -5,7 +5,7 @@ export const SITE_CONFIG = {
   shortName: 'Salim Lee',
   tagline: 'BOXING & FITNESS',
   description: 'Professionelles Boxen und Fitness Training in Reutlingen. Personaltraining, Gruppenkurse und spezielle Kinderkurse – für alle Levels.',
-  url: 'https://salim-lee-gym.de',
+  url: 'https://salimlee-gym.de',
 } as const
 
 export const CONTACT_INFO: ContactInfo = {
@@ -16,7 +16,7 @@ export const CONTACT_INFO: ContactInfo = {
     country: 'Deutschland',
   },
   phone: '+49 (0) 123 456 789',
-  email: 'info@salim-lee-gym.de',
+  email: 'info@salimlee-gym.de',
   hours: {
     weekdays: 'Mo - Fr: 06:00 - 22:00',
     weekend: 'Sa - So: 08:00 - 20:00',

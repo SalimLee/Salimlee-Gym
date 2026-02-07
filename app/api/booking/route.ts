@@ -4,7 +4,7 @@ import { Resend } from 'resend'
 const resend = new Resend(process.env.RESEND_API_KEY)
 
 // Email-Adresse des Gym-Besitzers - HIER ANPASSEN!
-const GYM_EMAIL = process.env.GYM_EMAIL || 'info@salim-lee-gym.de'
+const GYM_EMAIL = process.env.GYM_EMAIL || 'info@salimlee-gym.de'
 
 export async function POST(request: NextRequest) {
   try {
@@ -177,7 +177,7 @@ export async function POST(request: NextRequest) {
                 <a href="tel:+491234567890" style="color: #f59e0b; text-decoration: none;">📞 +49 (0) 123 456 789</a>
               </p>
               <p style="margin: 5px 0;">
-                <a href="mailto:info@salim-lee-gym.de" style="color: #f59e0b; text-decoration: none;">📧 info@salim-lee-gym.de</a>
+                <a href="mailto:info@salimlee-gym.de" style="color: #f59e0b; text-decoration: none;">📧 info@salimlee-gym.de</a>
               </p>
             </div>
             
