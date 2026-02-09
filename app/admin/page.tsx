@@ -41,17 +41,16 @@ export default function AdminDashboard() {
   const [adminNotes, setAdminNotes] = useState('')
   const [saving, setSaving] = useState(false)
 
-  // Auth prüfen
+  // Auth prüfen mit onAuthStateChange (zuverlässiger als getSession)
   useEffect(() => {
-    const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session) {
+        setAuthenticated(true)
+      } else {
         window.location.href = '/admin/login'
-        return
       }
-      setAuthenticated(true)
-    }
-    checkAuth()
+    })
+    return () => subscription.unsubscribe()
   }, [])
 
   // Buchungen laden
