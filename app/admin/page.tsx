@@ -2,11 +2,29 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { getSupabaseClient } from '@/lib/supabase/client'
-import { Database } from '@/types/database.types'
+import { createClient } from '@supabase/supabase-js'
 
-type Booking = Database['public']['Tables']['bookings']['Row']
-type BookingStatus = Database['public']['Enums']['booking_status']
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
+
+type BookingStatus = 'pending' | 'confirmed' | 'cancelled'
+
+interface Booking {
+  id: string
+  created_at: string
+  updated_at: string
+  name: string
+  email: string
+  phone: string | null
+  service: string
+  people: number
+  preferred_date: string | null
+  message: string | null
+  status: BookingStatus
+  admin_notes: string | null
+}
 
 const STATUS_CONFIG: Record<BookingStatus, { label: string; color: string; bg: string }> = {
   pending: { label: 'Offen', color: 'text-yellow-400', bg: 'bg-yellow-400/10 border-yellow-400/30' },
@@ -23,9 +41,7 @@ export default function AdminDashboard() {
   const [adminNotes, setAdminNotes] = useState('')
   const [saving, setSaving] = useState(false)
   const router = useRouter()
-  const supabase = getSupabaseClient()
 
-  // Auth prüfen
   useEffect(() => {
     const checkAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession()
@@ -36,9 +52,8 @@ export default function AdminDashboard() {
       setAuthenticated(true)
     }
     checkAuth()
-  }, [supabase, router])
+  }, [router])
 
-  // Buchungen laden
   const loadBookings = useCallback(async () => {
     setLoading(true)
     const { data, error } = await supabase
@@ -49,10 +64,10 @@ export default function AdminDashboard() {
     if (error) {
       console.error('Fehler beim Laden:', error)
     } else {
-      setBookings(data || [])
+      setBookings((data as Booking[]) || [])
     }
     setLoading(false)
-  }, [supabase])
+  }, [])
 
   useEffect(() => {
     if (authenticated) {
@@ -60,12 +75,11 @@ export default function AdminDashboard() {
     }
   }, [authenticated, loadBookings])
 
-  // Status ändern
   const updateStatus = async (id: string, newStatus: BookingStatus) => {
     setSaving(true)
     const { error } = await supabase
       .from('bookings')
-      .update({ status: newStatus } as Record<string, unknown>)
+      .update({ status: newStatus })
       .eq('id', id)
 
     if (!error) {
@@ -77,12 +91,11 @@ export default function AdminDashboard() {
     setSaving(false)
   }
 
-  // Admin-Notizen speichern
   const saveNotes = async (id: string) => {
     setSaving(true)
     const { error } = await supabase
       .from('bookings')
-      .update({ admin_notes: adminNotes } as Record<string, unknown>)
+      .update({ admin_notes: adminNotes })
       .eq('id', id)
 
     if (!error) {
@@ -94,16 +107,13 @@ export default function AdminDashboard() {
     setSaving(false)
   }
 
-  // Logout
   const handleLogout = async () => {
     await supabase.auth.signOut()
     router.push('/admin/login')
   }
 
-  // Gefilterte Buchungen
   const filteredBookings = filter === 'all' ? bookings : bookings.filter(b => b.status === filter)
 
-  // Statistiken
   const stats = {
     total: bookings.length,
     pending: bookings.filter(b => b.status === 'pending').length,
@@ -111,7 +121,6 @@ export default function AdminDashboard() {
     cancelled: bookings.filter(b => b.status === 'cancelled').length,
   }
 
-  // Datum formatieren
   const formatDate = (date: string) => {
     return new Date(date).toLocaleDateString('de-DE', {
       day: '2-digit',
@@ -142,7 +151,6 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-dark-950">
-      {/* Header */}
       <header className="bg-dark-900/80 border-b border-dark-800 sticky top-0 z-50 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
           <div>
@@ -152,83 +160,38 @@ export default function AdminDashboard() {
             </h1>
           </div>
           <div className="flex items-center gap-4">
-            <a href="/" className="text-dark-400 hover:text-brand-500 text-sm transition-colors">
-              Webseite
-            </a>
-            <button
-              onClick={handleLogout}
-              className="px-4 py-2 text-sm text-dark-400 hover:text-red-400 border border-dark-700 rounded-lg hover:border-red-400/30 transition-all"
-            >
-              Abmelden
-            </button>
+            <a href="/" className="text-dark-400 hover:text-brand-500 text-sm transition-colors">Webseite</a>
+            <button onClick={handleLogout} className="px-4 py-2 text-sm text-dark-400 hover:text-red-400 border border-dark-700 rounded-lg hover:border-red-400/30 transition-all">Abmelden</button>
           </div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Statistik-Karten */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <button
-            onClick={() => setFilter('all')}
-            className={`p-4 rounded-xl border transition-all text-left ${
-              filter === 'all'
-                ? 'bg-brand-500/10 border-brand-500/50'
-                : 'bg-dark-900/50 border-dark-800 hover:border-dark-700'
-            }`}
-          >
+          <button onClick={() => setFilter('all')} className={`p-4 rounded-xl border transition-all text-left ${filter === 'all' ? 'bg-brand-500/10 border-brand-500/50' : 'bg-dark-900/50 border-dark-800 hover:border-dark-700'}`}>
             <p className="text-3xl font-black text-dark-100">{stats.total}</p>
             <p className="text-sm text-dark-400 mt-1">Gesamt</p>
           </button>
-          <button
-            onClick={() => setFilter('pending')}
-            className={`p-4 rounded-xl border transition-all text-left ${
-              filter === 'pending'
-                ? 'bg-yellow-400/10 border-yellow-400/50'
-                : 'bg-dark-900/50 border-dark-800 hover:border-dark-700'
-            }`}
-          >
+          <button onClick={() => setFilter('pending')} className={`p-4 rounded-xl border transition-all text-left ${filter === 'pending' ? 'bg-yellow-400/10 border-yellow-400/50' : 'bg-dark-900/50 border-dark-800 hover:border-dark-700'}`}>
             <p className="text-3xl font-black text-yellow-400">{stats.pending}</p>
             <p className="text-sm text-dark-400 mt-1">Offen</p>
           </button>
-          <button
-            onClick={() => setFilter('confirmed')}
-            className={`p-4 rounded-xl border transition-all text-left ${
-              filter === 'confirmed'
-                ? 'bg-green-400/10 border-green-400/50'
-                : 'bg-dark-900/50 border-dark-800 hover:border-dark-700'
-            }`}
-          >
+          <button onClick={() => setFilter('confirmed')} className={`p-4 rounded-xl border transition-all text-left ${filter === 'confirmed' ? 'bg-green-400/10 border-green-400/50' : 'bg-dark-900/50 border-dark-800 hover:border-dark-700'}`}>
             <p className="text-3xl font-black text-green-400">{stats.confirmed}</p>
             <p className="text-sm text-dark-400 mt-1">Bestätigt</p>
           </button>
-          <button
-            onClick={() => setFilter('cancelled')}
-            className={`p-4 rounded-xl border transition-all text-left ${
-              filter === 'cancelled'
-                ? 'bg-red-400/10 border-red-400/50'
-                : 'bg-dark-900/50 border-dark-800 hover:border-dark-700'
-            }`}
-          >
+          <button onClick={() => setFilter('cancelled')} className={`p-4 rounded-xl border transition-all text-left ${filter === 'cancelled' ? 'bg-red-400/10 border-red-400/50' : 'bg-dark-900/50 border-dark-800 hover:border-dark-700'}`}>
             <p className="text-3xl font-black text-red-400">{stats.cancelled}</p>
             <p className="text-sm text-dark-400 mt-1">Storniert</p>
           </button>
         </div>
 
-        {/* Buchungsliste & Detail */}
         <div className="grid lg:grid-cols-3 gap-6">
-          {/* Buchungsliste */}
           <div className="lg:col-span-2">
             <div className="bg-dark-900/50 rounded-xl border border-dark-800 overflow-hidden">
               <div className="p-4 border-b border-dark-800 flex items-center justify-between">
-                <h2 className="font-bold text-dark-100">
-                  Buchungen {filter !== 'all' && `(${STATUS_CONFIG[filter].label})`}
-                </h2>
-                <button
-                  onClick={loadBookings}
-                  className="text-sm text-dark-400 hover:text-brand-500 transition-colors"
-                >
-                  Aktualisieren
-                </button>
+                <h2 className="font-bold text-dark-100">Buchungen {filter !== 'all' && `(${STATUS_CONFIG[filter].label})`}</h2>
+                <button onClick={loadBookings} className="text-sm text-dark-400 hover:text-brand-500 transition-colors">Aktualisieren</button>
               </div>
 
               {loading ? (
@@ -243,23 +206,12 @@ export default function AdminDashboard() {
               ) : (
                 <div className="divide-y divide-dark-800">
                   {filteredBookings.map((booking) => (
-                    <button
-                      key={booking.id}
-                      onClick={() => {
-                        setSelectedBooking(booking)
-                        setAdminNotes(booking.admin_notes || '')
-                      }}
-                      className={`w-full p-4 text-left hover:bg-dark-800/50 transition-colors ${
-                        selectedBooking?.id === booking.id ? 'bg-dark-800/50' : ''
-                      }`}
-                    >
+                    <button key={booking.id} onClick={() => { setSelectedBooking(booking); setAdminNotes(booking.admin_notes || '') }} className={`w-full p-4 text-left hover:bg-dark-800/50 transition-colors ${selectedBooking?.id === booking.id ? 'bg-dark-800/50' : ''}`}>
                       <div className="flex items-start justify-between gap-4">
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 mb-1">
                             <p className="font-bold text-dark-100 truncate">{booking.name}</p>
-                            <span className={`px-2 py-0.5 rounded-full text-xs border ${STATUS_CONFIG[booking.status].bg} ${STATUS_CONFIG[booking.status].color}`}>
-                              {STATUS_CONFIG[booking.status].label}
-                            </span>
+                            <span className={`px-2 py-0.5 rounded-full text-xs border ${STATUS_CONFIG[booking.status].bg} ${STATUS_CONFIG[booking.status].color}`}>{STATUS_CONFIG[booking.status].label}</span>
                           </div>
                           <p className="text-sm text-brand-500 font-medium">{booking.service}</p>
                           <p className="text-xs text-dark-500 mt-1">{formatDate(booking.created_at)}</p>
@@ -276,7 +228,6 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          {/* Detail-Panel */}
           <div className="lg:col-span-1">
             {selectedBooking ? (
               <div className="bg-dark-900/50 rounded-xl border border-dark-800 sticky top-24">
@@ -284,118 +235,45 @@ export default function AdminDashboard() {
                   <h3 className="font-bold text-dark-100">Buchungsdetails</h3>
                 </div>
                 <div className="p-4 space-y-4">
-                  {/* Kontaktdaten */}
                   <div>
                     <p className="text-xs text-dark-500 uppercase tracking-wider mb-2">Kontakt</p>
                     <p className="text-dark-100 font-bold">{selectedBooking.name}</p>
-                    <a href={`mailto:${selectedBooking.email}`} className="text-sm text-brand-500 hover:underline block">
-                      {selectedBooking.email}
-                    </a>
-                    {selectedBooking.phone && (
-                      <a href={`tel:${selectedBooking.phone}`} className="text-sm text-brand-500 hover:underline block">
-                        {selectedBooking.phone}
-                      </a>
-                    )}
+                    <a href={`mailto:${selectedBooking.email}`} className="text-sm text-brand-500 hover:underline block">{selectedBooking.email}</a>
+                    {selectedBooking.phone && (<a href={`tel:${selectedBooking.phone}`} className="text-sm text-brand-500 hover:underline block">{selectedBooking.phone}</a>)}
                   </div>
-
-                  {/* Buchungsdetails */}
                   <div>
                     <p className="text-xs text-dark-500 uppercase tracking-wider mb-2">Buchung</p>
                     <div className="space-y-1.5 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-dark-400">Service</span>
-                        <span className="text-dark-100 font-medium">{selectedBooking.service}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-dark-400">Personen</span>
-                        <span className="text-dark-100">{selectedBooking.people}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-dark-400">Wunschtermin</span>
-                        <span className="text-dark-100">{formatPreferredDate(selectedBooking.preferred_date)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-dark-400">Eingegangen</span>
-                        <span className="text-dark-100">{formatDate(selectedBooking.created_at)}</span>
-                      </div>
+                      <div className="flex justify-between"><span className="text-dark-400">Service</span><span className="text-dark-100 font-medium">{selectedBooking.service}</span></div>
+                      <div className="flex justify-between"><span className="text-dark-400">Personen</span><span className="text-dark-100">{selectedBooking.people}</span></div>
+                      <div className="flex justify-between"><span className="text-dark-400">Wunschtermin</span><span className="text-dark-100">{formatPreferredDate(selectedBooking.preferred_date)}</span></div>
+                      <div className="flex justify-between"><span className="text-dark-400">Eingegangen</span><span className="text-dark-100">{formatDate(selectedBooking.created_at)}</span></div>
                     </div>
                   </div>
-
-                  {/* Nachricht */}
                   {selectedBooking.message && (
                     <div>
                       <p className="text-xs text-dark-500 uppercase tracking-wider mb-2">Nachricht</p>
-                      <p className="text-sm text-dark-300 bg-dark-800/50 rounded-lg p-3">
-                        {selectedBooking.message}
-                      </p>
+                      <p className="text-sm text-dark-300 bg-dark-800/50 rounded-lg p-3">{selectedBooking.message}</p>
                     </div>
                   )}
-
-                  {/* Status ändern */}
                   <div>
                     <p className="text-xs text-dark-500 uppercase tracking-wider mb-2">Status ändern</p>
                     <div className="flex gap-2">
-                      <button
-                        onClick={() => updateStatus(selectedBooking.id, 'confirmed')}
-                        disabled={saving || selectedBooking.status === 'confirmed'}
-                        className="flex-1 px-3 py-2 text-sm font-bold rounded-lg bg-green-500/10 text-green-400 border border-green-500/30 hover:bg-green-500/20 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-                      >
-                        Bestätigen
-                      </button>
-                      <button
-                        onClick={() => updateStatus(selectedBooking.id, 'pending')}
-                        disabled={saving || selectedBooking.status === 'pending'}
-                        className="flex-1 px-3 py-2 text-sm font-bold rounded-lg bg-yellow-500/10 text-yellow-400 border border-yellow-500/30 hover:bg-yellow-500/20 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-                      >
-                        Offen
-                      </button>
-                      <button
-                        onClick={() => updateStatus(selectedBooking.id, 'cancelled')}
-                        disabled={saving || selectedBooking.status === 'cancelled'}
-                        className="flex-1 px-3 py-2 text-sm font-bold rounded-lg bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-                      >
-                        Stornieren
-                      </button>
+                      <button onClick={() => updateStatus(selectedBooking.id, 'confirmed')} disabled={saving || selectedBooking.status === 'confirmed'} className="flex-1 px-3 py-2 text-sm font-bold rounded-lg bg-green-500/10 text-green-400 border border-green-500/30 hover:bg-green-500/20 transition-all disabled:opacity-30 disabled:cursor-not-allowed">Bestätigen</button>
+                      <button onClick={() => updateStatus(selectedBooking.id, 'pending')} disabled={saving || selectedBooking.status === 'pending'} className="flex-1 px-3 py-2 text-sm font-bold rounded-lg bg-yellow-500/10 text-yellow-400 border border-yellow-500/30 hover:bg-yellow-500/20 transition-all disabled:opacity-30 disabled:cursor-not-allowed">Offen</button>
+                      <button onClick={() => updateStatus(selectedBooking.id, 'cancelled')} disabled={saving || selectedBooking.status === 'cancelled'} className="flex-1 px-3 py-2 text-sm font-bold rounded-lg bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 transition-all disabled:opacity-30 disabled:cursor-not-allowed">Stornieren</button>
                     </div>
                   </div>
-
-                  {/* Admin Notizen */}
                   <div>
                     <p className="text-xs text-dark-500 uppercase tracking-wider mb-2">Notizen</p>
-                    <textarea
-                      value={adminNotes}
-                      onChange={(e) => setAdminNotes(e.target.value)}
-                      rows={3}
-                      className="input-field resize-none text-sm"
-                      placeholder="Interne Notizen zur Buchung..."
-                    />
-                    <button
-                      onClick={() => saveNotes(selectedBooking.id)}
-                      disabled={saving}
-                      className="mt-2 w-full px-3 py-2 text-sm font-bold rounded-lg bg-brand-500/10 text-brand-500 border border-brand-500/30 hover:bg-brand-500/20 transition-all disabled:opacity-50"
-                    >
-                      {saving ? 'Speichert...' : 'Notizen speichern'}
-                    </button>
+                    <textarea value={adminNotes} onChange={(e) => setAdminNotes(e.target.value)} rows={3} className="input-field resize-none text-sm" placeholder="Interne Notizen zur Buchung..." />
+                    <button onClick={() => saveNotes(selectedBooking.id)} disabled={saving} className="mt-2 w-full px-3 py-2 text-sm font-bold rounded-lg bg-brand-500/10 text-brand-500 border border-brand-500/30 hover:bg-brand-500/20 transition-all disabled:opacity-50">{saving ? 'Speichert...' : 'Notizen speichern'}</button>
                   </div>
-
-                  {/* Quick Actions */}
                   <div>
                     <p className="text-xs text-dark-500 uppercase tracking-wider mb-2">Aktionen</p>
                     <div className="flex gap-2">
-                      <a
-                        href={`mailto:${selectedBooking.email}?subject=Deine Buchungsanfrage bei Salim Lee Gym`}
-                        className="flex-1 px-3 py-2 text-sm text-center font-bold rounded-lg bg-dark-800 text-dark-300 border border-dark-700 hover:border-brand-500/30 hover:text-brand-500 transition-all"
-                      >
-                        E-Mail
-                      </a>
-                      {selectedBooking.phone && (
-                        <a
-                          href={`tel:${selectedBooking.phone}`}
-                          className="flex-1 px-3 py-2 text-sm text-center font-bold rounded-lg bg-dark-800 text-dark-300 border border-dark-700 hover:border-brand-500/30 hover:text-brand-500 transition-all"
-                        >
-                          Anrufen
-                        </a>
-                      )}
+                      <a href={`mailto:${selectedBooking.email}?subject=Deine Buchungsanfrage bei Salim Lee Gym`} className="flex-1 px-3 py-2 text-sm text-center font-bold rounded-lg bg-dark-800 text-dark-300 border border-dark-700 hover:border-brand-500/30 hover:text-brand-500 transition-all">E-Mail</a>
+                      {selectedBooking.phone && (<a href={`tel:${selectedBooking.phone}`} className="flex-1 px-3 py-2 text-sm text-center font-bold rounded-lg bg-dark-800 text-dark-300 border border-dark-700 hover:border-brand-500/30 hover:text-brand-500 transition-all">Anrufen</a>)}
                     </div>
                   </div>
                 </div>
@@ -411,3 +289,6 @@ export default function AdminDashboard() {
     </div>
   )
 }
+```
+
+**Strg+A → Entf → Einfügen → Commit changes.** Dann sollte der Build durchlaufen!
