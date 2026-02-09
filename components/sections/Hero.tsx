@@ -38,10 +38,12 @@ export function Hero({ onBookingClick }: HeroProps) {
             <div className="flex flex-wrap gap-4 pt-4">
               <Button onClick={onBookingClick} size="lg">
                 JETZT BUCHEN
-              </Button>
-              <Button variant="secondary" size="lg" asChild>
-                <a href="#angebote">MEHR ERFAHREN</a>
-              </Button>
+            <a href="#angebote">
+                <Button variant="secondary" size="lg">
+                  MEHR ERFAHREN
+                </Button>
+            </a>
+
             </div>
           </div>
 
