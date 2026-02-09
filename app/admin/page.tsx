@@ -61,17 +61,17 @@ export default function AdminDashboard() {
   }, [authenticated, loadBookings])
 
   // Status ändern
-  const updateStatus = async (id: string, status: BookingStatus) => {
+  const updateStatus = async (id: string, newStatus: BookingStatus) => {
     setSaving(true)
     const { error } = await supabase
       .from('bookings')
-      .update({ status })
+      .update({ status: newStatus } as Record<string, unknown>)
       .eq('id', id)
 
     if (!error) {
-      setBookings(prev => prev.map(b => b.id === id ? { ...b, status } : b))
+      setBookings(prev => prev.map(b => b.id === id ? { ...b, status: newStatus } : b))
       if (selectedBooking?.id === id) {
-        setSelectedBooking(prev => prev ? { ...prev, status } : null)
+        setSelectedBooking(prev => prev ? { ...prev, status: newStatus } : null)
       }
     }
     setSaving(false)
@@ -82,7 +82,7 @@ export default function AdminDashboard() {
     setSaving(true)
     const { error } = await supabase
       .from('bookings')
-      .update({ admin_notes: adminNotes })
+      .update({ admin_notes: adminNotes } as Record<string, unknown>)
       .eq('id', id)
 
     if (!error) {
