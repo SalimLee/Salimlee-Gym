@@ -1,34 +1,48 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { getSupabaseClient } from '@/lib/supabase/client'
+import { createClient } from '@supabase/supabase-js'
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 
 export default function AdminLoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const router = useRouter()
-  const supabase = getSupabaseClient()
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError(null)
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
 
-    if (error) {
-      setError('E-Mail oder Passwort ist falsch.')
+      if (error) {
+        setError('E-Mail oder Passwort ist falsch. (' + error.message + ')')
+        setLoading(false)
+        return
+      }
+
+      if (!data.session) {
+        setError('Login erfolgreich aber keine Session erhalten.')
+        setLoading(false)
+        return
+      }
+
+      // Erfolgreich - voller Seitenneulad zum Dashboard
+      window.location.href = '/admin'
+    } catch (err) {
+      setError('Verbindungsfehler: ' + String(err))
       setLoading(false)
-      return
     }
-
-    router.push('/admin')
   }
 
   return (
