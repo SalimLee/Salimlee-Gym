@@ -289,6 +289,3 @@ export default function AdminDashboard() {
     </div>
   )
 }
-```
-
-**Strg+A → Entf → Einfügen → Commit changes.** Dann sollte der Build durchlaufen!
