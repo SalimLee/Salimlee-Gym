@@ -8,7 +8,7 @@ const supabase = createClient(
 )
 
 // Email-Adresse des Gym-Besitzers
-const GYM_EMAIL = process.env.GYM_EMAIL || 'info@salim-lee-gym.de'
+const GYM_EMAIL = process.env.GYM_EMAIL || 'info@salimlee-gym.de'
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
     // ========================================
     // BUCHUNG IN DATENBANK SPEICHERN
     // ========================================
-    const { data: booking, error: dbError } = await supabase
+    const { error: dbError } = await supabase
       .from('bookings')
       .insert({
         name,
@@ -38,8 +38,6 @@ export async function POST(request: NextRequest) {
         message: message || null,
         status: 'pending',
       })
-      .select()
-      .single()
 
     if (dbError) {
       console.error('Datenbank Fehler:', dbError)
@@ -144,7 +142,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: 'Buchungsanfrage erfolgreich gesendet!',
-      bookingId: booking?.id,
+      bookingId: null,
     })
   } catch (error) {
     console.error('Buchungsfehler:', error)
