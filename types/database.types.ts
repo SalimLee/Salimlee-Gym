@@ -1,9 +1,3 @@
-// Diese Datei wird automatisch generiert durch:
-// npm run db:generate
-// 
-// Oder manuell über Supabase CLI:
-// supabase gen types typescript --project-id YOUR_PROJECT_ID > types/database.types.ts
-
 export type Json =
   | string
   | number
@@ -19,6 +13,7 @@ export interface Database {
         Row: {
           id: string
           created_at: string
+          updated_at: string
           name: string
           email: string
           phone: string | null
@@ -27,10 +22,12 @@ export interface Database {
           preferred_date: string | null
           message: string | null
           status: 'pending' | 'confirmed' | 'cancelled'
+          admin_notes: string | null
         }
         Insert: {
           id?: string
           created_at?: string
+          updated_at?: string
           name: string
           email: string
           phone?: string | null
@@ -39,10 +36,12 @@ export interface Database {
           preferred_date?: string | null
           message?: string | null
           status?: 'pending' | 'confirmed' | 'cancelled'
+          admin_notes?: string | null
         }
         Update: {
           id?: string
           created_at?: string
+          updated_at?: string
           name?: string
           email?: string
           phone?: string | null
@@ -51,66 +50,79 @@ export interface Database {
           preferred_date?: string | null
           message?: string | null
           status?: 'pending' | 'confirmed' | 'cancelled'
+          admin_notes?: string | null
         }
       }
       services: {
         Row: {
           id: string
+          created_at: string
+          updated_at: string
           title: string
-          subtitle: string
+          subtitle: string | null
           price: string
           features: string[]
           icon: string
-          order: number
+          display_order: number
           active: boolean
         }
         Insert: {
           id?: string
+          created_at?: string
+          updated_at?: string
           title: string
-          subtitle: string
+          subtitle?: string | null
           price: string
-          features: string[]
-          icon: string
-          order?: number
+          features?: string[]
+          icon?: string
+          display_order?: number
           active?: boolean
         }
         Update: {
           id?: string
+          created_at?: string
+          updated_at?: string
           title?: string
-          subtitle?: string
+          subtitle?: string | null
           price?: string
           features?: string[]
           icon?: string
-          order?: number
+          display_order?: number
           active?: boolean
         }
       }
       prices: {
         Row: {
           id: string
+          created_at: string
+          updated_at: string
           name: string
           price: string
           discount: string | null
           category: string
-          order: number
+          display_order: number
           active: boolean
         }
         Insert: {
           id?: string
+          created_at?: string
+          updated_at?: string
           name: string
           price: string
           discount?: string | null
           category: string
-          order?: number
+          display_order?: number
           active?: boolean
         }
         Update: {
           id?: string
+          created_at?: string
+          updated_at?: string
           name?: string
           price?: string
           discount?: string | null
           category?: string
-          order?: number
+          display_order?: number
           active?: boolean
         }
       }
