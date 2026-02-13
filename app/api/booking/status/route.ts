@@ -36,10 +36,11 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Status aktualisieren
-    const { error: updateError } = await supabase
+    const { error: updateError } = await (supabase as any)
       .from('bookings')
       .update({ status: typedStatus })
       .eq('id', bookingId)
+
 
     if (updateError) {
       return NextResponse.json({ error: 'Status konnte nicht aktualisiert werden' }, { status: 500 })
