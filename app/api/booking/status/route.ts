@@ -36,7 +36,7 @@ export async function PATCH(request: NextRequest) {
     // Status aktualisieren
     const { error: updateError } = await supabase
       .from('bookings')
-      .update({ status })
+      .update({ status } as Record<string, unknown>)
       .eq('id', bookingId)
 
     if (updateError) {
