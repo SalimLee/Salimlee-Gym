@@ -1,15 +1,18 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { createClient } from '@supabase/supabase-js'
+import OverviewTab from '@/components/admin/OverviewTab'
+import BookingsTab from '@/components/admin/BookingsTab'
+import MembersTab from '@/components/admin/MembersTab'
+import SubscriptionsTab from '@/components/admin/SubscriptionsTab'
+import InvoicesTab from '@/components/admin/InvoicesTab'
 
 // Untyped Supabase client - vermeidet TypeScript-Konflikte mit @supabase/ssr
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
-
-type BookingStatus = 'pending' | 'confirmed' | 'cancelled'
 
 interface Booking {
   id: string
@@ -22,24 +25,91 @@ interface Booking {
   people: number
   preferred_date: string | null
   message: string | null
-  status: BookingStatus
+  status: 'pending' | 'confirmed' | 'cancelled'
   admin_notes: string | null
 }
 
-const STATUS_CONFIG: Record<BookingStatus, { label: string; color: string; bg: string }> = {
-  pending: { label: 'Offen', color: 'text-yellow-400', bg: 'bg-yellow-400/10 border-yellow-400/30' },
-  confirmed: { label: 'Bestätigt', color: 'text-green-400', bg: 'bg-green-400/10 border-green-400/30' },
-  cancelled: { label: 'Storniert', color: 'text-red-400', bg: 'bg-red-400/10 border-red-400/30' },
+interface Member {
+  id: string
+  created_at: string
+  updated_at: string
+  name: string
+  email: string
+  phone: string | null
+  notes: string | null
+  active: boolean
 }
 
+interface Subscription {
+  id: string
+  created_at: string
+  updated_at: string
+  member_id: string
+  name: string
+  type: string
+  start_date: string
+  end_date: string | null
+  total_units: number | null
+  remaining_units: number | null
+  price: number
+  status: 'active' | 'expired' | 'cancelled' | 'paused'
+  notes: string | null
+}
+
+interface Invoice {
+  id: string
+  created_at: string
+  updated_at: string
+  member_id: string
+  invoice_number: string
+  description: string
+  amount: number
+  status: 'open' | 'paid' | 'overdue' | 'cancelled'
+  due_date: string
+  paid_date: string | null
+  notes: string | null
+}
+
+type TabId = 'overview' | 'bookings' | 'members' | 'subscriptions' | 'invoices'
+
+const TABS: { id: TabId; label: string; icon: JSX.Element }[] = [
+  {
+    id: 'overview', label: 'Übersicht',
+    icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>,
+  },
+  {
+    id: 'bookings', label: 'Buchungen',
+    icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>,
+  },
+  {
+    id: 'members', label: 'Mitglieder',
+    icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>,
+  },
+  {
+    id: 'subscriptions', label: 'Abos',
+    icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" /></svg>,
+  },
+  {
+    id: 'invoices', label: 'Rechnungen',
+    icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z" /></svg>,
+  },
+]
+
 export default function AdminDashboard() {
-  const [bookings, setBookings] = useState<Booking[]>([])
-  const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState<TabId>('overview')
   const [authenticated, setAuthenticated] = useState(false)
-  const [filter, setFilter] = useState<BookingStatus | 'all'>('all')
-  const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
-  const [adminNotes, setAdminNotes] = useState('')
-  const [saving, setSaving] = useState(false)
+  const [loading, setLoading] = useState(true)
+
+  // Data states
+  const [bookings, setBookings] = useState<Booking[]>([])
+  const [members, setMembers] = useState<Member[]>([])
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([])
+  const [invoices, setInvoices] = useState<Invoice[]>([])
+
+  // Search
+  const [globalSearch, setGlobalSearch] = useState('')
+  const [showSearchResults, setShowSearchResults] = useState(false)
+  const searchRef = useRef<HTMLDivElement>(null)
 
   // Auth prüfen mit onAuthStateChange (zuverlässiger als getSession)
   useEffect(() => {
@@ -53,61 +123,39 @@ export default function AdminDashboard() {
     return () => subscription.unsubscribe()
   }, [])
 
-  // Buchungen laden
-  const loadBookings = useCallback(async () => {
+  // Alle Daten laden
+  const loadData = useCallback(async () => {
     setLoading(true)
-    const { data, error } = await supabase
-      .from('bookings')
-      .select('*')
-      .order('created_at', { ascending: false })
 
-    if (error) {
-      console.error('Fehler beim Laden:', error)
-    } else {
-      setBookings((data as Booking[]) || [])
-    }
+    const [bookingsRes, membersRes, subsRes, invoicesRes] = await Promise.all([
+      supabase.from('bookings').select('*').order('created_at', { ascending: false }),
+      supabase.from('members').select('*').order('name', { ascending: true }),
+      supabase.from('subscriptions').select('*').order('created_at', { ascending: false }),
+      supabase.from('invoices').select('*').order('created_at', { ascending: false }),
+    ])
+
+    if (bookingsRes.data) setBookings(bookingsRes.data as Booking[])
+    if (membersRes.data) setMembers(membersRes.data as Member[])
+    if (subsRes.data) setSubscriptions(subsRes.data as Subscription[])
+    if (invoicesRes.data) setInvoices(invoicesRes.data as Invoice[])
+
     setLoading(false)
   }, [])
 
   useEffect(() => {
-    if (authenticated) {
-      loadBookings()
-    }
-  }, [authenticated, loadBookings])
+    if (authenticated) loadData()
+  }, [authenticated, loadData])
 
-  // Status ändern
-  const updateStatus = async (id: string, newStatus: BookingStatus) => {
-    setSaving(true)
-    const { error } = await supabase
-      .from('bookings')
-      .update({ status: newStatus })
-      .eq('id', id)
-
-    if (!error) {
-      setBookings(prev => prev.map(b => b.id === id ? { ...b, status: newStatus } : b))
-      if (selectedBooking?.id === id) {
-        setSelectedBooking(prev => prev ? { ...prev, status: newStatus } : null)
+  // Klick außerhalb Suche schließt Dropdown
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setShowSearchResults(false)
       }
     }
-    setSaving(false)
-  }
-
-  // Admin-Notizen speichern
-  const saveNotes = async (id: string) => {
-    setSaving(true)
-    const { error } = await supabase
-      .from('bookings')
-      .update({ admin_notes: adminNotes })
-      .eq('id', id)
-
-    if (!error) {
-      setBookings(prev => prev.map(b => b.id === id ? { ...b, admin_notes: adminNotes } : b))
-      if (selectedBooking) {
-        setSelectedBooking({ ...selectedBooking, admin_notes: adminNotes })
-      }
-    }
-    setSaving(false)
-  }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
 
   // Logout
   const handleLogout = async () => {
@@ -115,37 +163,19 @@ export default function AdminDashboard() {
     window.location.href = '/admin/login'
   }
 
-  // Gefilterte Buchungen
-  const filteredBookings = filter === 'all' ? bookings : bookings.filter(b => b.status === filter)
+  // Globale Suche
+  const searchResults = globalSearch.length >= 2 ? {
+    members: members.filter(m =>
+      m.name.toLowerCase().includes(globalSearch.toLowerCase()) ||
+      m.email.toLowerCase().includes(globalSearch.toLowerCase())
+    ).slice(0, 5),
+    bookings: bookings.filter(b =>
+      b.name.toLowerCase().includes(globalSearch.toLowerCase()) ||
+      b.email.toLowerCase().includes(globalSearch.toLowerCase())
+    ).slice(0, 5),
+  } : { members: [], bookings: [] }
 
-  // Statistiken
-  const stats = {
-    total: bookings.length,
-    pending: bookings.filter(b => b.status === 'pending').length,
-    confirmed: bookings.filter(b => b.status === 'confirmed').length,
-    cancelled: bookings.filter(b => b.status === 'cancelled').length,
-  }
-
-  // Datum formatieren
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('de-DE', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
-  }
-
-  const formatPreferredDate = (date: string | null) => {
-    if (!date) return '-'
-    return new Date(date).toLocaleDateString('de-DE', {
-      weekday: 'short',
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-    })
-  }
+  const hasSearchResults = searchResults.members.length > 0 || searchResults.bookings.length > 0
 
   if (!authenticated) {
     return (
@@ -159,269 +189,191 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-dark-950">
       {/* Header */}
       <header className="bg-dark-900/80 border-b border-dark-800 sticky top-0 z-50 backdrop-blur-md">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-black">
-              <span className="bg-gradient-to-r from-brand-400 to-brand-600 bg-clip-text text-transparent">SALIM LEE</span>
-              <span className="text-dark-400 text-sm ml-2 font-normal">Admin</span>
-            </h1>
-          </div>
-          <div className="flex items-center gap-4">
-            <a href="/" className="text-dark-400 hover:text-brand-500 text-sm transition-colors">
-              Webseite
-            </a>
-            <button
-              onClick={handleLogout}
-              className="px-4 py-2 text-sm text-dark-400 hover:text-red-400 border border-dark-700 rounded-lg hover:border-red-400/30 transition-all"
-            >
-              Abmelden
-            </button>
-          </div>
-        </div>
-      </header>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+          <div className="flex items-center justify-between gap-4">
+            {/* Logo */}
+            <div className="shrink-0">
+              <h1 className="text-xl font-black">
+                <span className="bg-gradient-to-r from-brand-400 to-brand-600 bg-clip-text text-transparent">SALIM LEE</span>
+                <span className="text-dark-400 text-sm ml-2 font-normal">Admin</span>
+              </h1>
+            </div>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Statistik-Karten */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <button
-            onClick={() => setFilter('all')}
-            className={`p-4 rounded-xl border transition-all text-left ${
-              filter === 'all'
-                ? 'bg-brand-500/10 border-brand-500/50'
-                : 'bg-dark-900/50 border-dark-800 hover:border-dark-700'
-            }`}
-          >
-            <p className="text-3xl font-black text-dark-100">{stats.total}</p>
-            <p className="text-sm text-dark-400 mt-1">Gesamt</p>
-          </button>
-          <button
-            onClick={() => setFilter('pending')}
-            className={`p-4 rounded-xl border transition-all text-left ${
-              filter === 'pending'
-                ? 'bg-yellow-400/10 border-yellow-400/50'
-                : 'bg-dark-900/50 border-dark-800 hover:border-dark-700'
-            }`}
-          >
-            <p className="text-3xl font-black text-yellow-400">{stats.pending}</p>
-            <p className="text-sm text-dark-400 mt-1">Offen</p>
-          </button>
-          <button
-            onClick={() => setFilter('confirmed')}
-            className={`p-4 rounded-xl border transition-all text-left ${
-              filter === 'confirmed'
-                ? 'bg-green-400/10 border-green-400/50'
-                : 'bg-dark-900/50 border-dark-800 hover:border-dark-700'
-            }`}
-          >
-            <p className="text-3xl font-black text-green-400">{stats.confirmed}</p>
-            <p className="text-sm text-dark-400 mt-1">Bestätigt</p>
-          </button>
-          <button
-            onClick={() => setFilter('cancelled')}
-            className={`p-4 rounded-xl border transition-all text-left ${
-              filter === 'cancelled'
-                ? 'bg-red-400/10 border-red-400/50'
-                : 'bg-dark-900/50 border-dark-800 hover:border-dark-700'
-            }`}
-          >
-            <p className="text-3xl font-black text-red-400">{stats.cancelled}</p>
-            <p className="text-sm text-dark-400 mt-1">Storniert</p>
-          </button>
-        </div>
+            {/* Globale Suche */}
+            <div ref={searchRef} className="relative flex-1 max-w-md hidden sm:block">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+              <input
+                type="text"
+                value={globalSearch}
+                onChange={(e) => { setGlobalSearch(e.target.value); setShowSearchResults(true) }}
+                onFocus={() => setShowSearchResults(true)}
+                placeholder="Person suchen..."
+                className="w-full pl-10 pr-4 py-2 bg-dark-800/50 border border-dark-700 rounded-lg text-dark-100 placeholder:text-dark-500 focus:border-brand-500 focus:outline-none text-sm"
+              />
 
-        {/* Buchungsliste & Detail */}
-        <div className="grid lg:grid-cols-3 gap-6">
-          {/* Buchungsliste */}
-          <div className="lg:col-span-2">
-            <div className="bg-dark-900/50 rounded-xl border border-dark-800 overflow-hidden">
-              <div className="p-4 border-b border-dark-800 flex items-center justify-between">
-                <h2 className="font-bold text-dark-100">
-                  Buchungen {filter !== 'all' && `(${STATUS_CONFIG[filter].label})`}
-                </h2>
-                <button
-                  onClick={loadBookings}
-                  className="text-sm text-dark-400 hover:text-brand-500 transition-colors"
-                >
-                  Aktualisieren
-                </button>
-              </div>
-
-              {loading ? (
-                <div className="p-12 text-center">
-                  <div className="animate-spin h-8 w-8 border-2 border-brand-500 border-t-transparent rounded-full mx-auto" />
-                  <p className="text-dark-500 mt-4 text-sm">Lade Buchungen...</p>
-                </div>
-              ) : filteredBookings.length === 0 ? (
-                <div className="p-12 text-center">
-                  <p className="text-dark-500">Keine Buchungen vorhanden</p>
-                </div>
-              ) : (
-                <div className="divide-y divide-dark-800">
-                  {filteredBookings.map((booking) => (
-                    <button
-                      key={booking.id}
-                      onClick={() => {
-                        setSelectedBooking(booking)
-                        setAdminNotes(booking.admin_notes || '')
-                      }}
-                      className={`w-full p-4 text-left hover:bg-dark-800/50 transition-colors ${
-                        selectedBooking?.id === booking.id ? 'bg-dark-800/50' : ''
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <p className="font-bold text-dark-100 truncate">{booking.name}</p>
-                            <span className={`px-2 py-0.5 rounded-full text-xs border ${STATUS_CONFIG[booking.status].bg} ${STATUS_CONFIG[booking.status].color}`}>
-                              {STATUS_CONFIG[booking.status].label}
-                            </span>
-                          </div>
-                          <p className="text-sm text-brand-500 font-medium">{booking.service}</p>
-                          <p className="text-xs text-dark-500 mt-1">{formatDate(booking.created_at)}</p>
+              {/* Suchergebnisse Dropdown */}
+              {showSearchResults && globalSearch.length >= 2 && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-dark-900 border border-dark-700 rounded-xl shadow-2xl overflow-hidden z-50">
+                  {!hasSearchResults ? (
+                    <div className="p-4 text-center text-dark-500 text-sm">Keine Ergebnisse für &ldquo;{globalSearch}&rdquo;</div>
+                  ) : (
+                    <>
+                      {searchResults.members.length > 0 && (
+                        <div>
+                          <p className="px-4 py-2 text-xs text-dark-500 uppercase tracking-wider bg-dark-800/50">Mitglieder</p>
+                          {searchResults.members.map(m => (
+                            <button
+                              key={m.id}
+                              onClick={() => {
+                                setActiveTab('members')
+                                setGlobalSearch('')
+                                setShowSearchResults(false)
+                              }}
+                              className="w-full px-4 py-3 text-left hover:bg-dark-800 transition-colors flex items-center gap-3"
+                            >
+                              <div className="w-8 h-8 rounded-full bg-brand-500/20 flex items-center justify-center text-sm font-bold text-brand-500">
+                                {m.name.charAt(0).toUpperCase()}
+                              </div>
+                              <div>
+                                <p className="text-sm font-bold text-dark-100">{m.name}</p>
+                                <p className="text-xs text-dark-500">{m.email}</p>
+                              </div>
+                            </button>
+                          ))}
                         </div>
-                        <div className="text-right shrink-0">
-                          <p className="text-sm text-dark-400">{booking.people} Pers.</p>
-                          <p className="text-xs text-dark-500">{formatPreferredDate(booking.preferred_date)}</p>
+                      )}
+                      {searchResults.bookings.length > 0 && (
+                        <div>
+                          <p className="px-4 py-2 text-xs text-dark-500 uppercase tracking-wider bg-dark-800/50">Buchungen</p>
+                          {searchResults.bookings.map(b => (
+                            <button
+                              key={b.id}
+                              onClick={() => {
+                                setActiveTab('bookings')
+                                setGlobalSearch('')
+                                setShowSearchResults(false)
+                              }}
+                              className="w-full px-4 py-3 text-left hover:bg-dark-800 transition-colors flex items-center gap-3"
+                            >
+                              <div className="w-8 h-8 rounded-full bg-yellow-500/20 flex items-center justify-center text-sm font-bold text-yellow-400">
+                                {b.name.charAt(0).toUpperCase()}
+                              </div>
+                              <div>
+                                <p className="text-sm font-bold text-dark-100">{b.name}</p>
+                                <p className="text-xs text-dark-500">{b.service} &middot; {b.email}</p>
+                              </div>
+                            </button>
+                          ))}
                         </div>
-                      </div>
-                    </button>
-                  ))}
+                      )}
+                    </>
+                  )}
                 </div>
               )}
             </div>
+
+            {/* Aktionen */}
+            <div className="flex items-center gap-3 shrink-0">
+              <a href="/" className="text-dark-400 hover:text-brand-500 text-sm transition-colors hidden sm:block">
+                Webseite
+              </a>
+              <button
+                onClick={handleLogout}
+                className="px-4 py-2 text-sm text-dark-400 hover:text-red-400 border border-dark-700 rounded-lg hover:border-red-400/30 transition-all"
+              >
+                Abmelden
+              </button>
+            </div>
           </div>
 
-          {/* Detail-Panel */}
-          <div className="lg:col-span-1">
-            {selectedBooking ? (
-              <div className="bg-dark-900/50 rounded-xl border border-dark-800 sticky top-24">
-                <div className="p-4 border-b border-dark-800">
-                  <h3 className="font-bold text-dark-100">Buchungsdetails</h3>
-                </div>
-                <div className="p-4 space-y-4">
-                  {/* Kontaktdaten */}
-                  <div>
-                    <p className="text-xs text-dark-500 uppercase tracking-wider mb-2">Kontakt</p>
-                    <p className="text-dark-100 font-bold">{selectedBooking.name}</p>
-                    <a href={`mailto:${selectedBooking.email}`} className="text-sm text-brand-500 hover:underline block">
-                      {selectedBooking.email}
-                    </a>
-                    {selectedBooking.phone && (
-                      <a href={`tel:${selectedBooking.phone}`} className="text-sm text-brand-500 hover:underline block">
-                        {selectedBooking.phone}
-                      </a>
-                    )}
-                  </div>
-
-                  {/* Buchungsdetails */}
-                  <div>
-                    <p className="text-xs text-dark-500 uppercase tracking-wider mb-2">Buchung</p>
-                    <div className="space-y-1.5 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-dark-400">Service</span>
-                        <span className="text-dark-100 font-medium">{selectedBooking.service}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-dark-400">Personen</span>
-                        <span className="text-dark-100">{selectedBooking.people}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-dark-400">Wunschtermin</span>
-                        <span className="text-dark-100">{formatPreferredDate(selectedBooking.preferred_date)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-dark-400">Eingegangen</span>
-                        <span className="text-dark-100">{formatDate(selectedBooking.created_at)}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Nachricht */}
-                  {selectedBooking.message && (
-                    <div>
-                      <p className="text-xs text-dark-500 uppercase tracking-wider mb-2">Nachricht</p>
-                      <p className="text-sm text-dark-300 bg-dark-800/50 rounded-lg p-3">
-                        {selectedBooking.message}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Status ändern */}
-                  <div>
-                    <p className="text-xs text-dark-500 uppercase tracking-wider mb-2">Status ändern</p>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => updateStatus(selectedBooking.id, 'confirmed')}
-                        disabled={saving || selectedBooking.status === 'confirmed'}
-                        className="flex-1 px-3 py-2 text-sm font-bold rounded-lg bg-green-500/10 text-green-400 border border-green-500/30 hover:bg-green-500/20 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-                      >
-                        Bestätigen
-                      </button>
-                      <button
-                        onClick={() => updateStatus(selectedBooking.id, 'pending')}
-                        disabled={saving || selectedBooking.status === 'pending'}
-                        className="flex-1 px-3 py-2 text-sm font-bold rounded-lg bg-yellow-500/10 text-yellow-400 border border-yellow-500/30 hover:bg-yellow-500/20 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-                      >
-                        Offen
-                      </button>
-                      <button
-                        onClick={() => updateStatus(selectedBooking.id, 'cancelled')}
-                        disabled={saving || selectedBooking.status === 'cancelled'}
-                        className="flex-1 px-3 py-2 text-sm font-bold rounded-lg bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-                      >
-                        Stornieren
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Admin Notizen */}
-                  <div>
-                    <p className="text-xs text-dark-500 uppercase tracking-wider mb-2">Notizen</p>
-                    <textarea
-                      value={adminNotes}
-                      onChange={(e) => setAdminNotes(e.target.value)}
-                      rows={3}
-                      className="input-field resize-none text-sm"
-                      placeholder="Interne Notizen zur Buchung..."
-                    />
-                    <button
-                      onClick={() => saveNotes(selectedBooking.id)}
-                      disabled={saving}
-                      className="mt-2 w-full px-3 py-2 text-sm font-bold rounded-lg bg-brand-500/10 text-brand-500 border border-brand-500/30 hover:bg-brand-500/20 transition-all disabled:opacity-50"
-                    >
-                      {saving ? 'Speichert...' : 'Notizen speichern'}
-                    </button>
-                  </div>
-
-                  {/* Quick Actions */}
-                  <div>
-                    <p className="text-xs text-dark-500 uppercase tracking-wider mb-2">Aktionen</p>
-                    <div className="flex gap-2">
-                      <a
-                        href={`mailto:${selectedBooking.email}?subject=Deine Buchungsanfrage bei Salim Lee Gym`}
-                        className="flex-1 px-3 py-2 text-sm text-center font-bold rounded-lg bg-dark-800 text-dark-300 border border-dark-700 hover:border-brand-500/30 hover:text-brand-500 transition-all"
-                      >
-                        E-Mail
-                      </a>
-                      {selectedBooking.phone && (
-                        <a
-                          href={`tel:${selectedBooking.phone}`}
-                          className="flex-1 px-3 py-2 text-sm text-center font-bold rounded-lg bg-dark-800 text-dark-300 border border-dark-700 hover:border-brand-500/30 hover:text-brand-500 transition-all"
-                        >
-                          Anrufen
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="bg-dark-900/50 rounded-xl border border-dark-800 p-8 text-center">
-                <p className="text-dark-500 text-sm">Klicke auf eine Buchung, um Details zu sehen</p>
-              </div>
-            )}
-          </div>
+          {/* Tab Navigation */}
+          <nav className="flex gap-1 mt-3 -mb-[1px] overflow-x-auto">
+            {TABS.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg border border-b-0 transition-all whitespace-nowrap ${
+                  activeTab === tab.id
+                    ? 'bg-dark-950 border-dark-800 text-brand-500'
+                    : 'bg-transparent border-transparent text-dark-400 hover:text-dark-200'
+                }`}
+              >
+                {tab.icon}
+                {tab.label}
+                {tab.id === 'bookings' && bookings.filter(b => b.status === 'pending').length > 0 && (
+                  <span className="w-5 h-5 rounded-full bg-yellow-400/20 text-yellow-400 text-xs flex items-center justify-center font-bold">
+                    {bookings.filter(b => b.status === 'pending').length}
+                  </span>
+                )}
+                {tab.id === 'invoices' && invoices.filter(i => i.status === 'open' || i.status === 'overdue').length > 0 && (
+                  <span className="w-5 h-5 rounded-full bg-red-400/20 text-red-400 text-xs flex items-center justify-center font-bold">
+                    {invoices.filter(i => i.status === 'open' || i.status === 'overdue').length}
+                  </span>
+                )}
+              </button>
+            ))}
+          </nav>
         </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-20">
+            <div className="animate-spin h-8 w-8 border-2 border-brand-500 border-t-transparent rounded-full" />
+            <p className="text-dark-500 mt-4 text-sm">Lade Daten...</p>
+          </div>
+        ) : (
+          <>
+            {activeTab === 'overview' && (
+              <OverviewTab
+                bookings={bookings}
+                members={members}
+                subscriptions={subscriptions}
+                invoices={invoices}
+                onTabChange={(tab) => setActiveTab(tab as TabId)}
+              />
+            )}
+            {activeTab === 'bookings' && (
+              <BookingsTab
+                bookings={bookings}
+                setBookings={setBookings}
+                supabase={supabase}
+                onRefresh={loadData}
+              />
+            )}
+            {activeTab === 'members' && (
+              <MembersTab
+                members={members}
+                setMembers={setMembers}
+                subscriptions={subscriptions}
+                invoices={invoices}
+                bookings={bookings}
+                supabase={supabase}
+                onRefresh={loadData}
+                initialSearch={globalSearch}
+              />
+            )}
+            {activeTab === 'subscriptions' && (
+              <SubscriptionsTab
+                subscriptions={subscriptions}
+                setSubscriptions={setSubscriptions}
+                members={members}
+                supabase={supabase}
+                onRefresh={loadData}
+              />
+            )}
+            {activeTab === 'invoices' && (
+              <InvoicesTab
+                invoices={invoices}
+                setInvoices={setInvoices}
+                members={members}
+                supabase={supabase}
+                onRefresh={loadData}
+              />
+            )}
+          </>
+        )}
       </main>
     </div>
   )
