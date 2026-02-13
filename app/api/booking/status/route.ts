@@ -37,7 +37,8 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Buchung nicht gefunden' }, { status: 404 })
     }
     // Status aktualisieren
-    const { error: updateError } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: updateError } = await (supabase as any)
       .from('bookings')
       .update({ status: typedStatus })
       .eq('id', bookingId)
