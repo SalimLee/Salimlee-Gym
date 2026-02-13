@@ -6,7 +6,6 @@ export async function PATCH(request: NextRequest) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const supabase: any = await createServerSupabaseClient()
 
-
     // Auth prüfen
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) {
@@ -37,8 +36,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Buchung nicht gefunden' }, { status: 404 })
     }
     // Status aktualisieren
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error: updateError } = await (supabase as any)
+    const { error: updateError } = await supabase
       .from('bookings')
       .update({ status: typedStatus })
       .eq('id', bookingId)
