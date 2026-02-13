@@ -11,16 +11,18 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Nicht autorisiert' }, { status: 401 })
     }
 
-    const { bookingId, status } = await request.json()
+    const { bookingId, status: newStatus } = await request.json()
 
-    if (!bookingId || !status) {
+    if (!bookingId || !newStatus) {
       return NextResponse.json({ error: 'bookingId und status erforderlich' }, { status: 400 })
     }
 
-    const validStatuses = ['pending', 'confirmed', 'cancelled']
-    if (!validStatuses.includes(status)) {
+    const validStatuses = ['pending', 'confirmed', 'cancelled'] as const
+    if (!validStatuses.includes(newStatus)) {
       return NextResponse.json({ error: 'Ungültiger Status' }, { status: 400 })
     }
+
+    const typedStatus = newStatus as 'pending' | 'confirmed' | 'cancelled'
 
     // Buchung laden (für Email-Daten)
     const { data: booking, error: fetchError } = await supabase
@@ -36,7 +38,7 @@ export async function PATCH(request: NextRequest) {
     // Status aktualisieren
     const { error: updateError } = await supabase
       .from('bookings')
-      .update({ status } as any)
+      .update({ status: typedStatus })
       .eq('id', bookingId)
 
     if (updateError) {
@@ -44,7 +46,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     // E-Mail senden (wenn Resend konfiguriert und Status relevant)
-    if (process.env.RESEND_API_KEY && (status === 'confirmed' || status === 'cancelled')) {
+    if (process.env.RESEND_API_KEY && (typedStatus === 'confirmed' || typedStatus === 'cancelled')) {
       try {
         const { Resend } = await import('resend')
         const resend = new Resend(process.env.RESEND_API_KEY)
@@ -58,7 +60,7 @@ export async function PATCH(request: NextRequest) {
             })
           : 'Nicht angegeben'
 
-        if (status === 'confirmed') {
+        if (typedStatus === 'confirmed') {
           await resend.emails.send({
             from: 'Salim Lee Gym <onboarding@resend.dev>',
             to: booking.email,
@@ -99,7 +101,7 @@ export async function PATCH(request: NextRequest) {
               </html>
             `,
           })
-        } else if (status === 'cancelled') {
+        } else if (typedStatus === 'cancelled') {
           await resend.emails.send({
             from: 'Salim Lee Gym <onboarding@resend.dev>',
             to: booking.email,
@@ -137,7 +139,7 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ success: true, status })
+    return NextResponse.json({ success: true, status: typedStatus })
   } catch (error) {
     console.error('Status-Update Fehler:', error)
     return NextResponse.json({ error: 'Ein Fehler ist aufgetreten' }, { status: 500 })
