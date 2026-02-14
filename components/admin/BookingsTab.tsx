@@ -39,6 +39,10 @@ export default function BookingsTab({ bookings, setBookings, supabase, onRefresh
   const [adminNotes, setAdminNotes] = useState('')
   const [saving, setSaving] = useState(false)
   const [search, setSearch] = useState('')
+  const [showMessageModal, setShowMessageModal] = useState(false)
+  const [pendingStatus, setPendingStatus] = useState<BookingStatus | null>(null)
+  const [personalMessage, setPersonalMessage] = useState('')
+  const [sendingEmail, setSendingEmail] = useState(false)
 
   const filteredBookings = bookings.filter(b => {
     const matchesFilter = filter === 'all' || b.status === filter
@@ -56,7 +60,27 @@ export default function BookingsTab({ bookings, setBookings, supabase, onRefresh
     cancelled: bookings.filter(b => b.status === 'cancelled').length,
   }
 
-  const updateStatus = async (id: string, status: BookingStatus) => {
+  const openStatusModal = (status: BookingStatus) => {
+    if (status === 'confirmed' || status === 'cancelled') {
+      setPendingStatus(status)
+      setPersonalMessage('')
+      setShowMessageModal(true)
+    } else {
+      updateStatus(selectedBooking!.id, status)
+    }
+  }
+
+  const confirmStatusChange = async () => {
+    if (!selectedBooking || !pendingStatus) return
+    setSendingEmail(true)
+    await updateStatus(selectedBooking.id, pendingStatus, personalMessage)
+    setSendingEmail(false)
+    setShowMessageModal(false)
+    setPendingStatus(null)
+    setPersonalMessage('')
+  }
+
+  const updateStatus = async (id: string, status: BookingStatus, message?: string) => {
     setSaving(true)
     try {
       // Status direkt über Supabase Client aktualisieren
@@ -76,7 +100,7 @@ export default function BookingsTab({ bookings, setBookings, supabase, onRefresh
           fetch('/api/booking/send-notification', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ bookingId: id, status }),
+            body: JSON.stringify({ bookingId: id, status, personalMessage: message || '' }),
           }).catch(() => {
             // E-Mail-Fehler ignorieren - Status wurde bereits aktualisiert
           })
@@ -242,9 +266,9 @@ export default function BookingsTab({ bookings, setBookings, supabase, onRefresh
                 <div>
                   <p className="text-xs text-dark-500 uppercase tracking-wider mb-2">Status ändern</p>
                   <div className="flex gap-2">
-                    <button onClick={() => updateStatus(selectedBooking.id, 'confirmed')} disabled={saving || selectedBooking.status === 'confirmed'} className="flex-1 px-3 py-2 text-sm font-bold rounded-lg bg-green-500/10 text-green-400 border border-green-500/30 hover:bg-green-500/20 transition-all disabled:opacity-30 disabled:cursor-not-allowed">Bestätigen</button>
-                    <button onClick={() => updateStatus(selectedBooking.id, 'pending')} disabled={saving || selectedBooking.status === 'pending'} className="flex-1 px-3 py-2 text-sm font-bold rounded-lg bg-yellow-500/10 text-yellow-400 border border-yellow-500/30 hover:bg-yellow-500/20 transition-all disabled:opacity-30 disabled:cursor-not-allowed">Offen</button>
-                    <button onClick={() => updateStatus(selectedBooking.id, 'cancelled')} disabled={saving || selectedBooking.status === 'cancelled'} className="flex-1 px-3 py-2 text-sm font-bold rounded-lg bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 transition-all disabled:opacity-30 disabled:cursor-not-allowed">Stornieren</button>
+                    <button onClick={() => openStatusModal('confirmed')} disabled={saving || selectedBooking.status === 'confirmed'} className="flex-1 px-3 py-2 text-sm font-bold rounded-lg bg-green-500/10 text-green-400 border border-green-500/30 hover:bg-green-500/20 transition-all disabled:opacity-30 disabled:cursor-not-allowed">Bestätigen</button>
+                    <button onClick={() => openStatusModal('pending')} disabled={saving || selectedBooking.status === 'pending'} className="flex-1 px-3 py-2 text-sm font-bold rounded-lg bg-yellow-500/10 text-yellow-400 border border-yellow-500/30 hover:bg-yellow-500/20 transition-all disabled:opacity-30 disabled:cursor-not-allowed">Offen</button>
+                    <button onClick={() => openStatusModal('cancelled')} disabled={saving || selectedBooking.status === 'cancelled'} className="flex-1 px-3 py-2 text-sm font-bold rounded-lg bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 transition-all disabled:opacity-30 disabled:cursor-not-allowed">Stornieren</button>
                   </div>
                   {(selectedBooking.status !== 'pending') && (
                     <p className="text-xs text-dark-500 mt-2">
@@ -280,6 +304,87 @@ export default function BookingsTab({ bookings, setBookings, supabase, onRefresh
           )}
         </div>
       </div>
+
+      {/* Nachrichten-Modal für Bestätigung/Stornierung */}
+      {showMessageModal && pendingStatus && selectedBooking && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => !sendingEmail && setShowMessageModal(false)}>
+          <div className="bg-dark-900 border border-dark-700 rounded-2xl w-full max-w-lg shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className={`p-5 border-b border-dark-800 flex items-center gap-3`}>
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg ${
+                pendingStatus === 'confirmed' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+              }`}>
+                {pendingStatus === 'confirmed' ? '\u2713' : '\u2717'}
+              </div>
+              <div>
+                <h3 className="font-bold text-dark-100 text-lg">
+                  {pendingStatus === 'confirmed' ? 'Buchung bestätigen' : 'Buchung stornieren'}
+                </h3>
+                <p className="text-dark-500 text-sm">E-Mail an {selectedBooking.name}</p>
+              </div>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div className="bg-dark-800/50 rounded-xl p-4 space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-dark-400">Service</span>
+                  <span className="text-dark-100 font-medium">{selectedBooking.service}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-dark-400">Kunde</span>
+                  <span className="text-dark-100">{selectedBooking.name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-dark-400">E-Mail</span>
+                  <span className="text-dark-300">{selectedBooking.email}</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-dark-300 mb-2">
+                  Persönliche Nachricht <span className="text-dark-500">(optional)</span>
+                </label>
+                <textarea
+                  value={personalMessage}
+                  onChange={(e) => setPersonalMessage(e.target.value)}
+                  rows={4}
+                  className="w-full px-4 py-3 bg-dark-800/50 border border-dark-700 rounded-xl text-dark-100 placeholder:text-dark-500 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 text-sm resize-none"
+                  placeholder={pendingStatus === 'confirmed'
+                    ? 'z.B. "Wir freuen uns auf dich! Bitte komm 10 Minuten früher..."'
+                    : 'z.B. "Leider ist der Termin bereits ausgebucht. Wie wäre es am Donnerstag?"'
+                  }
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <div className="p-5 border-t border-dark-800 flex gap-3">
+              <button
+                onClick={() => { setShowMessageModal(false); setPendingStatus(null); setPersonalMessage('') }}
+                disabled={sendingEmail}
+                className="flex-1 px-4 py-3 text-sm font-bold rounded-xl bg-dark-800 text-dark-300 border border-dark-700 hover:border-dark-600 transition-all disabled:opacity-50"
+              >
+                Abbrechen
+              </button>
+              <button
+                onClick={confirmStatusChange}
+                disabled={sendingEmail}
+                className={`flex-1 px-4 py-3 text-sm font-bold rounded-xl transition-all disabled:opacity-50 ${
+                  pendingStatus === 'confirmed'
+                    ? 'bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-green-500/30'
+                    : 'bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30'
+                }`}
+              >
+                {sendingEmail
+                  ? 'Wird gesendet...'
+                  : pendingStatus === 'confirmed'
+                    ? 'Bestätigen & E-Mail senden'
+                    : 'Stornieren & E-Mail senden'
+                }
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
