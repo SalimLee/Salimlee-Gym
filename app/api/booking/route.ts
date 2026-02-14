@@ -9,6 +9,8 @@ const supabase = createClient(
 
 // Email-Adresse des Gym-Besitzers
 const GYM_EMAIL = process.env.GYM_EMAIL || 'info@salimlee-gym.de'
+// Absender-Email (muss in Resend als Domain verifiziert sein!)
+const EMAIL_FROM = process.env.EMAIL_FROM || 'Salim Lee Gym <noreply@salimlee-gym.de>'
 
 export async function POST(request: NextRequest) {
   try {
@@ -66,7 +68,7 @@ export async function POST(request: NextRequest) {
 
         // Email an Gym-Besitzer
         await resend.emails.send({
-          from: 'Salim Lee Gym <onboarding@resend.dev>',
+          from: EMAIL_FROM,
           to: GYM_EMAIL,
           subject: `Neue Buchungsanfrage: ${service} von ${name}`,
           html: `
@@ -101,7 +103,7 @@ export async function POST(request: NextRequest) {
 
         // Bestätigungsemail an Kunden
         await resend.emails.send({
-          from: 'Salim Lee Gym <onboarding@resend.dev>',
+          from: EMAIL_FROM,
           to: email,
           subject: 'Deine Buchungsanfrage bei Salim Lee Gym',
           html: `
@@ -126,7 +128,7 @@ export async function POST(request: NextRequest) {
                   <p style="color: #a1a1aa; margin-top: 30px; line-height: 1.8;">Sportliche Grüße,<br><strong style="color: #f59e0b;">Dein Salim Lee Team</strong></p>
                 </div>
                 <div style="background-color: #09090b; padding: 20px; text-align: center; color: #71717a; font-size: 12px;">
-                  Metzgerstrasse 5, 72764 Reutlingen<br>&copy; ${new Date().getFullYear()} Salim Lee Boxing & Fitness Gym
+                  Wörthstrasse 17, 72764 Reutlingen<br>&copy; ${new Date().getFullYear()} Salim Lee Boxing & Fitness Gym
                 </div>
               </div>
             </body>

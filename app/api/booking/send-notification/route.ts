@@ -36,6 +36,7 @@ export async function POST(request: NextRequest) {
 
     const { Resend } = await import('resend')
     const resend = new Resend(process.env.RESEND_API_KEY)
+    const EMAIL_FROM = process.env.EMAIL_FROM || 'Salim Lee Gym <noreply@salimlee-gym.de>'
 
     const formattedDate = booking.preferred_date
       ? new Date(booking.preferred_date).toLocaleDateString('de-DE', {
@@ -48,7 +49,7 @@ export async function POST(request: NextRequest) {
 
     if (status === 'confirmed') {
       const { error: emailError } = await resend.emails.send({
-        from: 'Salim Lee Gym <onboarding@resend.dev>',
+        from: EMAIL_FROM,
         to: booking.email,
         subject: 'Deine Buchung wurde bestätigt! - Salim Lee Gym',
         html: `
@@ -86,7 +87,7 @@ export async function POST(request: NextRequest) {
                 <p style="color: #a1a1aa; margin-top: 30px; line-height: 1.8;">Sportliche Grüße,<br><strong style="color: #f59e0b;">Dein Salim Lee Team</strong></p>
               </div>
               <div style="background-color: #09090b; padding: 20px; text-align: center; color: #71717a; font-size: 12px;">
-                Metzgerstrasse 5, 72764 Reutlingen<br>&copy; ${new Date().getFullYear()} Salim Lee Boxing & Fitness Gym
+                Wörthstrasse 17, 72764 Reutlingen<br>&copy; ${new Date().getFullYear()} Salim Lee Boxing & Fitness Gym
               </div>
             </div>
           </body>
@@ -100,7 +101,7 @@ export async function POST(request: NextRequest) {
       }
     } else {
       const { error: emailError } = await resend.emails.send({
-        from: 'Salim Lee Gym <onboarding@resend.dev>',
+        from: EMAIL_FROM,
         to: booking.email,
         subject: 'Deine Buchungsanfrage - Salim Lee Gym',
         html: `
@@ -129,7 +130,7 @@ export async function POST(request: NextRequest) {
                 <p style="color: #a1a1aa; margin-top: 30px; line-height: 1.8;">Sportliche Grüße,<br><strong style="color: #f59e0b;">Dein Salim Lee Team</strong></p>
               </div>
               <div style="background-color: #09090b; padding: 20px; text-align: center; color: #71717a; font-size: 12px;">
-                Metzgerstrasse 5, 72764 Reutlingen<br>&copy; ${new Date().getFullYear()} Salim Lee Boxing & Fitness Gym
+                Wörthstrasse 17, 72764 Reutlingen<br>&copy; ${new Date().getFullYear()} Salim Lee Boxing & Fitness Gym
               </div>
             </div>
           </body>
