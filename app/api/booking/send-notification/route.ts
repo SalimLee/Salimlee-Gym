@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 
 export async function POST(request: NextRequest) {
   try {
@@ -7,31 +6,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Resend nicht konfiguriert' }, { status: 200 })
     }
 
-    const { bookingId, status, personalMessage } = await request.json()
+    const { status, personalMessage, booking } = await request.json()
 
-    if (!bookingId || !status) {
-      return NextResponse.json({ error: 'bookingId und status erforderlich' }, { status: 400 })
+    if (!status || !booking?.email || !booking?.name) {
+      return NextResponse.json({ error: 'Status und Buchungsdaten erforderlich' }, { status: 400 })
     }
 
     if (status !== 'confirmed' && status !== 'cancelled') {
       return NextResponse.json({ error: 'Status muss confirmed oder cancelled sein' }, { status: 400 })
-    }
-
-    // Service-Role Client für Server-seitigen DB-Zugriff
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
-
-    // Buchung laden
-    const { data: booking, error: fetchError } = await supabase
-      .from('bookings')
-      .select('*')
-      .eq('id', bookingId)
-      .single()
-
-    if (fetchError || !booking) {
-      return NextResponse.json({ error: 'Buchung nicht gefunden' }, { status: 404 })
     }
 
     const { Resend } = await import('resend')

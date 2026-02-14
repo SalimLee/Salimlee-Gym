@@ -101,10 +101,22 @@ export default function BookingsTab({ bookings, setBookings, supabase, onRefresh
         // E-Mail-Benachrichtigung senden und auf Ergebnis warten
         if (status === 'confirmed' || status === 'cancelled') {
           try {
+            const booking = bookings.find(b => b.id === id)
             const res = await fetch('/api/booking/send-notification', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ bookingId: id, status, personalMessage: message || '' }),
+              body: JSON.stringify({
+                bookingId: id,
+                status,
+                personalMessage: message || '',
+                booking: booking ? {
+                  name: booking.name,
+                  email: booking.email,
+                  service: booking.service,
+                  people: booking.people,
+                  preferred_date: booking.preferred_date,
+                } : undefined,
+              }),
             })
             const data = await res.json()
             if (!res.ok || data.error) {
