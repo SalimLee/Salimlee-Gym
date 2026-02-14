@@ -59,16 +59,30 @@ export default function BookingsTab({ bookings, setBookings, supabase, onRefresh
   const updateStatus = async (id: string, status: BookingStatus) => {
     setSaving(true)
     try {
-      const res = await fetch('/api/booking/status', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bookingId: id, status }),
-      })
-      if (res.ok) {
+      // Status direkt über Supabase Client aktualisieren
+      const { error } = await supabase
+        .from('bookings')
+        .update({ status })
+        .eq('id', id)
+
+      if (!error) {
         setBookings(prev => prev.map(b => b.id === id ? { ...b, status } : b))
         if (selectedBooking?.id === id) {
           setSelectedBooking(prev => prev ? { ...prev, status } : null)
         }
+
+        // E-Mail-Benachrichtigung im Hintergrund senden
+        if (status === 'confirmed' || status === 'cancelled') {
+          fetch('/api/booking/send-notification', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ bookingId: id, status }),
+          }).catch(() => {
+            // E-Mail-Fehler ignorieren - Status wurde bereits aktualisiert
+          })
+        }
+      } else {
+        console.error('Status-Update fehlgeschlagen:', error)
       }
     } catch (error) {
       console.error('Status-Update fehlgeschlagen:', error)
