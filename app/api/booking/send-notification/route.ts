@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
       : 'Nicht angegeben'
 
     if (status === 'confirmed') {
-      await resend.emails.send({
+      const { error: emailError } = await resend.emails.send({
         from: 'Salim Lee Gym <onboarding@resend.dev>',
         to: booking.email,
         subject: 'Deine Buchung wurde bestätigt! - Salim Lee Gym',
@@ -93,8 +93,13 @@ export async function POST(request: NextRequest) {
           </html>
         `,
       })
+
+      if (emailError) {
+        console.error('Bestätigungs-E-Mail fehlgeschlagen:', emailError)
+        return NextResponse.json({ error: `E-Mail-Versand fehlgeschlagen: ${emailError.message}` }, { status: 500 })
+      }
     } else {
-      await resend.emails.send({
+      const { error: emailError } = await resend.emails.send({
         from: 'Salim Lee Gym <onboarding@resend.dev>',
         to: booking.email,
         subject: 'Deine Buchungsanfrage - Salim Lee Gym',
@@ -131,6 +136,11 @@ export async function POST(request: NextRequest) {
           </html>
         `,
       })
+
+      if (emailError) {
+        console.error('Stornierungs-E-Mail fehlgeschlagen:', emailError)
+        return NextResponse.json({ error: `E-Mail-Versand fehlgeschlagen: ${emailError.message}` }, { status: 500 })
+      }
     }
 
     return NextResponse.json({ success: true })

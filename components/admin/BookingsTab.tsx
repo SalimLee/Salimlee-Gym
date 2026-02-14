@@ -43,6 +43,7 @@ export default function BookingsTab({ bookings, setBookings, supabase, onRefresh
   const [pendingStatus, setPendingStatus] = useState<BookingStatus | null>(null)
   const [personalMessage, setPersonalMessage] = useState('')
   const [sendingEmail, setSendingEmail] = useState(false)
+  const [emailError, setEmailError] = useState<string | null>(null)
 
   const filteredBookings = bookings.filter(b => {
     const matchesFilter = filter === 'all' || b.status === filter
@@ -73,6 +74,7 @@ export default function BookingsTab({ bookings, setBookings, supabase, onRefresh
   const confirmStatusChange = async () => {
     if (!selectedBooking || !pendingStatus) return
     setSendingEmail(true)
+    setEmailError(null)
     await updateStatus(selectedBooking.id, pendingStatus, personalMessage)
     setSendingEmail(false)
     setShowMessageModal(false)
@@ -82,6 +84,7 @@ export default function BookingsTab({ bookings, setBookings, supabase, onRefresh
 
   const updateStatus = async (id: string, status: BookingStatus, message?: string) => {
     setSaving(true)
+    setEmailError(null)
     try {
       // Status direkt über Supabase Client aktualisieren
       const { error } = await supabase
@@ -95,15 +98,21 @@ export default function BookingsTab({ bookings, setBookings, supabase, onRefresh
           setSelectedBooking(prev => prev ? { ...prev, status } : null)
         }
 
-        // E-Mail-Benachrichtigung im Hintergrund senden
+        // E-Mail-Benachrichtigung senden und auf Ergebnis warten
         if (status === 'confirmed' || status === 'cancelled') {
-          fetch('/api/booking/send-notification', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ bookingId: id, status, personalMessage: message || '' }),
-          }).catch(() => {
-            // E-Mail-Fehler ignorieren - Status wurde bereits aktualisiert
-          })
+          try {
+            const res = await fetch('/api/booking/send-notification', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ bookingId: id, status, personalMessage: message || '' }),
+            })
+            const data = await res.json()
+            if (!res.ok || data.error) {
+              setEmailError(data.error || 'E-Mail konnte nicht gesendet werden')
+            }
+          } catch {
+            setEmailError('E-Mail-Versand fehlgeschlagen. Bitte prüfe die E-Mail-Konfiguration.')
+          }
         }
       } else {
         console.error('Status-Update fehlgeschlagen:', error)
@@ -270,7 +279,12 @@ export default function BookingsTab({ bookings, setBookings, supabase, onRefresh
                     <button onClick={() => openStatusModal('pending')} disabled={saving || selectedBooking.status === 'pending'} className="flex-1 px-3 py-2 text-sm font-bold rounded-lg bg-yellow-500/10 text-yellow-400 border border-yellow-500/30 hover:bg-yellow-500/20 transition-all disabled:opacity-30 disabled:cursor-not-allowed">Offen</button>
                     <button onClick={() => openStatusModal('cancelled')} disabled={saving || selectedBooking.status === 'cancelled'} className="flex-1 px-3 py-2 text-sm font-bold rounded-lg bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 transition-all disabled:opacity-30 disabled:cursor-not-allowed">Stornieren</button>
                   </div>
-                  {(selectedBooking.status !== 'pending') && (
+                  {emailError && (
+                    <div className="mt-2 p-2 bg-red-500/10 border border-red-500/30 rounded-lg">
+                      <p className="text-xs text-red-400 font-medium">E-Mail nicht gesendet: {emailError}</p>
+                    </div>
+                  )}
+                  {!emailError && (selectedBooking.status !== 'pending') && (
                     <p className="text-xs text-dark-500 mt-2">
                       {selectedBooking.status === 'confirmed' ? 'Kunde wurde per E-Mail benachrichtigt' : 'Kunde wurde per E-Mail informiert'}
                     </p>
