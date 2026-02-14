@@ -82,7 +82,7 @@ export function Contact() {
           {/* Map */}
           <div className="h-[400px] bg-dark-900/50 rounded-2xl border border-brand-600/20 overflow-hidden">
             <iframe
-              src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d2634.8!2d9.2!3d48.5!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2zNDjCsDMwJzAwLjAiTiA5wrAxMicwMC4wIkU!5e0!3m2!1sde!2sde!4v1234567890"
+              src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d2634.5!2d9.2048!3d48.4912!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x4799e9a3c9d3b7f7%3A0x0!2sW%C3%B6rthstra%C3%9Fe+17%2C+72764+Reutlingen!5e0!3m2!1sde!2sde"
               width="100%"
               height="100%"
               style={{ border: 0 }}

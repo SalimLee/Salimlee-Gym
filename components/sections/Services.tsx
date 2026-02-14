@@ -1,6 +1,6 @@
 'use client'
 
-import { Users, Award, Calendar, CheckCircle } from 'lucide-react'
+import { Users, Award, Calendar, Star, CheckCircle } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { SERVICES } from '@/lib/constants'
 import { Service } from '@/types'
@@ -10,6 +10,7 @@ const IconMap = {
   Users,
   Award,
   Calendar,
+  Star,
 }
 
 interface ServicesProps {
@@ -31,7 +32,7 @@ export function Services({ onServiceSelect }: ServicesProps) {
         </div>
 
         {/* Service Cards */}
-        <div className="grid md:grid-cols-3 gap-8">
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
           {SERVICES.map((service, index) => {
             const IconComponent = IconMap[service.icon as keyof typeof IconMap]
             
