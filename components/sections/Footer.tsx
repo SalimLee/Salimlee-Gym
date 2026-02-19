@@ -10,7 +10,7 @@ export function Footer() {
       <div className="max-w-4xl mx-auto text-center">
         {/* Motto */}
         <div className="mb-8">
-          <p className="text-2xl md:text-3xl font-black tracking-wider text-dark-200">
+          <p className="text-2xl md:text-3xl font-black tracking-wider text-dark-200 neon-text">
             MOTIVATION <span className="text-brand-500">·</span> RESPEKT <span className="text-brand-500">·</span> ERFOLG
           </p>
         </div>
