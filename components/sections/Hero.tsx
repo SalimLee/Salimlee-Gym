@@ -67,8 +67,8 @@ export function Hero({ onBookingClick }: HeroProps) {
           <div
             className="max-w-3xl mx-auto aspect-[16/9] rounded-2xl overflow-hidden relative"
             style={{
-              boxShadow: '0 0 30px rgba(204, 0, 0, 0.15), 0 0 80px rgba(204, 0, 0, 0.05), 0 25px 50px rgba(0,0,0,0.5)',
-              border: '1px solid rgba(204, 0, 0, 0.25)',
+              boxShadow: '0 0 30px rgba(176, 0, 0, 0.15), 0 0 80px rgba(176, 0, 0, 0.05), 0 25px 50px rgba(0,0,0,0.5)',
+              border: '1px solid rgba(176, 0, 0, 0.25)',
             }}
           >
             {/* Dark gym background */}
@@ -76,12 +76,12 @@ export function Hero({ onBookingClick }: HeroProps) {
 
             {/* Dramatic overhead spotlight */}
             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[40%] h-[80%]"
-              style={{ background: 'radial-gradient(ellipse at top, rgba(204,0,0,0.12) 0%, rgba(204,0,0,0.04) 40%, transparent 70%)' }}
+              style={{ background: 'radial-gradient(ellipse at top, rgba(176,0,0,0.12) 0%, rgba(176,0,0,0.04) 40%, transparent 70%)' }}
             />
 
             {/* Secondary ambient light */}
             <div className="absolute top-[10%] left-[20%] w-[25%] h-[40%]"
-              style={{ background: 'radial-gradient(circle, rgba(204,0,0,0.06) 0%, transparent 70%)' }}
+              style={{ background: 'radial-gradient(circle, rgba(176,0,0,0.06) 0%, transparent 70%)' }}
             />
 
             {/* Boxing ring - floor canvas */}
@@ -93,8 +93,8 @@ export function Hero({ onBookingClick }: HeroProps) {
                 <div
                   className="h-[2px] w-full"
                   style={{
-                    background: `linear-gradient(to right, transparent, rgba(204,0,0,${0.35 - i * 0.1}) 20%, rgba(204,0,0,${0.5 - i * 0.12}) 50%, rgba(204,0,0,${0.35 - i * 0.1}) 80%, transparent)`,
-                    boxShadow: `0 0 ${8 - i * 2}px rgba(204,0,0,${0.3 - i * 0.08})`,
+                    background: `linear-gradient(to right, transparent, rgba(176,0,0,${0.35 - i * 0.1}) 20%, rgba(176,0,0,${0.5 - i * 0.12}) 50%, rgba(176,0,0,${0.35 - i * 0.1}) 80%, transparent)`,
+                    boxShadow: `0 0 ${8 - i * 2}px rgba(176,0,0,${0.3 - i * 0.08})`,
                   }}
                 />
               </div>
@@ -102,10 +102,10 @@ export function Hero({ onBookingClick }: HeroProps) {
 
             {/* Ring posts with glow */}
             <div className="absolute top-[18%] left-[6%] w-[4px] h-[40%] rounded-full"
-              style={{ background: 'linear-gradient(to bottom, rgba(204,0,0,0.6), rgba(204,0,0,0.2), transparent)', boxShadow: '0 0 8px rgba(204,0,0,0.3)' }}
+              style={{ background: 'linear-gradient(to bottom, rgba(176,0,0,0.6), rgba(176,0,0,0.2), transparent)', boxShadow: '0 0 8px rgba(176,0,0,0.3)' }}
             />
             <div className="absolute top-[18%] right-[6%] w-[4px] h-[40%] rounded-full"
-              style={{ background: 'linear-gradient(to bottom, rgba(204,0,0,0.6), rgba(204,0,0,0.2), transparent)', boxShadow: '0 0 8px rgba(204,0,0,0.3)' }}
+              style={{ background: 'linear-gradient(to bottom, rgba(176,0,0,0.6), rgba(176,0,0,0.2), transparent)', boxShadow: '0 0 8px rgba(176,0,0,0.3)' }}
             />
 
             {/* Hanging hook/bar at top */}
@@ -125,18 +125,18 @@ export function Hero({ onBookingClick }: HeroProps) {
               <div className="relative w-[60px] h-[75px] md:w-[80px] md:h-[100px]">
                 <div className="absolute inset-0 rounded-[45%_45%_50%_50%]"
                   style={{
-                    background: 'linear-gradient(135deg, #e60000 0%, #cc0000 25%, #990000 60%, #660000 100%)',
-                    boxShadow: '0 0 25px rgba(204,0,0,0.35), inset 0 -5px 15px rgba(0,0,0,0.5), inset 5px 5px 10px rgba(255,80,80,0.1)',
+                    background: 'linear-gradient(135deg, #c00000 0%, #b00000 25%, #6a0000 60%, #550000 100%)',
+                    boxShadow: '0 0 25px rgba(176,0,0,0.35), inset 0 -5px 15px rgba(0,0,0,0.5), inset 5px 5px 10px rgba(255,80,80,0.1)',
                   }}
                 />
                 <div className="absolute top-[12%] left-[12%] w-[40%] h-[35%] rounded-full opacity-30"
                   style={{ background: 'radial-gradient(circle at 30% 30%, rgba(255,120,120,0.6), transparent)' }}
                 />
                 <div className="absolute top-[20%] left-[-10%] w-[30%] h-[35%] rounded-[50%]"
-                  style={{ background: 'linear-gradient(135deg, #cc0000, #800000)', boxShadow: 'inset 2px 2px 4px rgba(255,80,80,0.1)' }}
+                  style={{ background: 'linear-gradient(135deg, #b00000, #6a0000)', boxShadow: 'inset 2px 2px 4px rgba(255,80,80,0.1)' }}
                 />
                 <div className="absolute bottom-[-8%] left-[15%] w-[70%] h-[20%] rounded-b-lg"
-                  style={{ background: 'linear-gradient(to bottom, #660000, #400000)' }}
+                  style={{ background: 'linear-gradient(to bottom, #550000, #350000)' }}
                 />
                 <div className="absolute top-[55%] left-[20%] w-[60%] h-[1px] opacity-15 bg-white" />
               </div>
@@ -147,18 +147,18 @@ export function Hero({ onBookingClick }: HeroProps) {
               <div className="relative w-[60px] h-[75px] md:w-[80px] md:h-[100px]">
                 <div className="absolute inset-0 rounded-[45%_45%_50%_50%]"
                   style={{
-                    background: 'linear-gradient(225deg, #e60000 0%, #cc0000 25%, #990000 60%, #660000 100%)',
-                    boxShadow: '0 0 25px rgba(204,0,0,0.35), inset 0 -5px 15px rgba(0,0,0,0.5), inset -5px 5px 10px rgba(255,80,80,0.1)',
+                    background: 'linear-gradient(225deg, #c00000 0%, #b00000 25%, #6a0000 60%, #550000 100%)',
+                    boxShadow: '0 0 25px rgba(176,0,0,0.35), inset 0 -5px 15px rgba(0,0,0,0.5), inset -5px 5px 10px rgba(255,80,80,0.1)',
                   }}
                 />
                 <div className="absolute top-[12%] right-[12%] w-[40%] h-[35%] rounded-full opacity-30"
                   style={{ background: 'radial-gradient(circle at 70% 30%, rgba(255,120,120,0.6), transparent)' }}
                 />
                 <div className="absolute top-[20%] right-[-10%] w-[30%] h-[35%] rounded-[50%]"
-                  style={{ background: 'linear-gradient(225deg, #cc0000, #800000)', boxShadow: 'inset -2px 2px 4px rgba(255,80,80,0.1)' }}
+                  style={{ background: 'linear-gradient(225deg, #b00000, #6a0000)', boxShadow: 'inset -2px 2px 4px rgba(255,80,80,0.1)' }}
                 />
                 <div className="absolute bottom-[-8%] left-[15%] w-[70%] h-[20%] rounded-b-lg"
-                  style={{ background: 'linear-gradient(to bottom, #660000, #400000)' }}
+                  style={{ background: 'linear-gradient(to bottom, #550000, #350000)' }}
                 />
                 <div className="absolute top-[55%] left-[20%] w-[60%] h-[1px] opacity-15 bg-white" />
               </div>
@@ -166,13 +166,13 @@ export function Hero({ onBookingClick }: HeroProps) {
 
             {/* Glow behind gloves */}
             <div className="absolute top-[25%] left-1/2 -translate-x-1/2 w-[50%] h-[35%]"
-              style={{ background: 'radial-gradient(ellipse, rgba(204,0,0,0.1) 0%, transparent 60%)' }}
+              style={{ background: 'radial-gradient(ellipse, rgba(176,0,0,0.1) 0%, transparent 60%)' }}
             />
 
             {/* Central text */}
             <div className="absolute bottom-[15%] left-0 right-0 text-center">
               <div className="text-xl md:text-3xl font-black tracking-[0.25em] text-dark-400/70"
-                style={{ textShadow: '0 0 20px rgba(204,0,0,0.15)' }}
+                style={{ textShadow: '0 0 20px rgba(176,0,0,0.15)' }}
               >
                 TRAIN HARD
               </div>
@@ -194,7 +194,7 @@ export function Hero({ onBookingClick }: HeroProps) {
             >
               <div
                 className="w-14 h-14 md:w-16 md:h-16 mx-auto bg-brand-500/10 rounded-xl flex items-center justify-center text-brand-500 mb-3"
-                style={{ boxShadow: '0 0 15px rgba(204,0,0,0.08)' }}
+                style={{ boxShadow: '0 0 15px rgba(176,0,0,0.08)' }}
               >
                 {feature.icon}
               </div>
@@ -210,7 +210,7 @@ export function Hero({ onBookingClick }: HeroProps) {
           <button
             onClick={onBookingClick}
             className="px-12 py-4 bg-gradient-to-r from-brand-500 to-brand-600 text-white font-black text-xl rounded-lg transition-all duration-300 transform hover:scale-105 tracking-wider"
-            style={{ boxShadow: '0 0 20px rgba(204, 0, 0, 0.4), 0 0 60px rgba(204, 0, 0, 0.15)' }}
+            style={{ boxShadow: '0 0 20px rgba(176, 0, 0, 0.4), 0 0 60px rgba(176, 0, 0, 0.15)' }}
           >
             JETZT BUCHEN
           </button>

@@ -35,7 +35,7 @@ export function Header({ onBookingClick }: HeaderProps) {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-3 group">
-          <div className="w-12 h-12 bg-gradient-to-br from-brand-500 to-brand-700 rounded-lg flex items-center justify-center font-black text-white text-xl transition-all duration-300" style={{ boxShadow: '0 0 12px rgba(204,0,0,0.3)' }}>
+          <div className="w-12 h-12 bg-gradient-to-br from-brand-500 to-brand-700 rounded-lg flex items-center justify-center font-black text-white text-xl transition-all duration-300" style={{ boxShadow: '0 0 12px rgba(176,0,0,0.3)' }}>
             SL
           </div>
           <div>
