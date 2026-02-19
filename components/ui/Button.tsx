@@ -13,7 +13,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     const baseStyles = 'font-black rounded-lg transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-dark-950 disabled:opacity-50 disabled:cursor-not-allowed'
     
     const variants = {
-      primary: 'bg-gradient-to-r from-brand-500 to-brand-600 text-dark-950 hover:shadow-lg hover:shadow-brand-500/50 hover:scale-105 focus:ring-brand-500',
+      primary: 'bg-gradient-to-r from-brand-500 to-brand-600 text-white hover:shadow-lg hover:shadow-brand-500/50 hover:scale-105 focus:ring-brand-500',
       secondary: 'border-2 border-brand-500/50 text-brand-500 hover:bg-brand-500/10 focus:ring-brand-500',
       ghost: 'border-2 border-dark-700 text-dark-300 hover:bg-dark-800 focus:ring-dark-500',
     }

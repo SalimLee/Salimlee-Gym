@@ -41,7 +41,7 @@
 @layer components {
   .btn-primary {
     @apply px-8 py-4 bg-gradient-to-r from-brand-500 to-brand-600 
-           text-dark-950 font-black rounded-lg 
+           text-white font-black rounded-lg
            hover:shadow-lg hover:shadow-brand-500/50 
            transition-all duration-300 transform hover:scale-105
            focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-dark-950;

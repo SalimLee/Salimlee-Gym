@@ -4,10 +4,7 @@ import { useState } from 'react'
 import {
   Header,
   Hero,
-  Stats,
-  Services,
-  Pricing,
-  Contact,
+  KurseInfos,
   Footer,
   BookingModal,
 } from '@/components/sections'
@@ -33,10 +30,7 @@ export default function HomePage() {
       
       <main>
         <Hero onBookingClick={() => openBooking()} />
-        <Stats />
-        <Services onServiceSelect={openBooking} />
-        <Pricing />
-        <Contact />
+        <KurseInfos />
       </main>
       
       <Footer />

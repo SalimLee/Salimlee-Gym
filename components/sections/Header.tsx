@@ -35,7 +35,7 @@ export function Header({ onBookingClick }: HeaderProps) {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-3 group">
-          <div className="w-12 h-12 bg-gradient-to-br from-brand-500 to-brand-700 rounded-lg flex items-center justify-center font-black text-dark-950 text-xl group-hover:shadow-lg group-hover:shadow-brand-500/50 transition-all duration-300">
+          <div className="w-12 h-12 bg-gradient-to-br from-brand-500 to-brand-700 rounded-lg flex items-center justify-center font-black text-white text-xl group-hover:shadow-lg group-hover:shadow-brand-500/50 transition-all duration-300">
             SL
           </div>
           <div>
@@ -58,7 +58,7 @@ export function Header({ onBookingClick }: HeaderProps) {
           {onBookingClick && (
             <button
               onClick={onBookingClick}
-              className="ml-4 px-6 py-2 bg-brand-500 text-dark-950 font-bold rounded-lg hover:bg-brand-400 transition-colors"
+              className="ml-4 px-6 py-2 bg-brand-500 text-white font-bold rounded-lg hover:bg-brand-400 transition-colors"
             >
               BUCHEN
             </button>
@@ -95,7 +95,7 @@ export function Header({ onBookingClick }: HeaderProps) {
                   setIsMobileMenuOpen(false)
                   onBookingClick()
                 }}
-                className="mt-2 py-3 px-4 bg-brand-500 text-dark-950 font-bold rounded-lg hover:bg-brand-400 transition-colors"
+                className="mt-2 py-3 px-4 bg-brand-500 text-white font-bold rounded-lg hover:bg-brand-400 transition-colors"
               >
                 JETZT BUCHEN
               </button>
