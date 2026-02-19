@@ -8,18 +8,18 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Primärfarben für Salim Lee Gym – Rot
+        // Primärfarben für Salim Lee Gym – Tiefes Rot
         brand: {
           50: '#fef2f2',
-          100: '#fee2e2',
-          200: '#fecaca',
-          300: '#fca5a5',
-          400: '#f87171',
-          500: '#ef4444', // Hauptfarbe Rot
-          600: '#dc2626',
-          700: '#b91c1c',
-          800: '#991b1b',
-          900: '#7f1d1d',
+          100: '#fde8e8',
+          200: '#f9c5c5',
+          300: '#f09898',
+          400: '#e35c5c',
+          500: '#d32f2f', // Hauptfarbe – sattes, tiefes Rot
+          600: '#b52525',
+          700: '#961e1e',
+          800: '#7c1d1d',
+          900: '#681b1b',
         },
         dark: {
           50: '#fafafa',
@@ -55,13 +55,13 @@ const config: Config = {
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
         pulseGlow: {
-          '0%, 100%': { boxShadow: '0 0 20px rgba(239, 68, 68, 0.3)' },
-          '50%': { boxShadow: '0 0 40px rgba(239, 68, 68, 0.6)' },
+          '0%, 100%': { boxShadow: '0 0 20px rgba(211, 47, 47, 0.3)' },
+          '50%': { boxShadow: '0 0 40px rgba(211, 47, 47, 0.6)' },
         },
       },
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
-        'brand-gradient': 'linear-gradient(to right, #ef4444, #dc2626)',
+        'brand-gradient': 'linear-gradient(to right, #d32f2f, #b52525)',
       },
     },
   },

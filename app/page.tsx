@@ -5,6 +5,8 @@ import {
   Header,
   Hero,
   KurseInfos,
+  Pricing,
+  Contact,
   Footer,
   BookingModal,
 } from '@/components/sections'
@@ -31,6 +33,8 @@ export default function HomePage() {
       <main>
         <Hero onBookingClick={() => openBooking()} />
         <KurseInfos />
+        <Pricing />
+        <Contact />
       </main>
       
       <Footer />

@@ -5,7 +5,7 @@ import { Swords, Dumbbell, Baby, UserCheck, Euro, Clock, Gift, MapPin } from 'lu
 export function KurseInfos() {
   const kurse = [
     { icon: Swords, label: 'Boxtraining' },
-    { icon: Dumbbell, label: 'Fitness & Kraft' },
+    { icon: Dumbbell, label: 'Erwachsenenkurse' },
     { icon: Baby, label: 'Kinderkurse (3-14 Jahre)' },
     { icon: UserCheck, label: 'Personal Training' },
   ]
@@ -18,7 +18,7 @@ export function KurseInfos() {
   ]
 
   return (
-    <section className="py-16 px-4">
+    <section id="angebote" className="py-16 px-4">
       <div className="max-w-4xl mx-auto">
         <div className="grid md:grid-cols-2 gap-8 md:gap-12">
           {/* Kurse */}

@@ -19,7 +19,7 @@ export function Footer() {
         <div className="flex justify-center gap-6 mb-8">
           {/* Instagram */}
           <a
-            href="https://instagram.com"
+            href="https://www.instagram.com/salimleegym/"
             target="_blank"
             rel="noopener noreferrer"
             className="w-12 h-12 bg-dark-800 hover:bg-brand-500/20 border border-dark-700 hover:border-brand-500/50 rounded-full flex items-center justify-center text-dark-400 hover:text-brand-500 transition-all duration-300"

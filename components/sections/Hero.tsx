@@ -1,6 +1,6 @@
 'use client'
 
-import { Dumbbell, Shield, Users } from 'lucide-react'
+import { Dumbbell, Shield, Users, Swords } from 'lucide-react'
 
 interface HeroProps {
   onBookingClick?: () => void
@@ -9,28 +9,19 @@ interface HeroProps {
 export function Hero({ onBookingClick }: HeroProps) {
   const features = [
     {
-      icon: (
-        <svg className="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M18 4a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-1V6h-2V4h3z" />
-          <path d="M6 4a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h1V6h2V4H6z" />
-          <rect x="9" y="4" width="6" height="6" rx="1" />
-          <path d="M12 10v4" />
-          <path d="M8 14h8" />
-          <path d="M8 14v4a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-4" />
-        </svg>
-      ),
+      icon: <Swords className="w-7 h-7" />,
       title: 'Boxen & Fitness',
     },
     {
-      icon: <Dumbbell className="w-8 h-8" />,
+      icon: <Dumbbell className="w-7 h-7" />,
       title: 'Kraft & Ausdauer',
     },
     {
-      icon: <Shield className="w-8 h-8" />,
+      icon: <Shield className="w-7 h-7" />,
       title: 'Selbstvertrauen & Disziplin',
     },
     {
-      icon: <Users className="w-8 h-8" />,
+      icon: <Users className="w-7 h-7" />,
       title: 'Alle Level willkommen',
     },
   ]
@@ -45,37 +36,76 @@ export function Hero({ onBookingClick }: HeroProps) {
 
       <div className="max-w-5xl mx-auto relative z-10">
         {/* Main Hero Content */}
-        <div className="text-center mb-12 animate-fade-in">
+        <div className="text-center mb-10 animate-fade-in">
           <h1 className="text-4xl md:text-6xl lg:text-7xl font-black tracking-tighter mb-6 leading-none">
             SALIM LEE<br />
             <span className="text-brand-500">BOXING & FITNESS</span>
           </h1>
         </div>
 
-        {/* Boxing Image Area */}
+        {/* Boxing Gym Image Area - atmospheric CSS illustration */}
         <div className="relative mb-12 animate-fade-in-delay">
-          <div className="max-w-3xl mx-auto aspect-[16/9] bg-gradient-to-br from-dark-800 via-dark-900 to-dark-950 rounded-2xl border border-brand-600/30 overflow-hidden shadow-2xl shadow-brand-900/30 flex items-center justify-center relative">
-            {/* Boxing ring ropes effect */}
-            <div className="absolute top-[25%] left-0 right-0 h-[2px] bg-brand-500/30" />
-            <div className="absolute top-[50%] left-0 right-0 h-[2px] bg-brand-500/20" />
-            <div className="absolute top-[75%] left-0 right-0 h-[2px] bg-brand-500/10" />
+          <div className="max-w-3xl mx-auto aspect-[16/9] rounded-2xl border border-brand-700/40 overflow-hidden shadow-2xl shadow-brand-900/40 relative">
+            {/* Dark gym background with dramatic lighting */}
+            <div className="absolute inset-0 bg-gradient-to-br from-dark-900 via-[#1a0a0a] to-dark-950" />
 
-            {/* Boxing Gloves SVG */}
-            <div className="text-center">
-              <svg className="w-32 h-32 md:w-40 md:h-40 mx-auto text-brand-500 drop-shadow-lg" viewBox="0 0 100 100" fill="currentColor">
-                <path d="M30 25 C30 15, 45 10, 50 20 C55 10, 70 15, 70 25 L70 50 C70 65, 55 75, 50 75 C45 75, 30 65, 30 50 Z" opacity="0.9"/>
-                <rect x="42" y="72" width="16" height="12" rx="3" opacity="0.7"/>
-                <rect x="38" y="82" width="24" height="8" rx="4" opacity="0.5"/>
-                <path d="M35 35 C35 30, 40 28, 45 30 L45 50 C40 52, 35 48, 35 42 Z" opacity="0.6"/>
-              </svg>
-              <div className="mt-4 text-2xl md:text-3xl font-black tracking-wider text-dark-300">
+            {/* Spotlight from above */}
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[60%] h-[70%] bg-gradient-to-b from-brand-500/12 via-brand-600/5 to-transparent rounded-full blur-2xl" />
+
+            {/* Ring floor effect */}
+            <div className="absolute bottom-0 left-0 right-0 h-[35%] bg-gradient-to-t from-brand-900/15 to-transparent" />
+
+            {/* Boxing ring ropes */}
+            <div className="absolute top-[22%] left-[8%] right-[8%] h-[1px] bg-gradient-to-r from-transparent via-brand-400/40 to-transparent" />
+            <div className="absolute top-[38%] left-[5%] right-[5%] h-[1px] bg-gradient-to-r from-transparent via-brand-400/25 to-transparent" />
+            <div className="absolute top-[54%] left-[3%] right-[3%] h-[1px] bg-gradient-to-r from-transparent via-brand-400/15 to-transparent" />
+
+            {/* Ring posts - left and right */}
+            <div className="absolute top-[18%] left-[8%] w-[3px] h-[40%] bg-gradient-to-b from-brand-400/50 via-brand-500/30 to-transparent rounded-full" />
+            <div className="absolute top-[18%] right-[8%] w-[3px] h-[40%] bg-gradient-to-b from-brand-400/50 via-brand-500/30 to-transparent rounded-full" />
+
+            {/* Boxing gloves - left glove */}
+            <div className="absolute top-[28%] left-[28%] md:left-[32%]">
+              <div className="relative">
+                <div className="w-16 h-20 md:w-20 md:h-24 bg-gradient-to-br from-brand-500 via-brand-600 to-brand-700 rounded-[40%_40%_45%_45%] shadow-lg shadow-brand-900/50 transform -rotate-12">
+                  <div className="absolute top-[15%] left-[15%] w-[35%] h-[40%] bg-brand-400/30 rounded-full blur-[2px]" />
+                  <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[60%] h-[15%] bg-brand-800/60 rounded-b-lg" />
+                </div>
+                <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 w-[50%] h-4 bg-gradient-to-b from-brand-800 to-dark-900 rounded-b-lg" />
+              </div>
+            </div>
+
+            {/* Boxing gloves - right glove */}
+            <div className="absolute top-[28%] right-[28%] md:right-[32%]">
+              <div className="relative">
+                <div className="w-16 h-20 md:w-20 md:h-24 bg-gradient-to-bl from-brand-500 via-brand-600 to-brand-700 rounded-[40%_40%_45%_45%] shadow-lg shadow-brand-900/50 transform rotate-12">
+                  <div className="absolute top-[15%] right-[15%] w-[35%] h-[40%] bg-brand-400/30 rounded-full blur-[2px]" />
+                  <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[60%] h-[15%] bg-brand-800/60 rounded-b-lg" />
+                </div>
+                <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 w-[50%] h-4 bg-gradient-to-b from-brand-800 to-dark-900 rounded-b-lg" />
+              </div>
+            </div>
+
+            {/* Hanging laces between gloves */}
+            <div className="absolute top-[20%] left-1/2 -translate-x-1/2 w-[1px] h-[12%] bg-gradient-to-b from-dark-400/60 to-transparent" />
+            <div className="absolute top-[16%] left-1/2 -translate-x-1/2 w-8 h-[1px] bg-dark-400/30" />
+
+            {/* Central text */}
+            <div className="absolute bottom-[18%] left-0 right-0 text-center">
+              <div className="text-2xl md:text-3xl font-black tracking-[0.2em] text-dark-300/80">
                 TRAIN HARD
               </div>
             </div>
 
-            {/* Corner glow */}
-            <div className="absolute -bottom-4 -right-4 w-32 h-32 bg-brand-500/20 rounded-full blur-3xl" />
-            <div className="absolute -top-4 -left-4 w-24 h-24 bg-brand-600/10 rounded-full blur-2xl" />
+            {/* Atmospheric particles/dust */}
+            <div className="absolute top-[15%] left-[20%] w-1 h-1 bg-brand-400/20 rounded-full" />
+            <div className="absolute top-[35%] right-[18%] w-1.5 h-1.5 bg-brand-400/15 rounded-full" />
+            <div className="absolute top-[60%] left-[15%] w-1 h-1 bg-brand-400/10 rounded-full" />
+            <div className="absolute top-[45%] right-[25%] w-0.5 h-0.5 bg-brand-300/20 rounded-full" />
+
+            {/* Edge vignette */}
+            <div className="absolute inset-0 bg-gradient-to-r from-dark-950/40 via-transparent to-dark-950/40" />
+            <div className="absolute inset-0 bg-gradient-to-b from-dark-950/20 via-transparent to-dark-950/60" />
           </div>
         </div>
 
@@ -84,7 +114,7 @@ export function Hero({ onBookingClick }: HeroProps) {
           {features.map((feature, index) => (
             <div
               key={feature.title}
-              className="text-center p-4 md:p-6 bg-dark-900/60 rounded-xl border border-brand-600/20 hover:border-brand-500/40 transition-all duration-300 animate-fade-in"
+              className="text-center p-4 md:p-6 bg-dark-900/60 rounded-xl border border-brand-700/20 hover:border-brand-500/40 transition-all duration-300 animate-fade-in"
               style={{ animationDelay: `${index * 0.1}s` }}
             >
               <div className="w-14 h-14 md:w-16 md:h-16 mx-auto bg-brand-500/15 rounded-xl flex items-center justify-center text-brand-500 mb-3">
