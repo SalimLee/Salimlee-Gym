@@ -1,17 +1,36 @@
 'use client'
 
-import { useRef, useCallback } from 'react'
+import { useRef, useCallback, useEffect, useState } from 'react'
 import SignatureCanvas from 'react-signature-canvas'
 
 interface SignaturePadProps {
   label: string
   onSignatureChange: (dataUrl: string | null) => void
-  width?: number
   height?: number
 }
 
-export function SignaturePad({ label, onSignatureChange, width = 400, height = 150 }: SignaturePadProps) {
+export function SignaturePad({ label, onSignatureChange, height = 150 }: SignaturePadProps) {
   const sigRef = useRef<SignatureCanvas | null>(null)
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const [canvasWidth, setCanvasWidth] = useState(0)
+
+  // Measure the actual container width and use it as the canvas width
+  // This prevents the offset caused by CSS width differing from canvas width
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    const updateWidth = () => {
+      const w = container.clientWidth
+      if (w > 0) setCanvasWidth(w)
+    }
+
+    updateWidth()
+
+    const observer = new ResizeObserver(updateWidth)
+    observer.observe(container)
+    return () => observer.disconnect()
+  }, [])
 
   const handleEnd = useCallback(() => {
     if (sigRef.current && !sigRef.current.isEmpty()) {
@@ -28,19 +47,23 @@ export function SignaturePad({ label, onSignatureChange, width = 400, height = 1
   return (
     <div>
       <label className="block text-sm font-semibold text-dark-300 mb-2">{label}</label>
-      <div className="border border-dark-700 rounded-lg overflow-hidden bg-white">
-        <SignatureCanvas
-          ref={sigRef}
-          canvasProps={{
-            width,
-            height,
-            className: 'w-full',
-            style: { width: '100%', height: `${height}px` },
-          }}
-          backgroundColor="white"
-          penColor="black"
-          onEnd={handleEnd}
-        />
+      <div ref={containerRef} className="border border-dark-700 rounded-lg overflow-hidden bg-white">
+        {canvasWidth > 0 && (
+          <SignatureCanvas
+            ref={sigRef}
+            canvasProps={{
+              width: canvasWidth,
+              height,
+              className: 'touch-none',
+            }}
+            backgroundColor="white"
+            penColor="black"
+            minWidth={0.5}
+            maxWidth={2.5}
+            velocityFilterWeight={0.7}
+            onEnd={handleEnd}
+          />
+        )}
       </div>
       <button
         type="button"

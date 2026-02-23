@@ -106,6 +106,20 @@ export function ContractsTab({ members }: ContractsTabProps) {
     setStep('sign')
   }, [])
 
+  // Stable signature callbacks to prevent stale closures in SignaturePad
+  const handleMemberSig = useCallback(
+    (sig: string | null) => updateField('unterschriftMitglied', sig || ''),
+    [updateField]
+  )
+  const handleGuardianSig = useCallback(
+    (sig: string | null) => updateField('unterschriftErziehungsberechtigter', sig || ''),
+    [updateField]
+  )
+  const handleOwnerSig = useCallback(
+    (sig: string | null) => updateField('unterschriftInhaber', sig || ''),
+    [updateField]
+  )
+
   const handleSendContract = useCallback(async () => {
     setIsSending(true)
     setSendResult(null)
@@ -422,17 +436,17 @@ export function ContractsTab({ members }: ContractsTabProps) {
             <div className="space-y-8">
               <SignaturePad
                 label="Unterschrift Mitglied *"
-                onSignatureChange={(sig) => updateField('unterschriftMitglied', sig || '')}
+                onSignatureChange={handleMemberSig}
               />
 
               <SignaturePad
                 label="Unterschrift Erziehungsberechtigte/r (nur bei Minderjährigen)"
-                onSignatureChange={(sig) => updateField('unterschriftErziehungsberechtigter', sig || '')}
+                onSignatureChange={handleGuardianSig}
               />
 
               <SignaturePad
                 label="Unterschrift Inhaber (Saleem Fahmi Muhammad Shareef)"
-                onSignatureChange={(sig) => updateField('unterschriftInhaber', sig || '')}
+                onSignatureChange={handleOwnerSig}
               />
             </div>
           </div>
