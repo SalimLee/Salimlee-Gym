@@ -112,10 +112,15 @@ export function ContractsTab({ members }: ContractsTabProps) {
   }, [])
 
   // Read signatures from canvas refs and move to send step
+  // Each read is wrapped in try-catch so navigation always proceeds
   const handleGoToSend = useCallback(() => {
-    const memberSig = getMemberSig.current?.() || ''
-    const guardianSig = getGuardianSig.current?.() || ''
-    const ownerSig = getOwnerSig.current?.() || ''
+    let memberSig = ''
+    let guardianSig = ''
+    let ownerSig = ''
+
+    try { memberSig = getMemberSig.current?.() || '' } catch (e) { console.warn('Sig read error (member):', e) }
+    try { guardianSig = getGuardianSig.current?.() || '' } catch (e) { console.warn('Sig read error (guardian):', e) }
+    try { ownerSig = getOwnerSig.current?.() || '' } catch (e) { console.warn('Sig read error (owner):', e) }
 
     setFormData((prev) => ({
       ...prev,
