@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
     const { Resend } = await import('resend')
     const resend = new Resend(process.env.RESEND_API_KEY)
     const EMAIL_FROM = process.env.EMAIL_FROM || 'Salim Lee Gym <noreply@salimlee-gym.de>'
-    const GYM_EMAIL = process.env.GYM_EMAIL || 'salimlee.business@gmail.com'
+    const GYM_EMAIL = process.env.GYM_EMAIL || 'info@salimlee-gym.de'
 
     const mitgliedschaft = contractData?.mitgliedschaft || 'Nicht angegeben'
     const vertragsbeginn = contractData?.vertragsbeginn
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
               </div>
               <p style="color: #a1a1aa; line-height: 1.8;">
                 Bitte bewahre diesen Vertrag gut auf. Bei Fragen erreichst du uns jederzeit unter
-                <a href="mailto:salimlee.business@gmail.com" style="color: #b00000;">salimlee.business@gmail.com</a>
+                <a href="mailto:info@salimlee-gym.de" style="color: #b00000;">info@salimlee-gym.de</a>
                 oder telefonisch unter <strong style="color: #fafafa;">+49 151 68457943</strong>.
               </p>
               <p style="color: #a1a1aa; margin-top: 30px; line-height: 1.8;">
