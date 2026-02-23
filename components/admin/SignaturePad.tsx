@@ -13,9 +13,9 @@ export function SignaturePad({ label, onSignatureChange, height = 150 }: Signatu
   const sigRef = useRef<SignatureCanvas | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [canvasWidth, setCanvasWidth] = useState(0)
+  const onSignatureChangeRef = useRef(onSignatureChange)
+  onSignatureChangeRef.current = onSignatureChange
 
-  // Measure the actual container width and use it as the canvas width
-  // This prevents the offset caused by CSS width differing from canvas width
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
@@ -32,22 +32,31 @@ export function SignaturePad({ label, onSignatureChange, height = 150 }: Signatu
     return () => observer.disconnect()
   }, [])
 
-  const handleEnd = useCallback(() => {
-    if (sigRef.current && !sigRef.current.isEmpty()) {
-      const dataUrl = sigRef.current.getTrimmedCanvas().toDataURL('image/png')
-      onSignatureChange(dataUrl)
-    }
-  }, [onSignatureChange])
+  // Use native pointer/touch events instead of react-signature-canvas onEnd
+  // because onEnd does not fire reliably with next/dynamic imports
+  const handleStrokeEnd = useCallback(() => {
+    setTimeout(() => {
+      if (sigRef.current && !sigRef.current.isEmpty()) {
+        const dataUrl = sigRef.current.getTrimmedCanvas().toDataURL('image/png')
+        onSignatureChangeRef.current(dataUrl)
+      }
+    }, 10)
+  }, [])
 
   const handleClear = useCallback(() => {
     sigRef.current?.clear()
-    onSignatureChange(null)
-  }, [onSignatureChange])
+    onSignatureChangeRef.current(null)
+  }, [])
 
   return (
     <div>
       <label className="block text-sm font-semibold text-dark-300 mb-2">{label}</label>
-      <div ref={containerRef} className="border border-dark-700 rounded-lg overflow-hidden bg-white">
+      <div
+        ref={containerRef}
+        className="border border-dark-700 rounded-lg overflow-hidden bg-white"
+        onPointerUp={handleStrokeEnd}
+        onTouchEnd={handleStrokeEnd}
+      >
         {canvasWidth > 0 && (
           <SignatureCanvas
             ref={sigRef}
@@ -61,7 +70,6 @@ export function SignaturePad({ label, onSignatureChange, height = 150 }: Signatu
             minWidth={0.5}
             maxWidth={2.5}
             velocityFilterWeight={0.7}
-            onEnd={handleEnd}
           />
         )}
       </div>
