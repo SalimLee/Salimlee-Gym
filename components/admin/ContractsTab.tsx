@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { pdf } from '@react-pdf/renderer'
 import { ContractPDF, MEMBERSHIP_OPTIONS, PAYMENT_OPTIONS } from '@/lib/contract-pdf'
@@ -22,7 +22,7 @@ interface ContractsTabProps {
   members: Member[]
 }
 
-type Step = 'form' | 'preview' | 'sign' | 'done'
+type Step = 'form' | 'preview' | 'sign' | 'send' | 'done'
 
 const INITIAL_FORM: ContractData = {
   vorname: '',
@@ -51,7 +51,11 @@ export function ContractsTab({ members }: ContractsTabProps) {
   const [isSending, setIsSending] = useState(false)
   const [sendResult, setSendResult] = useState<{ success: boolean; message: string } | null>(null)
   const [pdfUrl, setPdfUrl] = useState<string | null>(null)
-  const [memberSigned, setMemberSigned] = useState(false)
+
+  // Refs to read signature data on-demand (no event listeners needed)
+  const getMemberSig = useRef<(() => string | null) | null>(null)
+  const getGuardianSig = useRef<(() => string | null) | null>(null)
+  const getOwnerSig = useRef<(() => string | null) | null>(null)
 
   // Auto-fill from selected member
   useEffect(() => {
@@ -107,23 +111,21 @@ export function ContractsTab({ members }: ContractsTabProps) {
     setStep('sign')
   }, [])
 
-  // Stable signature callbacks — use dedicated state for member signature
-  // to reliably control the submit button
-  const handleMemberSig = useCallback(
-    (sig: string | null) => {
-      updateField('unterschriftMitglied', sig || '')
-      setMemberSigned(!!sig)
-    },
-    [updateField]
-  )
-  const handleGuardianSig = useCallback(
-    (sig: string | null) => updateField('unterschriftErziehungsberechtigter', sig || ''),
-    [updateField]
-  )
-  const handleOwnerSig = useCallback(
-    (sig: string | null) => updateField('unterschriftInhaber', sig || ''),
-    [updateField]
-  )
+  // Read signatures from canvas refs and move to send step
+  const handleGoToSend = useCallback(() => {
+    const memberSig = getMemberSig.current?.() || ''
+    const guardianSig = getGuardianSig.current?.() || ''
+    const ownerSig = getOwnerSig.current?.() || ''
+
+    setFormData((prev) => ({
+      ...prev,
+      unterschriftMitglied: memberSig,
+      unterschriftErziehungsberechtigter: guardianSig,
+      unterschriftInhaber: ownerSig,
+    }))
+
+    setStep('send')
+  }, [])
 
   const handleSendContract = useCallback(async () => {
     setIsSending(true)
@@ -164,7 +166,6 @@ export function ContractsTab({ members }: ContractsTabProps) {
     setFormData(INITIAL_FORM)
     setSelectedMember('')
     setSendResult(null)
-    setMemberSigned(false)
     setStep('form')
     if (pdfUrl) URL.revokeObjectURL(pdfUrl)
     setPdfUrl(null)
@@ -195,13 +196,13 @@ export function ContractsTab({ members }: ContractsTabProps) {
           { id: 'form', label: '1. Daten eingeben' },
           { id: 'preview', label: '2. Vorschau' },
           { id: 'sign', label: '3. Unterschreiben' },
-          { id: 'done', label: '4. Versenden' },
+          { id: 'send', label: '4. Versenden' },
         ].map((s, i) => (
           <div key={s.id} className="flex items-center gap-2">
             {i > 0 && <div className="w-8 h-[1px] bg-dark-700" />}
             <div
               className={`px-3 py-1 rounded-full text-xs font-bold ${
-                step === s.id
+                step === s.id || (s.id === 'send' && step === 'done')
                   ? 'bg-brand-500 text-white'
                   : 'bg-dark-800 text-dark-500'
               }`}
@@ -442,17 +443,17 @@ export function ContractsTab({ members }: ContractsTabProps) {
             <div className="space-y-8">
               <SignaturePad
                 label="Unterschrift Mitglied *"
-                onSignatureChange={handleMemberSig}
+                signatureRef={getMemberSig}
               />
 
               <SignaturePad
                 label="Unterschrift Erziehungsberechtigte/r (nur bei Minderjährigen)"
-                onSignatureChange={handleGuardianSig}
+                signatureRef={getGuardianSig}
               />
 
               <SignaturePad
                 label="Unterschrift Inhaber (Saleem Fahmi Muhammad Shareef)"
-                onSignatureChange={handleOwnerSig}
+                signatureRef={getOwnerSig}
               />
             </div>
           </div>
@@ -465,21 +466,77 @@ export function ContractsTab({ members }: ContractsTabProps) {
               ← Zurück
             </button>
             <button
-              onClick={handleSendContract}
-              disabled={!memberSigned || isSending}
-              className={`flex-1 py-3 rounded-lg font-bold transition-all ${
-                memberSigned && !isSending
-                  ? 'bg-brand-500 text-white hover:bg-brand-400'
-                  : 'bg-dark-800 text-dark-500 cursor-not-allowed'
-              }`}
+              onClick={handleGoToSend}
+              className="flex-1 py-3 rounded-lg font-bold bg-brand-500 text-white hover:bg-brand-400 transition-all"
             >
-              {isSending ? 'Wird versendet...' : 'Vertrag versenden & abschließen ✉'}
+              Weiter →
             </button>
           </div>
         </div>
       )}
 
-      {/* STEP 4: Done */}
+      {/* STEP 4: Send */}
+      {step === 'send' && (
+        <div className="space-y-6">
+          <div className="bg-dark-900/50 rounded-xl border border-dark-800 p-6">
+            <h3 className="text-lg font-bold mb-4">Vertrag versenden</h3>
+            <div className="space-y-3 text-sm">
+              <div className="flex justify-between py-2 border-b border-dark-800">
+                <span className="text-dark-400">Mitglied</span>
+                <span className="font-semibold">{formData.vorname} {formData.nachname}</span>
+              </div>
+              <div className="flex justify-between py-2 border-b border-dark-800">
+                <span className="text-dark-400">E-Mail</span>
+                <span className="font-semibold">{formData.email}</span>
+              </div>
+              <div className="flex justify-between py-2 border-b border-dark-800">
+                <span className="text-dark-400">Mitgliedschaft</span>
+                <span className="font-semibold text-brand-400">{selectedMembership?.label}</span>
+              </div>
+              <div className="flex justify-between py-2 border-b border-dark-800">
+                <span className="text-dark-400">Unterschrift Mitglied</span>
+                <span className={`font-semibold ${formData.unterschriftMitglied ? 'text-green-400' : 'text-dark-500'}`}>
+                  {formData.unterschriftMitglied ? 'Vorhanden' : 'Fehlt'}
+                </span>
+              </div>
+              <div className="flex justify-between py-2">
+                <span className="text-dark-400">Unterschrift Inhaber</span>
+                <span className={`font-semibold ${formData.unterschriftInhaber ? 'text-green-400' : 'text-dark-500'}`}>
+                  {formData.unterschriftInhaber ? 'Vorhanden' : 'Fehlt'}
+                </span>
+              </div>
+            </div>
+
+            {sendResult && !sendResult.success && (
+              <div className="mt-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+                {sendResult.message}
+              </div>
+            )}
+          </div>
+
+          <div className="flex gap-4">
+            <button
+              onClick={() => setStep('sign')}
+              className="flex-1 py-3 rounded-lg font-bold border border-dark-700 text-dark-300 hover:bg-dark-800 transition-all"
+            >
+              ← Zurück
+            </button>
+            <button
+              onClick={handleSendContract}
+              disabled={isSending}
+              className={`flex-1 py-4 rounded-lg font-bold text-lg transition-all ${
+                isSending
+                  ? 'bg-dark-800 text-dark-500 cursor-not-allowed'
+                  : 'bg-brand-500 text-white hover:bg-brand-400'
+              }`}
+            >
+              {isSending ? 'Wird versendet...' : 'Vertrag versenden & abschließen'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* STEP 5: Done */}
       {step === 'done' && (
         <div className="bg-dark-900/50 rounded-xl border border-dark-800 p-8 text-center">
           {sendResult?.success ? (

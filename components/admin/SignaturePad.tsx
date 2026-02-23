@@ -1,20 +1,18 @@
 'use client'
 
-import { useRef, useCallback, useEffect, useState } from 'react'
+import { useRef, useEffect, useState, useCallback } from 'react'
 import SignatureCanvas from 'react-signature-canvas'
 
 interface SignaturePadProps {
   label: string
-  onSignatureChange: (dataUrl: string | null) => void
+  signatureRef?: React.MutableRefObject<(() => string | null) | null>
   height?: number
 }
 
-export function SignaturePad({ label, onSignatureChange, height = 150 }: SignaturePadProps) {
+export function SignaturePad({ label, signatureRef, height = 150 }: SignaturePadProps) {
   const sigRef = useRef<SignatureCanvas | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [canvasWidth, setCanvasWidth] = useState(0)
-  const onSignatureChangeRef = useRef(onSignatureChange)
-  onSignatureChangeRef.current = onSignatureChange
 
   useEffect(() => {
     const container = containerRef.current
@@ -32,37 +30,23 @@ export function SignaturePad({ label, onSignatureChange, height = 150 }: Signatu
     return () => observer.disconnect()
   }, [])
 
-  // Attach event listeners directly on the canvas element.
-  // signature_pad calls canvas.setPointerCapture() on pointerdown,
-  // which means pointerup events go directly to the canvas and do NOT
-  // bubble to parent elements. So we must listen on the canvas itself.
+  // Expose a function to read the current signature on-demand
+  // This avoids all event listener issues with signature_pad's pointer capture
   useEffect(() => {
-    if (!sigRef.current) return
-    const canvas = sigRef.current.getCanvas()
-    if (!canvas) return
-
-    const handleStrokeEnd = () => {
-      setTimeout(() => {
-        if (sigRef.current && !sigRef.current.isEmpty()) {
-          const dataUrl = sigRef.current.getTrimmedCanvas().toDataURL('image/png')
-          onSignatureChangeRef.current(dataUrl)
-        }
-      }, 10)
+    if (!signatureRef) return
+    signatureRef.current = () => {
+      if (sigRef.current && !sigRef.current.isEmpty()) {
+        return sigRef.current.getTrimmedCanvas().toDataURL('image/png')
+      }
+      return null
     }
-
-    canvas.addEventListener('pointerup', handleStrokeEnd)
-    canvas.addEventListener('mouseup', handleStrokeEnd)
-    canvas.addEventListener('touchend', handleStrokeEnd)
     return () => {
-      canvas.removeEventListener('pointerup', handleStrokeEnd)
-      canvas.removeEventListener('mouseup', handleStrokeEnd)
-      canvas.removeEventListener('touchend', handleStrokeEnd)
+      if (signatureRef) signatureRef.current = null
     }
-  }, [canvasWidth])
+  }, [signatureRef, canvasWidth])
 
   const handleClear = useCallback(() => {
     sigRef.current?.clear()
-    onSignatureChangeRef.current(null)
   }, [])
 
   return (
