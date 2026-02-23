@@ -51,6 +51,7 @@ export function ContractsTab({ members }: ContractsTabProps) {
   const [isSending, setIsSending] = useState(false)
   const [sendResult, setSendResult] = useState<{ success: boolean; message: string } | null>(null)
   const [pdfUrl, setPdfUrl] = useState<string | null>(null)
+  const [memberSigned, setMemberSigned] = useState(false)
 
   // Auto-fill from selected member
   useEffect(() => {
@@ -106,9 +107,13 @@ export function ContractsTab({ members }: ContractsTabProps) {
     setStep('sign')
   }, [])
 
-  // Stable signature callbacks to prevent stale closures in SignaturePad
+  // Stable signature callbacks — use dedicated state for member signature
+  // to reliably control the submit button
   const handleMemberSig = useCallback(
-    (sig: string | null) => updateField('unterschriftMitglied', sig || ''),
+    (sig: string | null) => {
+      updateField('unterschriftMitglied', sig || '')
+      setMemberSigned(!!sig)
+    },
     [updateField]
   )
   const handleGuardianSig = useCallback(
@@ -159,6 +164,7 @@ export function ContractsTab({ members }: ContractsTabProps) {
     setFormData(INITIAL_FORM)
     setSelectedMember('')
     setSendResult(null)
+    setMemberSigned(false)
     setStep('form')
     if (pdfUrl) URL.revokeObjectURL(pdfUrl)
     setPdfUrl(null)
@@ -460,9 +466,9 @@ export function ContractsTab({ members }: ContractsTabProps) {
             </button>
             <button
               onClick={handleSendContract}
-              disabled={!formData.unterschriftMitglied || isSending}
+              disabled={!memberSigned || isSending}
               className={`flex-1 py-3 rounded-lg font-bold transition-all ${
-                formData.unterschriftMitglied && !isSending
+                memberSigned && !isSending
                   ? 'bg-brand-500 text-white hover:bg-brand-400'
                   : 'bg-dark-800 text-dark-500 cursor-not-allowed'
               }`}
