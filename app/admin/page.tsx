@@ -378,7 +378,7 @@ export default function AdminDashboard() {
               />
             )}
             {activeTab === 'contracts' && (
-              <ContractsTab members={members} />
+              <ContractsTab members={members} supabase={supabase} onRefresh={loadData} />
             )}
           </>
         )}

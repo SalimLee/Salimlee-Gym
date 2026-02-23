@@ -20,6 +20,9 @@ interface Member {
 
 interface ContractsTabProps {
   members: Member[]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any
+  onRefresh: () => void
 }
 
 type Step = 'form' | 'preview' | 'sign' | 'send' | 'done'
@@ -44,7 +47,16 @@ const INITIAL_FORM: ContractData = {
   ortDatum: `Reutlingen, ${new Date().toLocaleDateString('de-DE')}`,
 }
 
-export function ContractsTab({ members }: ContractsTabProps) {
+// Map membership IDs to subscription details for Supabase
+const MEMBERSHIP_DETAILS: Record<string, { price: number; months: number | null; type: string; units?: number }> = {
+  erwachsene_6: { price: 90, months: 6, type: 'monthly' },
+  erwachsene_12: { price: 80, months: 12, type: 'monthly' },
+  kinder_12: { price: 50, months: 12, type: 'monthly' },
+  monatlich: { price: 120, months: null, type: 'monthly' },
+  '10er_karte': { price: 160, months: 6, type: 'punch_card', units: 10 },
+}
+
+export function ContractsTab({ members, supabase, onRefresh }: ContractsTabProps) {
   const [step, setStep] = useState<Step>('form')
   const [formData, setFormData] = useState<ContractData>(INITIAL_FORM)
   const [selectedMember, setSelectedMember] = useState<string>('')
@@ -155,6 +167,67 @@ export function ContractsTab({ members }: ContractsTabProps) {
 
       const result = await res.json()
       if (res.ok) {
+        // Create member + subscription in Supabase
+        try {
+          const fullName = `${formData.vorname} ${formData.nachname}`.trim()
+
+          // Check if member with this email already exists
+          const { data: existing } = await supabase
+            .from('members')
+            .select('id')
+            .eq('email', formData.email)
+            .maybeSingle()
+
+          let memberId: string | null = null
+
+          if (existing?.id) {
+            // Update existing member
+            await supabase
+              .from('members')
+              .update({ name: fullName, phone: formData.telefon || null, active: true })
+              .eq('id', existing.id)
+            memberId = existing.id
+          } else {
+            // Create new member
+            const { data: newMember } = await supabase
+              .from('members')
+              .insert({ name: fullName, email: formData.email, phone: formData.telefon || null, active: true })
+              .select('id')
+              .single()
+            memberId = newMember?.id ?? null
+          }
+
+          const memberData = memberId ? { id: memberId } : null
+
+          if (memberData?.id) {
+            const details = MEMBERSHIP_DETAILS[formData.mitgliedschaft]
+            const membershipLabel = MEMBERSHIP_OPTIONS.find((m) => m.id === formData.mitgliedschaft)?.label || formData.mitgliedschaft
+
+            let endDate: string | null = null
+            if (details?.months) {
+              const end = new Date(formData.vertragsbeginn)
+              end.setMonth(end.getMonth() + details.months)
+              endDate = end.toISOString().split('T')[0]
+            }
+
+            await supabase.from('subscriptions').insert({
+              member_id: memberData.id,
+              name: membershipLabel,
+              type: details?.type || 'monthly',
+              start_date: formData.vertragsbeginn,
+              end_date: endDate,
+              total_units: details?.units || null,
+              remaining_units: details?.units || null,
+              price: details?.price || 0,
+              status: 'active',
+            })
+          }
+
+          onRefresh()
+        } catch (e) {
+          console.warn('Mitglied/Abo Erstellung fehlgeschlagen:', e)
+        }
+
         setSendResult({ success: true, message: 'Vertrag wurde erfolgreich per E-Mail versendet!' })
         setStep('done')
       } else {
@@ -165,7 +238,7 @@ export function ContractsTab({ members }: ContractsTabProps) {
     } finally {
       setIsSending(false)
     }
-  }, [formData])
+  }, [formData, supabase, onRefresh])
 
   const handleReset = useCallback(() => {
     setFormData(INITIAL_FORM)

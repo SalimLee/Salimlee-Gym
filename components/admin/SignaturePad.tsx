@@ -31,14 +31,28 @@ export function SignaturePad({ label, signatureRef, height = 150 }: SignaturePad
   }, [])
 
   // Expose a function to read the current signature on-demand
-  // This avoids all event listener issues with signature_pad's pointer capture
+  // Uses direct pixel checking instead of isEmpty() which can be unreliable
   useEffect(() => {
     if (!signatureRef) return
     signatureRef.current = () => {
-      if (sigRef.current && !sigRef.current.isEmpty()) {
-        return sigRef.current.getTrimmedCanvas().toDataURL('image/png')
+      if (!sigRef.current) return null
+
+      const canvas = sigRef.current.getCanvas()
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return null
+
+      // Check canvas pixels for any drawn content (dark pixels on white bg)
+      const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      let hasDrawing = false
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i] < 200 || data[i + 1] < 200 || data[i + 2] < 200) {
+          hasDrawing = true
+          break
+        }
       }
-      return null
+
+      if (!hasDrawing) return null
+      return canvas.toDataURL('image/png')
     }
     return () => {
       if (signatureRef) signatureRef.current = null
