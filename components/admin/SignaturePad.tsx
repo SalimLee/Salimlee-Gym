@@ -32,16 +32,33 @@ export function SignaturePad({ label, onSignatureChange, height = 150 }: Signatu
     return () => observer.disconnect()
   }, [])
 
-  // Use native pointer/touch events instead of react-signature-canvas onEnd
-  // because onEnd does not fire reliably with next/dynamic imports
-  const handleStrokeEnd = useCallback(() => {
-    setTimeout(() => {
-      if (sigRef.current && !sigRef.current.isEmpty()) {
-        const dataUrl = sigRef.current.getTrimmedCanvas().toDataURL('image/png')
-        onSignatureChangeRef.current(dataUrl)
-      }
-    }, 10)
-  }, [])
+  // Attach event listeners directly on the canvas element.
+  // signature_pad calls canvas.setPointerCapture() on pointerdown,
+  // which means pointerup events go directly to the canvas and do NOT
+  // bubble to parent elements. So we must listen on the canvas itself.
+  useEffect(() => {
+    if (!sigRef.current) return
+    const canvas = sigRef.current.getCanvas()
+    if (!canvas) return
+
+    const handleStrokeEnd = () => {
+      setTimeout(() => {
+        if (sigRef.current && !sigRef.current.isEmpty()) {
+          const dataUrl = sigRef.current.getTrimmedCanvas().toDataURL('image/png')
+          onSignatureChangeRef.current(dataUrl)
+        }
+      }, 10)
+    }
+
+    canvas.addEventListener('pointerup', handleStrokeEnd)
+    canvas.addEventListener('mouseup', handleStrokeEnd)
+    canvas.addEventListener('touchend', handleStrokeEnd)
+    return () => {
+      canvas.removeEventListener('pointerup', handleStrokeEnd)
+      canvas.removeEventListener('mouseup', handleStrokeEnd)
+      canvas.removeEventListener('touchend', handleStrokeEnd)
+    }
+  }, [canvasWidth])
 
   const handleClear = useCallback(() => {
     sigRef.current?.clear()
@@ -51,12 +68,7 @@ export function SignaturePad({ label, onSignatureChange, height = 150 }: Signatu
   return (
     <div>
       <label className="block text-sm font-semibold text-dark-300 mb-2">{label}</label>
-      <div
-        ref={containerRef}
-        className="border border-dark-700 rounded-lg overflow-hidden bg-white"
-        onPointerUp={handleStrokeEnd}
-        onTouchEnd={handleStrokeEnd}
-      >
+      <div ref={containerRef} className="border border-dark-700 rounded-lg overflow-hidden bg-white">
         {canvasWidth > 0 && (
           <SignatureCanvas
             ref={sigRef}
