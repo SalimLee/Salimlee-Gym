@@ -16,7 +16,7 @@ export default function ImpressumPage() {
             <span className="text-dark-400 text-sm ml-2 font-normal">GYM</span>
           </Link>
           <Link href="/" className="text-sm text-dark-400 hover:text-brand-500 transition-colors">
-            Zurueck zur Startseite
+            Zurück zur Startseite
           </Link>
         </div>
       </header>
@@ -26,7 +26,7 @@ export default function ImpressumPage() {
 
         <div className="space-y-8 text-dark-300 leading-relaxed">
           <section>
-            <h2 className="text-xl font-bold text-dark-100 mb-3">Angaben gemaess 5 TMG</h2>
+            <h2 className="text-xl font-bold text-dark-100 mb-3">Angaben gemäß § 5 TMG</h2>
             <p>
               Salim Lee Boxing &amp; Fitness Gym<br />
               Inhaber: Saleem Fahmi Muhammad Shareef<br />
@@ -44,7 +44,7 @@ export default function ImpressumPage() {
           </section>
 
           <section>
-            <h2 className="text-xl font-bold text-dark-100 mb-3">Verantwortlich fuer den Inhalt nach 18 Abs. 2 MStV</h2>
+            <h2 className="text-xl font-bold text-dark-100 mb-3">Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV</h2>
             <p>
               Saleem Fahmi Muhammad Shareef<br />
               Netzgenauerstr. 8<br />
@@ -55,7 +55,7 @@ export default function ImpressumPage() {
           <section>
             <h2 className="text-xl font-bold text-dark-100 mb-3">Streitschlichtung</h2>
             <p>
-              Die Europaeische Kommission stellt eine Plattform zur Online-Streitbeilegung (OS) bereit:{' '}
+              Die Europäische Kommission stellt eine Plattform zur Online-Streitbeilegung (OS) bereit:{' '}
               <a
                 href="https://ec.europa.eu/consumers/odr/"
                 target="_blank"
@@ -72,25 +72,25 @@ export default function ImpressumPage() {
           </section>
 
           <section>
-            <h2 className="text-xl font-bold text-dark-100 mb-3">Haftung fuer Inhalte</h2>
+            <h2 className="text-xl font-bold text-dark-100 mb-3">Haftung für Inhalte</h2>
             <p>
-              Als Diensteanbieter sind wir gemaess 7 Abs. 1 TMG fuer eigene Inhalte auf diesen Seiten nach den
-              allgemeinen Gesetzen verantwortlich. Nach den 8 bis 10 TMG sind wir als Diensteanbieter jedoch nicht
-              verpflichtet, uebermittelte oder gespeicherte fremde Informationen zu ueberwachen oder nach Umstaenden zu
-              forschen, die auf eine rechtswidrige Taetigkeit hinweisen. Verpflichtungen zur Entfernung oder Sperrung der
-              Nutzung von Informationen nach den allgemeinen Gesetzen bleiben hiervon unberuehrt. Eine diesbezuegliche
-              Haftung ist jedoch erst ab dem Zeitpunkt der Kenntnis einer konkreten Rechtsverletzung moeglich. Bei
+              Als Diensteanbieter sind wir gemäß § 7 Abs. 1 TMG für eigene Inhalte auf diesen Seiten nach den
+              allgemeinen Gesetzen verantwortlich. Nach §§ 8 bis 10 TMG sind wir als Diensteanbieter jedoch nicht
+              verpflichtet, übermittelte oder gespeicherte fremde Informationen zu überwachen oder nach Umständen zu
+              forschen, die auf eine rechtswidrige Tätigkeit hinweisen. Verpflichtungen zur Entfernung oder Sperrung der
+              Nutzung von Informationen nach den allgemeinen Gesetzen bleiben hiervon unberührt. Eine diesbezügliche
+              Haftung ist jedoch erst ab dem Zeitpunkt der Kenntnis einer konkreten Rechtsverletzung möglich. Bei
               Bekanntwerden von entsprechenden Rechtsverletzungen werden wir diese Inhalte umgehend entfernen.
             </p>
           </section>
 
           <section>
-            <h2 className="text-xl font-bold text-dark-100 mb-3">Haftung fuer Links</h2>
+            <h2 className="text-xl font-bold text-dark-100 mb-3">Haftung für Links</h2>
             <p>
-              Unser Angebot enthaelt Links zu externen Websites Dritter, auf deren Inhalte wir keinen Einfluss haben.
-              Deshalb koennen wir fuer diese fremden Inhalte auch keine Gewaehr uebernehmen. Fuer die Inhalte der
+              Unser Angebot enthält Links zu externen Websites Dritter, auf deren Inhalte wir keinen Einfluss haben.
+              Deshalb können wir für diese fremden Inhalte auch keine Gewähr übernehmen. Für die Inhalte der
               verlinkten Seiten ist stets der jeweilige Anbieter oder Betreiber der Seiten verantwortlich. Die verlinkten
-              Seiten wurden zum Zeitpunkt der Verlinkung auf moegliche Rechtsverstoesse ueberprueft. Rechtswidrige Inhalte
+              Seiten wurden zum Zeitpunkt der Verlinkung auf mögliche Rechtsverstöße überprüft. Rechtswidrige Inhalte
               waren zum Zeitpunkt der Verlinkung nicht erkennbar. Eine permanente inhaltliche Kontrolle der verlinkten
               Seiten ist jedoch ohne konkrete Anhaltspunkte einer Rechtsverletzung nicht zumutbar. Bei Bekanntwerden von
               Rechtsverletzungen werden wir derartige Links umgehend entfernen.
@@ -101,9 +101,9 @@ export default function ImpressumPage() {
             <h2 className="text-xl font-bold text-dark-100 mb-3">Urheberrecht</h2>
             <p>
               Die durch die Seitenbetreiber erstellten Inhalte und Werke auf diesen Seiten unterliegen dem deutschen
-              Urheberrecht. Die Vervielfaeltigung, Bearbeitung, Verbreitung und jede Art der Verwertung ausserhalb der
-              Grenzen des Urheberrechtes beduerfen der schriftlichen Zustimmung des jeweiligen Autors bzw. Erstellers.
-              Downloads und Kopien dieser Seite sind nur fuer den privaten, nicht kommerziellen Gebrauch gestattet.
+              Urheberrecht. Die Vervielfältigung, Bearbeitung, Verbreitung und jede Art der Verwertung außerhalb der
+              Grenzen des Urheberrechtes bedürfen der schriftlichen Zustimmung des jeweiligen Autors bzw. Erstellers.
+              Downloads und Kopien dieser Seite sind nur für den privaten, nicht kommerziellen Gebrauch gestattet.
             </p>
           </section>
         </div>
