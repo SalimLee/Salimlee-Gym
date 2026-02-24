@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { SITE_CONFIG } from '@/lib/constants'
 
 export function Footer() {
@@ -32,7 +33,7 @@ export function Footer() {
 
           {/* TikTok */}
           <a
-            href="https://tiktok.com"
+            href="https://www.tiktok.com/@leesalim1"
             target="_blank"
             rel="noopener noreferrer"
             className="w-12 h-12 bg-dark-800 hover:bg-brand-500/20 border border-dark-700 hover:border-brand-500/50 rounded-full flex items-center justify-center text-dark-400 hover:text-brand-500 transition-all duration-300"
@@ -45,7 +46,7 @@ export function Footer() {
 
           {/* YouTube */}
           <a
-            href="https://youtube.com"
+            href="https://youtube.com/@salimlee1378"
             target="_blank"
             rel="noopener noreferrer"
             className="w-12 h-12 bg-dark-800 hover:bg-brand-500/20 border border-dark-700 hover:border-brand-500/50 rounded-full flex items-center justify-center text-dark-400 hover:text-brand-500 transition-all duration-300"
@@ -61,6 +62,16 @@ export function Footer() {
         <p className="text-lg font-bold text-dark-500 tracking-widest mb-6">
           TRAIN HARD <span className="text-brand-500/60">·</span> STAY STRONG
         </p>
+
+        {/* Legal Links */}
+        <div className="flex justify-center gap-6 mb-4">
+          <Link href="/impressum" className="text-sm text-dark-500 hover:text-brand-500 transition-colors">
+            Impressum
+          </Link>
+          <Link href="/datenschutz" className="text-sm text-dark-500 hover:text-brand-500 transition-colors">
+            Datenschutz
+          </Link>
+        </div>
 
         {/* Copyright */}
         <p className="text-sm text-dark-600">

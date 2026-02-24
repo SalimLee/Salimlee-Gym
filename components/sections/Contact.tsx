@@ -1,9 +1,12 @@
 'use client'
 
+import { useState } from 'react'
 import { MapPin, Phone, Mail, Clock } from 'lucide-react'
 import { CONTACT_INFO } from '@/lib/constants'
 
 export function Contact() {
+  const [mapsConsent, setMapsConsent] = useState(false)
+
   const contactCards = [
     {
       icon: MapPin,
@@ -79,18 +82,38 @@ export function Contact() {
             ))}
           </div>
 
-          {/* Map */}
+          {/* Map with DSGVO consent */}
           <div className="h-[400px] bg-dark-900/50 rounded-2xl border border-brand-600/20 overflow-hidden">
-            <iframe
-              src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d2634.5!2d9.2048!3d48.4912!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x4799e9a3c9d3b7f7%3A0x0!2sW%C3%B6rthstra%C3%9Fe+17%2C+72764+Reutlingen!5e0!3m2!1sde!2sde"
-              width="100%"
-              height="100%"
-              style={{ border: 0 }}
-              allowFullScreen
-              loading="lazy"
-              referrerPolicy="no-referrer-when-downgrade"
-              title="Standort Salim Lee Gym"
-            />
+            {mapsConsent ? (
+              <iframe
+                src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d2634.5!2d9.2048!3d48.4912!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x4799e9a3c9d3b7f7%3A0x0!2sW%C3%B6rthstra%C3%9Fe+17%2C+72764+Reutlingen!5e0!3m2!1sde!2sde"
+                width="100%"
+                height="100%"
+                style={{ border: 0 }}
+                allowFullScreen
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+                title="Standort Salim Lee Gym"
+              />
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center p-8 text-center">
+                <div className="w-16 h-16 bg-brand-500/20 rounded-full flex items-center justify-center mb-4">
+                  <MapPin className="w-8 h-8 text-brand-500" />
+                </div>
+                <h4 className="text-lg font-bold mb-2">Google Maps</h4>
+                <p className="text-dark-400 text-sm mb-4 max-w-sm">
+                  Beim Laden der Karte werden Daten an Google (USA) uebermittelt.
+                  Mehr dazu in unserer{' '}
+                  <a href="/datenschutz" className="text-brand-500 hover:underline">Datenschutzerklaerung</a>.
+                </p>
+                <button
+                  onClick={() => setMapsConsent(true)}
+                  className="px-6 py-3 bg-brand-500 text-white font-bold rounded-lg hover:bg-brand-400 transition-colors"
+                >
+                  Karte laden
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
