@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Exercise, WorkoutWithExercises } from '@/types'
+import MediaPicker from './MediaPicker'
 
 const MUSCLE_GROUPS = ['Full Body', 'Upper Body', 'Lower Body', 'Core', 'Chest', 'Back', 'Legs', 'Arms', 'Shoulders']
 const DIFFICULTY_LEVELS = ['beginner', 'intermediate', 'advanced', 'expert']
@@ -55,6 +56,7 @@ export default function WorkoutsView({ workouts, exercises, supabase, onRefresh,
   const [saving, setSaving] = useState(false)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [detailWorkout, setDetailWorkout] = useState<WorkoutWithExercises | null>(null)
+  const [mediaPickerOpen, setMediaPickerOpen] = useState(false)
 
   const filtered = workouts.filter(w =>
     !search || w.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -314,7 +316,13 @@ export default function WorkoutsView({ workouts, exercises, supabase, onRefresh,
                   <div><label className="block text-sm font-medium text-dark-300 mb-1.5">Dauer (min)</label><input type="number" value={form.estimated_duration_minutes} onChange={e => setField('estimated_duration_minutes', e.target.value)} className="input-field text-sm" placeholder="30" /></div>
                   <div><label className="block text-sm font-medium text-dark-300 mb-1.5">Kalorien (kcal)</label><input type="number" value={form.estimated_calories} onChange={e => setField('estimated_calories', e.target.value)} className="input-field text-sm" placeholder="250" /></div>
                   <div><label className="block text-sm font-medium text-dark-300 mb-1.5">Tags</label><input value={form.tags} onChange={e => setField('tags', e.target.value)} className="input-field text-sm" placeholder="strength, home" /></div>
-                  <div><label className="block text-sm font-medium text-dark-300 mb-1.5">Bild URL</label><input value={form.image_url} onChange={e => setField('image_url', e.target.value)} className="input-field text-sm" placeholder="https://..." /></div>
+                  <div>
+                    <label className="block text-sm font-medium text-dark-300 mb-1.5">Bild URL</label>
+                    <div className="flex gap-2">
+                      <input value={form.image_url} onChange={e => setField('image_url', e.target.value)} className="input-field text-sm flex-1" placeholder="https://..." />
+                      <button type="button" onClick={() => setMediaPickerOpen(true)} className="px-3 py-2 bg-dark-800 hover:bg-dark-700 text-dark-300 text-sm font-bold rounded-xl transition-all border border-dark-700">Wählen</button>
+                    </div>
+                  </div>
                 </div>
                 <label className="flex items-center gap-3 cursor-pointer">
                   <div className={`w-10 h-6 rounded-full transition-colors relative ${form.is_published ? 'bg-green-500' : 'bg-dark-700'}`} onClick={() => setField('is_published', !form.is_published)}>
@@ -386,6 +394,19 @@ export default function WorkoutsView({ workouts, exercises, supabase, onRefresh,
             </div>
           </div>
         </div>
+      )}
+
+      {/* Media Picker Modal */}
+      {mediaPickerOpen && (
+        <MediaPicker 
+          supabase={supabase}
+          defaultTab="image"
+          onSelect={(url) => {
+            setField('image_url', url)
+            setMediaPickerOpen(false)
+          }}
+          onClose={() => setMediaPickerOpen(false)}
+        />
       )}
 
       {/* Delete Confirm */}
