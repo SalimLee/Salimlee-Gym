@@ -8,6 +8,8 @@ import MembersTab from '@/components/admin/MembersTab'
 import SubscriptionsTab from '@/components/admin/SubscriptionsTab'
 import InvoicesTab from '@/components/admin/InvoicesTab'
 import { ContractsTab } from '@/components/admin/ContractsTab'
+import TrainingTab from '@/components/admin/TrainingTab'
+import type { Exercise, WorkoutWithExercises } from '@/types'
 
 // Untyped Supabase client - vermeidet TypeScript-Konflikte mit @supabase/ssr
 const supabase = createClient(
@@ -71,7 +73,7 @@ interface Invoice {
   notes: string | null
 }
 
-type TabId = 'overview' | 'bookings' | 'members' | 'subscriptions' | 'invoices' | 'contracts'
+type TabId = 'overview' | 'bookings' | 'members' | 'subscriptions' | 'invoices' | 'contracts' | 'training'
 
 const TABS: { id: TabId; label: string; icon: JSX.Element }[] = [
   {
@@ -98,6 +100,10 @@ const TABS: { id: TabId; label: string; icon: JSX.Element }[] = [
     id: 'contracts', label: 'Verträge',
     icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>,
   },
+  {
+    id: 'training', label: 'Trainingsdaten',
+    icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h2l1-2h2l1 2h6l1-2h2l1 2h2M5 14h14M7 18h10" /></svg>,
+  },
 ]
 
 export default function AdminDashboard() {
@@ -110,6 +116,9 @@ export default function AdminDashboard() {
   const [members, setMembers] = useState<Member[]>([])
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([])
   const [invoices, setInvoices] = useState<Invoice[]>([])
+  const [exercises, setExercises] = useState<Exercise[]>([])
+  const [workouts, setWorkouts] = useState<WorkoutWithExercises[]>([])
+  const [userId, setUserId] = useState<string>('')
 
   // Search
   const [globalSearch, setGlobalSearch] = useState('')
@@ -121,6 +130,7 @@ export default function AdminDashboard() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session) {
         setAuthenticated(true)
+        setUserId(session.user.id)
       } else {
         window.location.href = '/admin/login'
       }
@@ -132,17 +142,23 @@ export default function AdminDashboard() {
   const loadData = useCallback(async () => {
     setLoading(true)
 
-    const [bookingsRes, membersRes, subsRes, invoicesRes] = await Promise.all([
+    const [bookingsRes, membersRes, subsRes, invoicesRes, exercisesRes, workoutsRes] = await Promise.all([
       supabase.from('bookings').select('*').order('created_at', { ascending: false }),
       supabase.from('members').select('*').order('name', { ascending: true }),
       supabase.from('subscriptions').select('*').order('created_at', { ascending: false }),
       supabase.from('invoices').select('*').order('created_at', { ascending: false }),
+      supabase.from('exercises').select('*').order('name', { ascending: true }),
+      supabase.from('workouts').select('*, workout_exercises(*, exercise:exercises(*))').order('created_at', { ascending: false }),
     ])
 
     if (bookingsRes.data) setBookings(bookingsRes.data as Booking[])
     if (membersRes.data) setMembers(membersRes.data as Member[])
     if (subsRes.data) setSubscriptions(subsRes.data as Subscription[])
     if (invoicesRes.data) setInvoices(invoicesRes.data as Invoice[])
+    if (exercisesRes.data) setExercises(exercisesRes.data as Exercise[])
+    else if (exercisesRes.error) console.error('Exercises load error:', exercisesRes.error)
+    if (workoutsRes.data) setWorkouts(workoutsRes.data as WorkoutWithExercises[])
+    else if (workoutsRes.error) console.error('Workouts load error:', workoutsRes.error)
 
     setLoading(false)
   }, [])
@@ -379,6 +395,9 @@ export default function AdminDashboard() {
             )}
             {activeTab === 'contracts' && (
               <ContractsTab members={members} supabase={supabase} onRefresh={loadData} />
+            )}
+            {activeTab === 'training' && (
+              <TrainingTab exercises={exercises} workouts={workouts} supabase={supabase} onRefresh={loadData} userId={userId} />
             )}
           </>
         )}
