@@ -39,7 +39,7 @@ export default function ImpressumPage() {
             <h2 className="text-xl font-bold text-dark-100 mb-3">Kontakt</h2>
             <p>
               Telefon: +49 151 68457943<br />
-              E-Mail: salimlee.business@gmail.com
+              E-Mail: info@salimlee-gym.de
             </p>
           </section>
 

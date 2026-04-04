@@ -33,7 +33,7 @@ export default function DatenschutzPage() {
               Inhaber: Saleem Fahmi Muhammad Shareef<br />
               Netzgenauerstr. 8<br />
               72764 Reutlingen<br />
-              E-Mail: salimlee.business@gmail.com<br />
+              E-Mail: info@salimlee-gym.de<br />
               Telefon: +49 151 68457943
             </p>
           </section>

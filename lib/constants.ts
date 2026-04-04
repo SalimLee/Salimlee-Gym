@@ -15,7 +15,7 @@ export const CONTACT_INFO: ContactInfo = {
     city: 'Reutlingen',
     country: 'Deutschland',
   },
-  phone: '+49 (0) 123 456 789',
+  phone: '+49 15168457943',
   email: 'info@salim-lee-gym.de',
   hours: {
     weekdays: 'Mo - Fr: 06:00 - 22:00',

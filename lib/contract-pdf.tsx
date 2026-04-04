@@ -325,7 +325,7 @@ const OWNER_INFO = {
   inhaber: 'Saleem Fahmi Muhammad Shareef',
   strasse: 'Netzgenauerstr. 8',
   plz: '72764 Reutlingen',
-  email: 'salimlee.business@gmail.com',
+  email: 'info@salimlee-gym.de',
   tel: '+49 151 68457943',
 }
 
