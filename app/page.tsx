@@ -5,6 +5,7 @@ import {
   Header,
   Hero,
   KurseInfos,
+  About,
   Pricing,
   Contact,
   Footer,
@@ -33,6 +34,7 @@ export default function HomePage() {
       <main>
         <Hero onBookingClick={() => openBooking()} />
         <KurseInfos />
+        <About />
         <Pricing />
         <Contact />
       </main>

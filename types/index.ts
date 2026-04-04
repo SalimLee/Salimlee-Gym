@@ -14,7 +14,8 @@ export interface PriceItem {
   name: string
   price: string
   discount: string | null
-  category: 'membership' | 'personal' | 'trial'
+  category: 'membership' | 'personal' | 'trial' | 'service'
+  hasServiceFee?: boolean
 }
 
 // Booking Types

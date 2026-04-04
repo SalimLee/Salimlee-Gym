@@ -79,15 +79,16 @@ export const SERVICES: Service[] = [
 ]
 
 export const PRICES: PriceItem[] = [
-  { id: '1', name: 'Erwachsene & Jugendliche – 6 Monate', price: '90€/mtl.', discount: null, category: 'membership' },
-  { id: '2', name: 'Erwachsene & Jugendliche – 12 Monate', price: '80€/mtl.', discount: 'Beste Ersparnis', category: 'membership' },
-  { id: '3', name: 'Kinder (3-14 Jahre) – 12 Monate', price: '50€/mtl.', discount: null, category: 'membership' },
-  { id: '4', name: 'Monatlich kündbar', price: '120€/mtl.', discount: 'Flexibel', category: 'membership' },
+  { id: '1', name: 'Erwachsene & Jugendliche – 6 Monate', price: '90€/mtl.', discount: null, category: 'membership', hasServiceFee: true },
+  { id: '2', name: 'Erwachsene & Jugendliche – 12 Monate', price: '80€/mtl.', discount: 'Beste Ersparnis', category: 'membership', hasServiceFee: true },
+  { id: '3', name: 'Kinder (3-14 Jahre) – 12 Monate', price: '50€/mtl.', discount: null, category: 'membership', hasServiceFee: true },
+  { id: '4', name: 'Monatlich kündbar', price: '120€/mtl.', discount: 'Flexibel', category: 'membership', hasServiceFee: true },
   { id: '5', name: '10er Karte – 6 Monate gültig', price: '160€', discount: 'Einmalzahlung', category: 'membership' },
   { id: '6', name: 'Einzelstunde Personaltraining', price: '60€', discount: null, category: 'personal' },
-  { id: '7', name: '10er Karte Personaltraining', price: '600€', discount: 'Vorauszahlung', category: 'personal' },
+  { id: '7', name: '10er Karte Personaltraining', price: 'Auf Anfrage', discount: 'Vorauszahlung', category: 'personal' },
   { id: '8', name: 'Probetraining Personaltraining (einmalig)', price: '40€', discount: null, category: 'trial' },
   { id: '9', name: 'Probetraining Kurse (max. 2 Kurse)', price: 'Kostenlos', discount: 'Unverbindlich', category: 'trial' },
+  { id: '10', name: 'Halbjährliche Service Pauschale', price: '40€', discount: 'Halbjährlich fällig', category: 'service' },
 ]
 
 export const STATS: Stat[] = [
@@ -99,6 +100,7 @@ export const STATS: Stat[] = [
 
 export const NAV_LINKS = [
   { href: '#angebote', label: 'ANGEBOTE' },
+  { href: '#about', label: 'ÜBER MICH' },
   { href: '#preise', label: 'PREISE' },
   { href: '#kontakt', label: 'KONTAKT' },
 ] as const

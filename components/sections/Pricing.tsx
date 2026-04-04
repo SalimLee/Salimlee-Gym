@@ -6,9 +6,10 @@ const CATEGORY_LABELS: Record<string, string> = {
   membership: 'Mitgliedschaft (Kurse)',
   personal: 'Personaltraining',
   trial: 'Probetraining',
+  service: 'Service Pauschale',
 }
 
-const CATEGORY_ORDER = ['membership', 'personal', 'trial'] as const
+const CATEGORY_ORDER = ['membership', 'personal', 'trial', 'service'] as const
 
 export function Pricing() {
   const grouped = CATEGORY_ORDER.map((cat) => ({
@@ -49,6 +50,9 @@ export function Pricing() {
                       <div className="font-bold text-lg">{item.name}</div>
                       {item.discount && (
                         <div className="text-sm text-brand-400 mt-1">{item.discount}</div>
+                      )}
+                      {item.hasServiceFee && (
+                        <div className="text-xs text-dark-500 mt-1">zzgl. 40€ halbjährliche Service Pauschale</div>
                       )}
                     </div>
                     <div className="text-2xl font-black text-brand-500 ml-4">
