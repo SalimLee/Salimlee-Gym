@@ -16,7 +16,7 @@ export const CONTACT_INFO: ContactInfo = {
     country: 'Deutschland',
   },
   phone: '+49 15168457943',
-  email: 'info@salim-lee-gym.de',
+  email: 'info@salimlee-gym.de',
   hours: {
     weekdays: 'Mo - Fr: 06:00 - 22:00',
     weekend: 'Sa - So: 08:00 - 20:00',

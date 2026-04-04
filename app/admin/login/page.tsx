@@ -76,7 +76,7 @@ export default function AdminLoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="input-field"
-                placeholder="admin@salim-lee-gym.de"
+                placeholder="info@salimlee-gym.de"
                 required
               />
             </div>

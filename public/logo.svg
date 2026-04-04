@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 80" fill="none">
+  <!-- SALIM LEE text -->
+  <text x="0" y="45" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="48" fill="white" letter-spacing="2">
+    SAL
+  </text>
+  <!-- Boxer silhouette integrated into the I -->
+  <g transform="translate(118, 2)">
+    <!-- Boxer figure -->
+    <circle cx="8" cy="6" r="5" fill="white"/>
+    <path d="M3 14 L8 28 L13 14 M5 18 L-2 24 M11 18 L18 14 M6 28 L2 42 M10 28 L14 42" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  </g>
+  <text x="135" y="45" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="48" fill="white" letter-spacing="2">
+    M LEE
+  </text>
+  <!-- BOXING & FITNESS GYM subtitle -->
+  <text x="0" y="70" font-family="Arial, sans-serif" font-weight="400" font-size="18" fill="white" letter-spacing="4">
+    BOXING &amp; FITNESS GYM
+  </text>
+</svg>
