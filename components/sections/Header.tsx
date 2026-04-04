@@ -2,9 +2,11 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { Menu, X } from 'lucide-react'
 import { NAV_LINKS, SITE_CONFIG } from '@/lib/constants'
 import { cn } from '@/lib/utils'
+import logoImage from '@/assets/logo.png'
 
 interface HeaderProps {
   onBookingClick?: () => void
@@ -34,14 +36,13 @@ export function Header({ onBookingClick }: HeaderProps) {
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-3 group">
-          <div className="w-12 h-12 bg-gradient-to-br from-brand-500 to-brand-700 rounded-lg flex items-center justify-center font-black text-white text-xl transition-all duration-300" style={{ boxShadow: '0 0 12px rgba(176,0,0,0.3)' }}>
-            SL
-          </div>
-          <div>
-            <div className="font-black text-xl tracking-tight">{SITE_CONFIG.shortName.toUpperCase()}</div>
-            <div className="text-xs text-brand-500 tracking-widest">{SITE_CONFIG.tagline}</div>
-          </div>
+        <Link href="/" className="flex items-center group">
+          <Image 
+            src={logoImage} 
+            alt="Salim Lee Logo" 
+            className="w-auto h-16 md:h-20 transition-all duration-300 group-hover:scale-105" 
+            priority
+          />
         </Link>
 
         {/* Desktop Navigation */}

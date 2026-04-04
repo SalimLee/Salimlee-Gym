@@ -1,5 +1,7 @@
 'use client'
 
+import Image from 'next/image'
+import logoImage from '@/assets/logo.png'
 interface HeroProps {
   onBookingClick?: () => void
 }
@@ -46,7 +48,7 @@ export function Hero({ onBookingClick }: HeroProps) {
   ]
 
   return (
-    <section className="relative pt-24 pb-8 px-4 overflow-hidden">
+    <section className="relative pt-0 pb-8 px-4 overflow-hidden">
       {/* Background glow effects */}
       <div className="absolute inset-0">
         <div className="absolute inset-0 bg-gradient-to-b from-brand-900/30 via-transparent to-dark-950" />
@@ -55,11 +57,13 @@ export function Hero({ onBookingClick }: HeroProps) {
 
       <div className="max-w-5xl mx-auto relative z-10">
         {/* Main Hero Content */}
-        <div className="text-center mb-10 animate-fade-in">
-          <h1 className="text-4xl md:text-6xl lg:text-7xl font-black tracking-tighter mb-6 leading-none">
-            SALIM LEE<br />
-            <span className="text-brand-500 neon-text">BOXING & FITNESS</span>
-          </h1>
+        <div className="text-center mb-0 animate-fade-in flex flex-col items-center justify-center">
+          <Image 
+            src={logoImage} 
+            alt="Salim Lee Boxing & Fitness Logo" 
+            className="w-full max-w-[280px] sm:max-w-[320px] md:max-w-[500px] lg:max-w-[600px] h-auto drop-shadow-[0_0_20px_rgba(176,0,0,0.3)]" 
+            priority
+          />
         </div>
 
         {/* Boxing Gym Image Area */}
