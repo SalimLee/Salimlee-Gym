@@ -1,19 +1,28 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 80" fill="none">
-  <!-- SALIM LEE text -->
-  <text x="0" y="45" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="48" fill="white" letter-spacing="2">
-    SAL
-  </text>
-  <!-- Boxer silhouette integrated into the I -->
-  <g transform="translate(118, 2)">
-    <!-- Boxer figure -->
-    <circle cx="8" cy="6" r="5" fill="white"/>
-    <path d="M3 14 L8 28 L13 14 M5 18 L-2 24 M11 18 L18 14 M6 28 L2 42 M10 28 L14 42" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 90" fill="none">
+  <!-- SAL in bold italic -->
+  <text x="0" y="48" font-family="Arial Black, Impact, sans-serif" font-weight="900" font-size="52" fill="white" font-style="italic" letter-spacing="1">SAL</text>
+
+  <!-- Boxer silhouette replacing the I in SALIM -->
+  <g transform="translate(120, 4)">
+    <!-- Head -->
+    <circle cx="10" cy="5" r="5.5" fill="white"/>
+    <!-- Body -->
+    <path d="M10 11 L10 30" stroke="white" stroke-width="3" stroke-linecap="round"/>
+    <!-- Arms raised in boxing stance -->
+    <path d="M10 16 L1 11" stroke="white" stroke-width="2.8" stroke-linecap="round"/>
+    <path d="M10 16 L19 11" stroke="white" stroke-width="2.8" stroke-linecap="round"/>
+    <!-- Left fist -->
+    <circle cx="0" cy="10" r="2" fill="white"/>
+    <!-- Right fist -->
+    <circle cx="20" cy="10" r="2" fill="white"/>
+    <!-- Legs -->
+    <path d="M10 30 L4 44" stroke="white" stroke-width="2.8" stroke-linecap="round"/>
+    <path d="M10 30 L16 44" stroke="white" stroke-width="2.8" stroke-linecap="round"/>
   </g>
-  <text x="135" y="45" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="48" fill="white" letter-spacing="2">
-    M LEE
-  </text>
+
+  <!-- M LEE in bold italic -->
+  <text x="143" y="48" font-family="Arial Black, Impact, sans-serif" font-weight="900" font-size="52" fill="white" font-style="italic" letter-spacing="1">M LEE</text>
+
   <!-- BOXING & FITNESS GYM subtitle -->
-  <text x="0" y="70" font-family="Arial, sans-serif" font-weight="400" font-size="18" fill="white" letter-spacing="4">
-    BOXING &amp; FITNESS GYM
-  </text>
+  <text x="2" y="76" font-family="Arial, Helvetica, sans-serif" font-weight="400" font-size="19" fill="white" letter-spacing="5">BOXING &amp; FITNESS GYM</text>
 </svg>
