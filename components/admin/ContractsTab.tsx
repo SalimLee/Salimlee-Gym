@@ -63,6 +63,7 @@ export function ContractsTab({ members, supabase, onRefresh }: ContractsTabProps
   const [isSending, setIsSending] = useState(false)
   const [sendResult, setSendResult] = useState<{ success: boolean; message: string } | null>(null)
   const [pdfUrl, setPdfUrl] = useState<string | null>(null)
+  const [mobileAppRegistrieren, setMobileAppRegistrieren] = useState(false)
 
   // Refs to read signature data on-demand (no event listeners needed)
   const getMemberSig = useRef<(() => string | null) | null>(null)
@@ -154,6 +155,8 @@ export function ContractsTab({ members, supabase, onRefresh }: ContractsTabProps
         new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
       )
 
+      const tempPassword = mobileAppRegistrieren ? Math.random().toString(36).slice(-8) + 'A1!' : undefined
+
       const res = await fetch('/api/contract/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -162,6 +165,7 @@ export function ContractsTab({ members, supabase, onRefresh }: ContractsTabProps
           pdfBase64: base64,
           memberEmail: formData.email,
           memberName: `${formData.vorname} ${formData.nachname}`,
+          tempPassword,
         }),
       })
 
@@ -184,14 +188,25 @@ export function ContractsTab({ members, supabase, onRefresh }: ContractsTabProps
             // Update existing member
             await supabase
               .from('members')
-              .update({ name: fullName, phone: formData.telefon || null, active: true })
+              .update({ 
+                name: fullName, 
+                phone: formData.telefon || null, 
+                active: true,
+                ...(mobileAppRegistrieren ? { is_temp_password: true, temp_password: tempPassword } : {})
+              })
               .eq('id', existing.id)
             memberId = existing.id
           } else {
             // Create new member
             const { data: newMember } = await supabase
               .from('members')
-              .insert({ name: fullName, email: formData.email, phone: formData.telefon || null, active: true })
+              .insert({ 
+                name: fullName, 
+                email: formData.email, 
+                phone: formData.telefon || null, 
+                active: true,
+                ...(mobileAppRegistrieren ? { is_temp_password: true, temp_password: tempPassword } : {})
+              })
               .select('id')
               .single()
             memberId = newMember?.id ?? null
@@ -245,6 +260,7 @@ export function ContractsTab({ members, supabase, onRefresh }: ContractsTabProps
     setSelectedMember('')
     setSendResult(null)
     setStep('form')
+    setMobileAppRegistrieren(false)
     if (pdfUrl) URL.revokeObjectURL(pdfUrl)
     setPdfUrl(null)
   }, [pdfUrl])
@@ -462,6 +478,20 @@ export function ContractsTab({ members, supabase, onRefresh }: ContractsTabProps
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Mobile App Registrierung */}
+          <div className="bg-dark-900/50 rounded-xl border border-dark-800 p-6">
+            <h3 className="text-lg font-bold mb-4">Mobile App & System</h3>
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={mobileAppRegistrieren}
+                onChange={(e) => setMobileAppRegistrieren(e.target.checked)}
+                className="w-5 h-5 accent-brand-500 rounded border-dark-700 bg-dark-800"
+              />
+              <span className="text-sm font-medium">Mitglied für die Mobile App registrieren (Zugangsdaten generieren und mitsenden)</span>
+            </label>
           </div>
 
           {/* Submit */}

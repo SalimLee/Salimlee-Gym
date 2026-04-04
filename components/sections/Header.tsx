@@ -6,6 +6,7 @@ import Image from 'next/image'
 import { Menu, X } from 'lucide-react'
 import { NAV_LINKS, SITE_CONFIG } from '@/lib/constants'
 import { cn } from '@/lib/utils'
+import logoImage from '@/assets/logo.png'
 
 interface HeaderProps {
   onBookingClick?: () => void
@@ -36,12 +37,10 @@ export function Header({ onBookingClick }: HeaderProps) {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
         {/* Logo */}
         <Link href="/" className="flex items-center group">
-          <Image
-            src="/logo.svg"
-            alt={SITE_CONFIG.name}
-            width={220}
-            height={44}
-            className="h-11 w-auto transition-all duration-300"
+          <Image 
+            src={logoImage} 
+            alt="Salim Lee Logo" 
+            className="w-auto h-16 md:h-20 transition-all duration-300 group-hover:scale-105" 
             priority
           />
         </Link>

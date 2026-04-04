@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { pdfBase64, memberEmail, memberName, contractData } = await request.json()
+    const { pdfBase64, memberEmail, memberName, contractData, tempPassword } = await request.json()
 
     if (!pdfBase64 || !memberEmail || !memberName) {
       return NextResponse.json(
@@ -69,6 +69,14 @@ export async function POST(request: NextRequest) {
                 <h3 style="color: #b00000; margin: 0 0 15px; font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">Vertragsdetails</h3>
                 <p style="color: #fafafa; margin: 8px 0;"><strong>Vertragsbeginn:</strong> ${vertragsbeginn}</p>
               </div>
+              ${tempPassword ? `
+              <div style="background-color: #27272a; border-radius: 12px; padding: 25px; margin: 25px 0; border-left: 4px solid #b00000;">
+                <h3 style="color: #b00000; margin: 0 0 15px; font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">Mobile App Zugang</h3>
+                <p style="color: #a1a1aa; margin: 8px 0;">Wir haben für dich einen Zugang zur Mobile App erstellt. Du kannst dich mit deiner E-Mail und folgendem temporären Passwort in der App anmelden:</p>
+                <p style="color: #fafafa; margin: 8px 0; font-size: 18px; letter-spacing: 2px;"><strong>${tempPassword}</strong></p>
+                <p style="color: #a1a1aa; margin: 8px 0; font-size: 12px;">Bitte ändere dein Passwort nach dem ersten Login.</p>
+              </div>
+              ` : ''}
               <p style="color: #a1a1aa; line-height: 1.8;">
                 Bitte bewahre diesen Vertrag gut auf. Bei Fragen erreichst du uns jederzeit unter
                 <a href="mailto:info@salimlee-gym.de" style="color: #b00000;">info@salimlee-gym.de</a>

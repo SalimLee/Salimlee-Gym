@@ -246,6 +246,144 @@ export interface Database {
           active?: boolean
         }
       }
+      exercises: {
+        Row: {
+          id: string
+          created_at: string
+          updated_at: string
+          created_by: string
+          name: string
+          description: string | null
+          target_muscle: string | null
+          exercise_type: string
+          difficulty_level: string
+          default_sets: number | null
+          default_reps: number | null
+          default_duration_seconds: number | null
+          instructions: string | null
+          video_url: string | null
+          image_url: string | null
+        }
+        Insert: {
+          id?: string
+          created_at?: string
+          updated_at?: string
+          created_by: string
+          name: string
+          description?: string | null
+          target_muscle?: string | null
+          exercise_type: string
+          difficulty_level?: string
+          default_sets?: number | null
+          default_reps?: number | null
+          default_duration_seconds?: number | null
+          instructions?: string | null
+          video_url?: string | null
+          image_url?: string | null
+        }
+        Update: {
+          id?: string
+          created_at?: string
+          updated_at?: string
+          created_by?: string
+          name?: string
+          description?: string | null
+          target_muscle?: string | null
+          exercise_type?: string
+          difficulty_level?: string
+          default_sets?: number | null
+          default_reps?: number | null
+          default_duration_seconds?: number | null
+          instructions?: string | null
+          video_url?: string | null
+          image_url?: string | null
+        }
+      }
+      workouts: {
+        Row: {
+          id: string
+          created_at: string
+          updated_at: string
+          created_by: string
+          name: string
+          description: string | null
+          target_muscle_group: string | null
+          difficulty_level: string
+          estimated_duration_minutes: number | null
+          is_published: boolean
+          image_url: string | null
+          tags: string[] | null
+          estimated_calories: number | null
+        }
+        Insert: {
+          id?: string
+          created_at?: string
+          updated_at?: string
+          created_by: string
+          name: string
+          description?: string | null
+          target_muscle_group?: string | null
+          difficulty_level?: string
+          estimated_duration_minutes?: number | null
+          is_published?: boolean
+          image_url?: string | null
+          tags?: string[] | null
+          estimated_calories?: number | null
+        }
+        Update: {
+          id?: string
+          created_at?: string
+          updated_at?: string
+          created_by?: string
+          name?: string
+          description?: string | null
+          target_muscle_group?: string | null
+          difficulty_level?: string
+          estimated_duration_minutes?: number | null
+          is_published?: boolean
+          image_url?: string | null
+          tags?: string[] | null
+          estimated_calories?: number | null
+        }
+      }
+      workout_exercises: {
+        Row: {
+          id: string
+          created_at: string
+          workout_id: string
+          exercise_id: string
+          exercise_order: number
+          sets: number | null
+          reps: number | null
+          duration_seconds: number | null
+          rest_seconds: number | null
+          notes: string | null
+        }
+        Insert: {
+          id?: string
+          created_at?: string
+          workout_id: string
+          exercise_id: string
+          exercise_order: number
+          sets?: number | null
+          reps?: number | null
+          duration_seconds?: number | null
+          rest_seconds?: number | null
+          notes?: string | null
+        }
+        Update: {
+          id?: string
+          created_at?: string
+          workout_id?: string
+          exercise_id?: string
+          exercise_order?: number
+          sets?: number | null
+          reps?: number | null
+          duration_seconds?: number | null
+          rest_seconds?: number | null
+          notes?: string | null
+        }
+      }
     }
     Views: {
       [_ in never]: never
