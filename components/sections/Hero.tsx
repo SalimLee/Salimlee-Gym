@@ -70,7 +70,7 @@ export function Hero({ onBookingClick }: HeroProps) {
         {/* Boxing Gym Image */}
         <div className="relative mb-12 animate-fade-in-delay">
           <div
-            className="max-w-3xl mx-auto rounded-2xl overflow-hidden relative"
+            className="max-w-2xl mx-auto aspect-[16/9] rounded-2xl overflow-hidden relative"
             style={{
               boxShadow: '0 0 30px rgba(176, 0, 0, 0.15), 0 0 80px rgba(176, 0, 0, 0.05), 0 25px 50px rgba(0,0,0,0.5)',
               border: '1px solid rgba(176, 0, 0, 0.25)',
@@ -79,13 +79,21 @@ export function Hero({ onBookingClick }: HeroProps) {
             <Image
               src="/Boxring.jpeg"
               alt="Boxring im Salim Lee Boxing & Fitness Gym"
-              width={1200}
-              height={900}
-              className="w-full h-auto object-cover"
+              fill
+              className="object-cover"
               priority
             />
-            {/* Vignette overlay */}
-            <div className="absolute inset-0 bg-gradient-to-b from-dark-950/20 via-transparent to-dark-950/40" />
+            {/* Dark overlay for text readability */}
+            <div className="absolute inset-0 bg-gradient-to-b from-dark-950/30 via-transparent to-dark-950/70" />
+            {/* Spruch */}
+            <div className="absolute bottom-[12%] left-0 right-0 text-center">
+              <div
+                className="text-xl md:text-3xl font-black tracking-[0.2em] text-white/80"
+                style={{ textShadow: '0 2px 10px rgba(0,0,0,0.7), 0 0 20px rgba(176,0,0,0.3)' }}
+              >
+                DEIN RING. DEIN KAMPF.
+              </div>
+            </div>
           </div>
         </div>
 
