@@ -26,6 +26,8 @@ export default function MembersTab({ members, setMembers, subscriptions, invoice
   const [saving, setSaving] = useState(false)
   const [formData, setFormData] = useState({ name: '', email: '', phone: '', notes: '' })
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const filteredMembers = members.filter(m =>
     search === '' ||
@@ -85,6 +87,20 @@ export default function MembersTab({ members, setMembers, subscriptions, invoice
       setMembers(prev => prev.map(m => m.id === member.id ? { ...m, active: !m.active } : m))
       if (selectedMember?.id === member.id) setSelectedMember({ ...member, active: !member.active })
     }
+  }
+
+  const deleteMember = async (member: Member) => {
+    setDeleting(true)
+    // Delete related subscriptions and invoices first
+    await supabase.from('subscriptions').delete().eq('member_id', member.id)
+    await supabase.from('invoices').delete().eq('member_id', member.id)
+    const { error } = await supabase.from('members').delete().eq('id', member.id)
+    if (!error) {
+      setMembers(prev => prev.filter(m => m.id !== member.id))
+      if (selectedMember?.id === member.id) setSelectedMember(null)
+    }
+    setDeleting(false)
+    setDeleteConfirm(null)
   }
 
   const startEdit = (member: Member) => {
@@ -219,6 +235,16 @@ export default function MembersTab({ members, setMembers, subscriptions, invoice
                   <button onClick={() => toggleActive(selectedMember)} className="text-xs text-dark-400 hover:text-dark-200">
                     {selectedMember.active ? 'Deaktivieren' : 'Aktivieren'}
                   </button>
+                  {deleteConfirm === selectedMember.id ? (
+                    <>
+                      <button onClick={() => deleteMember(selectedMember)} disabled={deleting} className="text-xs text-red-400 font-bold hover:underline disabled:opacity-50">
+                        {deleting ? '...' : 'Bestätigen'}
+                      </button>
+                      <button onClick={() => setDeleteConfirm(null)} className="text-xs text-dark-500 hover:underline">Abbruch</button>
+                    </>
+                  ) : (
+                    <button onClick={() => setDeleteConfirm(selectedMember.id)} className="text-xs text-red-400/60 hover:text-red-400 hover:underline">Löschen</button>
+                  )}
                 </div>
               </div>
               <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto">

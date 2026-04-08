@@ -44,6 +44,8 @@ export default function BookingsTab({ bookings, setBookings, supabase, onRefresh
   const [personalMessage, setPersonalMessage] = useState('')
   const [sendingEmail, setSendingEmail] = useState(false)
   const [emailError, setEmailError] = useState<string | null>(null)
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const filteredBookings = bookings.filter(b => {
     const matchesFilter = filter === 'all' || b.status === filter
@@ -149,6 +151,17 @@ export default function BookingsTab({ bookings, setBookings, supabase, onRefresh
       }
     }
     setSaving(false)
+  }
+
+  const deleteBooking = async (id: string) => {
+    setDeleting(true)
+    const { error } = await supabase.from('bookings').delete().eq('id', id)
+    if (!error) {
+      setBookings(prev => prev.filter(b => b.id !== id))
+      if (selectedBooking?.id === id) setSelectedBooking(null)
+    }
+    setDeleting(false)
+    setDeleteConfirm(null)
   }
 
   const formatDate = (date: string) => new Date(date).toLocaleDateString('de-DE', {
@@ -319,6 +332,26 @@ export default function BookingsTab({ bookings, setBookings, supabase, onRefresh
                       <a href={`tel:${selectedBooking.phone}`} className="flex-1 px-3 py-2 text-sm text-center font-bold rounded-lg bg-dark-800 text-dark-300 border border-dark-700 hover:border-brand-500/30 hover:text-brand-500 transition-all">Anrufen</a>
                     )}
                   </div>
+                </div>
+
+                <div className="pt-3 border-t border-dark-800">
+                  {deleteConfirm === selectedBooking.id ? (
+                    <div className="space-y-2">
+                      <p className="text-xs text-red-400 font-medium">Buchung endgültig löschen?</p>
+                      <div className="flex gap-2">
+                        <button onClick={() => deleteBooking(selectedBooking.id)} disabled={deleting} className="flex-1 px-3 py-2 text-sm font-bold rounded-lg bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 transition-all disabled:opacity-50">
+                          {deleting ? 'Löscht...' : 'Ja, löschen'}
+                        </button>
+                        <button onClick={() => setDeleteConfirm(null)} className="flex-1 px-3 py-2 text-sm font-bold rounded-lg bg-dark-800 text-dark-300 border border-dark-700 hover:border-dark-600 transition-all">
+                          Abbrechen
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button onClick={() => setDeleteConfirm(selectedBooking.id)} className="w-full px-3 py-2 text-sm font-bold rounded-lg text-red-400/60 border border-dark-800 hover:border-red-500/30 hover:text-red-400 hover:bg-red-500/10 transition-all">
+                      Buchung löschen
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

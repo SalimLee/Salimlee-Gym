@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
               </div>
             </div>
             <div style="background-color: #09090b; padding: 20px; text-align: center; color: #71717a; font-size: 12px;">
-              Netzgenauerstr. 8, 72764 Reutlingen<br>
+              Wörthstrasse 17, 72764 Reutlingen<br>
               &copy; ${new Date().getFullYear()} Salim Lee Boxing & Fitness Gym
             </div>
           </div>

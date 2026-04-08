@@ -31,6 +31,8 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
     member_id: '', name: '', type: 'monthly' as string, start_date: '', end_date: '',
     total_units: '', remaining_units: '', price: '', notes: '',
   })
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const getMemberName = (memberId: string) => members.find(m => m.id === memberId)?.name || 'Unbekannt'
 
@@ -92,6 +94,16 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
     if (!error) {
       setSubscriptions(prev => prev.map(s => s.id === id ? { ...s, status } : s))
     }
+  }
+
+  const deleteSub = async (id: string) => {
+    setDeleting(true)
+    const { error } = await supabase.from('subscriptions').delete().eq('id', id)
+    if (!error) {
+      setSubscriptions(prev => prev.filter(s => s.id !== id))
+    }
+    setDeleting(false)
+    setDeleteConfirm(null)
   }
 
   const updateUnits = async (id: string, remaining: number) => {
@@ -269,6 +281,20 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
                       {isExpired && (
                         <button onClick={() => updateStatus(sub.id, 'expired')} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 transition-all">
                           Als abgelaufen markieren
+                        </button>
+                      )}
+                      {deleteConfirm === sub.id ? (
+                        <>
+                          <button onClick={() => deleteSub(sub.id)} disabled={deleting} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-red-600 text-white hover:bg-red-500 transition-all disabled:opacity-50">
+                            {deleting ? '...' : 'Bestätigen'}
+                          </button>
+                          <button onClick={() => setDeleteConfirm(null)} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-dark-800 text-dark-400 border border-dark-700 hover:border-dark-600 transition-all">
+                            Abbruch
+                          </button>
+                        </>
+                      ) : (
+                        <button onClick={() => setDeleteConfirm(sub.id)} className="px-3 py-1.5 text-xs font-bold rounded-lg text-red-400/50 border border-dark-800 hover:border-red-500/30 hover:text-red-400 hover:bg-red-500/10 transition-all" title="Abo löschen">
+                          ✕
                         </button>
                       )}
                     </div>

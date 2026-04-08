@@ -29,7 +29,7 @@ export function KurseInfos() {
   const infos = [
     { icon: Euro, label: 'Ab 50€/mtl.', detail: 'Faire Preise, keine versteckten Kosten' },
     { icon: Gift, label: 'Probetraining kostenlos', detail: 'Unverbindlich reinschnuppern (max. 2 Kurse)' },
-    { icon: MapPin, label: 'Reutlingen', detail: 'Netzgenauerstr. 8, 72764 Reutlingen' },
+    { icon: MapPin, label: 'Reutlingen', detail: 'Wörthstrasse 17, 72764 Reutlingen' },
     { icon: Clock, label: 'Jetzt starten', detail: 'Einfach vorbeikommen oder anrufen' },
   ]
 

@@ -61,6 +61,7 @@ export function ContractsTab({ members, supabase, onRefresh }: ContractsTabProps
   const [formData, setFormData] = useState<ContractData>(INITIAL_FORM)
   const [selectedMember, setSelectedMember] = useState<string>('')
   const [isSending, setIsSending] = useState(false)
+  const [isSendingDraft, setIsSendingDraft] = useState(false)
   const [sendResult, setSendResult] = useState<{ success: boolean; message: string } | null>(null)
   const [pdfUrl, setPdfUrl] = useState<string | null>(null)
   const [mobileAppRegistrieren, setMobileAppRegistrieren] = useState(false)
@@ -144,6 +145,40 @@ export function ContractsTab({ members, supabase, onRefresh }: ContractsTabProps
 
     setStep('send')
   }, [])
+
+  const handleSendDraft = useCallback(async () => {
+    if (!formData.email || !formData.vorname || !formData.nachname) return
+    setIsSendingDraft(true)
+    setSendResult(null)
+    try {
+      const blob = await pdf(<ContractPDF data={formData} />).toBlob()
+      const arrayBuffer = await blob.arrayBuffer()
+      const base64 = btoa(
+        new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+      )
+
+      const res = await fetch('/api/contract/send-draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pdfBase64: base64,
+          memberEmail: formData.email,
+          memberName: `${formData.vorname} ${formData.nachname}`,
+        }),
+      })
+
+      const result = await res.json()
+      if (res.ok) {
+        setSendResult({ success: true, message: `Vertragsentwurf wurde an ${formData.email} gesendet.` })
+      } else {
+        setSendResult({ success: false, message: result.error || 'Fehler beim Senden des Entwurfs.' })
+      }
+    } catch {
+      setSendResult({ success: false, message: 'Netzwerkfehler beim Senden.' })
+    } finally {
+      setIsSendingDraft(false)
+    }
+  }, [formData])
 
   const handleSendContract = useCallback(async () => {
     setIsSending(true)
@@ -495,17 +530,36 @@ export function ContractsTab({ members, supabase, onRefresh }: ContractsTabProps
           </div>
 
           {/* Submit */}
-          <button
-            onClick={handlePreview}
-            disabled={!isFormValid}
-            className={`w-full py-4 rounded-lg font-bold text-lg transition-all ${
-              isFormValid
-                ? 'bg-brand-500 text-white hover:bg-brand-400'
-                : 'bg-dark-800 text-dark-500 cursor-not-allowed'
-            }`}
-          >
-            Weiter zur Vorschau →
-          </button>
+          <div className="flex gap-4">
+            <button
+              onClick={handlePreview}
+              disabled={!isFormValid}
+              className={`flex-1 py-4 rounded-lg font-bold text-lg transition-all ${
+                isFormValid
+                  ? 'bg-brand-500 text-white hover:bg-brand-400'
+                  : 'bg-dark-800 text-dark-500 cursor-not-allowed'
+              }`}
+            >
+              Weiter zur Vorschau →
+            </button>
+            <button
+              onClick={handleSendDraft}
+              disabled={!isFormValid || isSendingDraft}
+              className={`py-4 px-6 rounded-lg font-bold text-sm transition-all ${
+                isFormValid && !isSendingDraft
+                  ? 'bg-dark-800 text-dark-200 border border-dark-700 hover:border-brand-500/30 hover:text-brand-400'
+                  : 'bg-dark-800 text-dark-500 cursor-not-allowed'
+              }`}
+              title="Vertrag ohne Unterschrift als PDF an den Kunden senden"
+            >
+              {isSendingDraft ? 'Wird gesendet...' : 'Vorab als PDF senden'}
+            </button>
+          </div>
+          {sendResult && step === 'form' && (
+            <div className={`p-3 rounded-lg text-sm ${sendResult.success ? 'bg-green-500/10 border border-green-500/30 text-green-400' : 'bg-red-500/10 border border-red-500/30 text-red-400'}`}>
+              {sendResult.message}
+            </div>
+          )}
         </div>
       )}
 

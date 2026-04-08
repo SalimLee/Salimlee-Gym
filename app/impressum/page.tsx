@@ -30,7 +30,7 @@ export default function ImpressumPage() {
             <p>
               Salim Lee Boxing &amp; Fitness Gym<br />
               Inhaber: Saleem Fahmi Muhammad Shareef<br />
-              Netzgenauerstr. 8<br />
+              Wörthstrasse 17<br />
               72764 Reutlingen
             </p>
           </section>
@@ -47,7 +47,7 @@ export default function ImpressumPage() {
             <h2 className="text-xl font-bold text-dark-100 mb-3">Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV</h2>
             <p>
               Saleem Fahmi Muhammad Shareef<br />
-              Netzgenauerstr. 8<br />
+              Wörthstrasse 17<br />
               72764 Reutlingen
             </p>
           </section>

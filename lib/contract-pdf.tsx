@@ -323,7 +323,7 @@ const AGB_SECTIONS = [
 const OWNER_INFO = {
   name: 'Salim Lee Boxing & Fitness Gym',
   inhaber: 'Saleem Fahmi Muhammad Shareef',
-  strasse: 'Netzgenauerstr. 8',
+  strasse: 'Wörthstrasse 17',
   plz: '72764 Reutlingen',
   email: 'info@salimlee-gym.de',
   tel: '+49 151 68457943',

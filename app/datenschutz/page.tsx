@@ -31,7 +31,7 @@ export default function DatenschutzPage() {
             <p>
               Salim Lee Boxing &amp; Fitness Gym<br />
               Inhaber: Saleem Fahmi Muhammad Shareef<br />
-              Netzgenauerstr. 8<br />
+              Wörthstrasse 17<br />
               72764 Reutlingen<br />
               E-Mail: info@salimlee-gym.de<br />
               Telefon: +49 151 68457943
