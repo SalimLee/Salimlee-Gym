@@ -94,6 +94,10 @@ export function ContractsTab({ members, supabase, onRefresh }: ContractsTabProps
     setFormData((prev) => ({ ...prev, [field]: value }))
   }, [])
 
+  const isDraftValid = useMemo(() => {
+    return formData.vorname.trim() !== '' && formData.nachname.trim() !== '' && formData.email.trim() !== ''
+  }, [formData])
+
   const isFormValid = useMemo(() => {
     return (
       formData.vorname.trim() !== '' &&
@@ -544,9 +548,9 @@ export function ContractsTab({ members, supabase, onRefresh }: ContractsTabProps
             </button>
             <button
               onClick={handleSendDraft}
-              disabled={!isFormValid || isSendingDraft}
+              disabled={!isDraftValid || isSendingDraft}
               className={`py-4 px-6 rounded-lg font-bold text-sm transition-all ${
-                isFormValid && !isSendingDraft
+                isDraftValid && !isSendingDraft
                   ? 'bg-dark-800 text-dark-200 border border-dark-700 hover:border-brand-500/30 hover:text-brand-400'
                   : 'bg-dark-800 text-dark-500 cursor-not-allowed'
               }`}
