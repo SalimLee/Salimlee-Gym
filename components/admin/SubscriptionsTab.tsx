@@ -22,6 +22,21 @@ interface SubscriptionsTabProps {
   onRefresh: () => void
 }
 
+function getFirstOfNextMonth(): Date {
+  const d = new Date()
+  return new Date(d.getFullYear(), d.getMonth() + 1, 1)
+}
+
+function formatDateDE(date: string | Date): string {
+  return new Date(date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
+
+/** Check if a subscription is still in its binding period (6/12 month contract) */
+function isInBindingPeriod(sub: Subscription): boolean {
+  if (!sub.end_date || sub.type === 'punch_card') return false
+  return new Date(sub.end_date).getTime() > new Date().getTime()
+}
+
 export default function SubscriptionsTab({ subscriptions, setSubscriptions, members, supabase, onRefresh }: SubscriptionsTabProps) {
   const [filter, setFilter] = useState<SubStatus | 'all'>('all')
   const [search, setSearch] = useState('')
@@ -34,7 +49,15 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
 
+  // Modal state for status changes with email
+  const [showStatusModal, setShowStatusModal] = useState(false)
+  const [pendingAction, setPendingAction] = useState<{ sub: Subscription; newStatus: SubStatus } | null>(null)
+  const [personalMessage, setPersonalMessage] = useState('')
+  const [sendingStatus, setSendingStatus] = useState(false)
+  const [emailError, setEmailError] = useState<string | null>(null)
+
   const getMemberName = (memberId: string) => members.find(m => m.id === memberId)?.name || 'Unbekannt'
+  const getMemberEmail = (memberId: string) => members.find(m => m.id === memberId)?.email || ''
 
   const filteredSubs = subscriptions.filter(s => {
     const matchesFilter = filter === 'all' || s.status === filter
@@ -57,8 +80,6 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
     const diff = new Date(date).getTime() - now.getTime()
     return Math.ceil(diff / (1000 * 60 * 60 * 24))
   }
-
-  const formatDate = (date: string) => new Date(date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
   const resetForm = () => {
     setFormData({ member_id: '', name: '', type: 'monthly', start_date: '', end_date: '', total_units: '', remaining_units: '', price: '', notes: '' })
@@ -89,11 +110,62 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
     resetForm()
   }
 
-  const updateStatus = async (id: string, status: SubStatus) => {
-    const { error } = await supabase.from('subscriptions').update({ status }).eq('id', id)
-    if (!error) {
-      setSubscriptions(prev => prev.map(s => s.id === id ? { ...s, status } : s))
+  // Open confirmation modal before changing status
+  const openStatusModal = (sub: Subscription, newStatus: SubStatus) => {
+    setPendingAction({ sub, newStatus })
+    setPersonalMessage('')
+    setEmailError(null)
+    setShowStatusModal(true)
+  }
+
+  // Execute status change + send email
+  const confirmStatusChange = async () => {
+    if (!pendingAction) return
+    const { sub, newStatus } = pendingAction
+    setSendingStatus(true)
+    setEmailError(null)
+
+    // Update status in Supabase
+    const { error } = await supabase.from('subscriptions').update({ status: newStatus }).eq('id', sub.id)
+    if (error) {
+      setEmailError('Status konnte nicht aktualisiert werden.')
+      setSendingStatus(false)
+      return
     }
+
+    setSubscriptions(prev => prev.map(s => s.id === sub.id ? { ...s, status: newStatus } : s))
+
+    // Send notification email
+    const memberEmail = getMemberEmail(sub.member_id)
+    const memberName = getMemberName(sub.member_id)
+    if (memberEmail) {
+      try {
+        const effectiveDate = newStatus === 'cancelled' ? formatDateDE(getFirstOfNextMonth()) : undefined
+        const res = await fetch('/api/subscription/send-notification', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            status: newStatus,
+            memberName,
+            memberEmail,
+            subscriptionName: sub.name,
+            effectiveDate,
+            personalMessage: personalMessage || undefined,
+          }),
+        })
+        const data = await res.json()
+        if (!res.ok || data.error) {
+          setEmailError(data.error || 'E-Mail konnte nicht gesendet werden')
+        }
+      } catch {
+        setEmailError('E-Mail-Versand fehlgeschlagen.')
+      }
+    }
+
+    setSendingStatus(false)
+    setShowStatusModal(false)
+    setPendingAction(null)
+    setPersonalMessage('')
   }
 
   const deleteSub = async (id: string) => {
@@ -110,6 +182,13 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
     const { error } = await supabase.from('subscriptions').update({ remaining_units: remaining }).eq('id', id)
     if (!error) {
       setSubscriptions(prev => prev.map(s => s.id === id ? { ...s, remaining_units: remaining } : s))
+    }
+  }
+
+  const updateStatus = async (id: string, status: SubStatus) => {
+    const { error } = await supabase.from('subscriptions').update({ status }).eq('id', id)
+    if (!error) {
+      setSubscriptions(prev => prev.map(s => s.id === id ? { ...s, status } : s))
     }
   }
 
@@ -186,6 +265,13 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
         </div>
       )}
 
+      {/* Email-Fehler Hinweis */}
+      {emailError && !showStatusModal && (
+        <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl">
+          <p className="text-sm text-red-400">E-Mail nicht gesendet: {emailError}</p>
+        </div>
+      )}
+
       {/* Abo-Liste */}
       <div className="bg-dark-900/50 rounded-xl border border-dark-800 overflow-hidden">
         <div className="p-4 border-b border-dark-800 flex items-center justify-between">
@@ -206,12 +292,14 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
               const member = members.find(m => m.id === sub.member_id)
               const isExpiringSoon = sub.status === 'active' && sub.end_date && daysUntil(sub.end_date) <= 30 && daysUntil(sub.end_date) > 0
               const isExpired = sub.end_date && daysUntil(sub.end_date) <= 0 && sub.status === 'active'
+              const inBinding = isInBindingPeriod(sub)
+              const cancelDate = formatDateDE(getFirstOfNextMonth())
 
               return (
                 <div key={sub.id} className="p-4">
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <p className="font-bold text-dark-100">{member?.name || 'Unbekannt'}</p>
                         <span className={`px-2 py-0.5 rounded-full text-xs border ${STATUS_CONFIG[sub.status].bg} ${STATUS_CONFIG[sub.status].color}`}>
                           {STATUS_CONFIG[sub.status].label}
@@ -221,10 +309,15 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
                             {daysUntil(sub.end_date!)} Tage
                           </span>
                         )}
+                        {inBinding && sub.status === 'active' && (
+                          <span className="px-2 py-0.5 rounded-full text-xs bg-blue-400/10 text-blue-400 border border-blue-400/30">
+                            Bindung bis {formatDateDE(sub.end_date!)}
+                          </span>
+                        )}
                       </div>
                       <p className="text-sm text-brand-500">{sub.name}</p>
-                      <div className="flex items-center gap-4 mt-1 text-xs text-dark-400">
-                        <span>{formatDate(sub.start_date)}{sub.end_date ? ` - ${formatDate(sub.end_date)}` : ''}</span>
+                      <div className="flex items-center gap-4 mt-1 text-xs text-dark-400 flex-wrap">
+                        <span>{formatDateDE(sub.start_date)}{sub.end_date ? ` - ${formatDateDE(sub.end_date)}` : ' – Monatlich kündbar'}</span>
                         <span className="font-bold text-dark-300">{Number(sub.price).toFixed(0)}€</span>
                         {sub.type === 'punch_card' && sub.total_units && (
                           <span>{sub.remaining_units}/{sub.total_units} Einheiten</span>
@@ -253,7 +346,7 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
                     </div>
 
                     {/* Aktionen */}
-                    <div className="flex items-center gap-1 shrink-0">
+                    <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
                       {sub.status === 'active' && sub.type === 'punch_card' && sub.remaining_units !== null && sub.remaining_units > 0 && (
                         <button
                           onClick={() => updateUnits(sub.id, sub.remaining_units! - 1)}
@@ -264,19 +357,31 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
                         </button>
                       )}
                       {sub.status === 'active' && (
-                        <button onClick={() => updateStatus(sub.id, 'paused')} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-yellow-500/10 text-yellow-400 border border-yellow-500/30 hover:bg-yellow-500/20 transition-all">
+                        <button onClick={() => openStatusModal(sub, 'paused')} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-yellow-500/10 text-yellow-400 border border-yellow-500/30 hover:bg-yellow-500/20 transition-all">
                           Pause
                         </button>
                       )}
                       {sub.status === 'paused' && (
-                        <button onClick={() => updateStatus(sub.id, 'active')} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-green-500/10 text-green-400 border border-green-500/30 hover:bg-green-500/20 transition-all">
+                        <button onClick={() => openStatusModal(sub, 'active')} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-green-500/10 text-green-400 border border-green-500/30 hover:bg-green-500/20 transition-all">
                           Fortsetzen
                         </button>
                       )}
-                      {(sub.status === 'active' || sub.status === 'paused') && (
-                        <button onClick={() => updateStatus(sub.id, 'cancelled')} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 transition-all">
+                      {(sub.status === 'active' || sub.status === 'paused') && !inBinding && (
+                        <button
+                          onClick={() => openStatusModal(sub, 'cancelled')}
+                          className="px-3 py-1.5 text-xs font-bold rounded-lg bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 transition-all"
+                          title={`Kündigung zum ${cancelDate}`}
+                        >
                           Kündigen
                         </button>
+                      )}
+                      {(sub.status === 'active' || sub.status === 'paused') && inBinding && (
+                        <span
+                          className="px-3 py-1.5 text-xs rounded-lg bg-dark-800 text-dark-500 border border-dark-700 cursor-not-allowed"
+                          title={`Vertragslaufzeit bis ${formatDateDE(sub.end_date!)} – Kündigung erst danach möglich`}
+                        >
+                          Kündigen
+                        </span>
                       )}
                       {isExpired && (
                         <button onClick={() => updateStatus(sub.id, 'expired')} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 transition-all">
@@ -305,6 +410,119 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
           </div>
         )}
       </div>
+
+      {/* Status-Änderung Modal */}
+      {showStatusModal && pendingAction && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => !sendingStatus && setShowStatusModal(false)}>
+          <div className="bg-dark-900 border border-dark-700 rounded-2xl w-full max-w-lg shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="p-5 border-b border-dark-800 flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg ${
+                pendingAction.newStatus === 'active' ? 'bg-green-500/20 text-green-400' :
+                pendingAction.newStatus === 'paused' ? 'bg-yellow-500/20 text-yellow-400' :
+                'bg-red-500/20 text-red-400'
+              }`}>
+                {pendingAction.newStatus === 'active' ? '▶' : pendingAction.newStatus === 'paused' ? '⏸' : '✕'}
+              </div>
+              <div>
+                <h3 className="font-bold text-dark-100 text-lg">
+                  {pendingAction.newStatus === 'active' ? 'Abo fortsetzen' :
+                   pendingAction.newStatus === 'paused' ? 'Abo pausieren' :
+                   'Abo kündigen'}
+                </h3>
+                <p className="text-dark-500 text-sm">
+                  {getMemberName(pendingAction.sub.member_id)} – {pendingAction.sub.name}
+                </p>
+              </div>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {/* Info-Box */}
+              <div className="bg-dark-800/50 rounded-xl p-4 space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-dark-400">Mitglied</span>
+                  <span className="text-dark-100 font-medium">{getMemberName(pendingAction.sub.member_id)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-dark-400">E-Mail</span>
+                  <span className="text-dark-300">{getMemberEmail(pendingAction.sub.member_id) || 'Keine E-Mail'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-dark-400">Abo</span>
+                  <span className="text-dark-100">{pendingAction.sub.name}</span>
+                </div>
+                {pendingAction.newStatus === 'cancelled' && (
+                  <div className="flex justify-between pt-2 border-t border-dark-700">
+                    <span className="text-dark-400">Kündigung wirksam ab</span>
+                    <span className="text-red-400 font-bold">{formatDateDE(getFirstOfNextMonth())}</span>
+                  </div>
+                )}
+              </div>
+
+              {pendingAction.newStatus === 'cancelled' && (
+                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+                  <p className="text-xs text-red-400">
+                    Die Kündigung wird zum <strong>01. des nächsten Monats</strong> wirksam. Bis dahin kann das Mitglied das Abo weiterhin nutzen.
+                  </p>
+                </div>
+              )}
+
+              {/* Persönliche Nachricht */}
+              <div>
+                <label className="block text-sm font-medium text-dark-300 mb-2">
+                  Persönliche Nachricht <span className="text-dark-500">(optional)</span>
+                </label>
+                <textarea
+                  value={personalMessage}
+                  onChange={(e) => setPersonalMessage(e.target.value)}
+                  rows={3}
+                  className="w-full px-4 py-3 bg-dark-800/50 border border-dark-700 rounded-xl text-dark-100 placeholder:text-dark-500 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 text-sm resize-none"
+                  placeholder={
+                    pendingAction.newStatus === 'paused' ? 'z.B. "Wir hoffen, dich bald wieder zu sehen!"' :
+                    pendingAction.newStatus === 'active' ? 'z.B. "Willkommen zurück! Wir freuen uns auf dich."' :
+                    'z.B. "Wir bedauern deine Kündigung. Du bist jederzeit willkommen!"'
+                  }
+                  autoFocus
+                />
+              </div>
+
+              {emailError && (
+                <div className="p-2 bg-red-500/10 border border-red-500/30 rounded-lg">
+                  <p className="text-xs text-red-400 font-medium">E-Mail-Fehler: {emailError}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="p-5 border-t border-dark-800 flex gap-3">
+              <button
+                onClick={() => { setShowStatusModal(false); setPendingAction(null); setPersonalMessage('') }}
+                disabled={sendingStatus}
+                className="flex-1 px-4 py-3 text-sm font-bold rounded-xl bg-dark-800 text-dark-300 border border-dark-700 hover:border-dark-600 transition-all disabled:opacity-50"
+              >
+                Abbrechen
+              </button>
+              <button
+                onClick={confirmStatusChange}
+                disabled={sendingStatus}
+                className={`flex-1 px-4 py-3 text-sm font-bold rounded-xl transition-all disabled:opacity-50 ${
+                  pendingAction.newStatus === 'active'
+                    ? 'bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-green-500/30'
+                    : pendingAction.newStatus === 'paused'
+                    ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 hover:bg-yellow-500/30'
+                    : 'bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30'
+                }`}
+              >
+                {sendingStatus
+                  ? 'Wird gesendet...'
+                  : pendingAction.newStatus === 'active'
+                  ? 'Fortsetzen & E-Mail senden'
+                  : pendingAction.newStatus === 'paused'
+                  ? 'Pausieren & E-Mail senden'
+                  : 'Kündigen & E-Mail senden'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
