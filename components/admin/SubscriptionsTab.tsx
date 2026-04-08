@@ -140,7 +140,7 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
     const memberName = getMemberName(sub.member_id)
     if (memberEmail) {
       try {
-        const effectiveDate = newStatus === 'cancelled' ? formatDateDE(getFirstOfNextMonth()) : undefined
+        const effectiveDate = (newStatus === 'cancelled' || newStatus === 'paused') ? formatDateDE(getFirstOfNextMonth()) : undefined
         const res = await fetch('/api/subscription/send-notification', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -456,12 +456,26 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
                     <span className="text-red-400 font-bold">{formatDateDE(getFirstOfNextMonth())}</span>
                   </div>
                 )}
+                {pendingAction.newStatus === 'paused' && (
+                  <div className="flex justify-between pt-2 border-t border-dark-700">
+                    <span className="text-dark-400">Pause wirksam ab</span>
+                    <span className="text-yellow-400 font-bold">{formatDateDE(getFirstOfNextMonth())}</span>
+                  </div>
+                )}
               </div>
 
               {pendingAction.newStatus === 'cancelled' && (
                 <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
                   <p className="text-xs text-red-400">
-                    Die Kündigung wird zum <strong>01. des nächsten Monats</strong> wirksam. Bis dahin kann das Mitglied das Abo weiterhin nutzen.
+                    Die Kündigung wird zum <strong>{formatDateDE(getFirstOfNextMonth())}</strong> wirksam. Bis dahin kann das Mitglied das Abo weiterhin nutzen.
+                  </p>
+                </div>
+              )}
+
+              {pendingAction.newStatus === 'paused' && (
+                <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+                  <p className="text-xs text-yellow-400">
+                    Die Pause wird zum <strong>{formatDateDE(getFirstOfNextMonth())}</strong> wirksam. Bis dahin bleibt das Abo aktiv.
                   </p>
                 </div>
               )}

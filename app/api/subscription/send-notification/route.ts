@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
         title: 'Abo pausiert',
         color: '#eab308',
         icon: '⏸',
-        text: `dein Abonnement <strong style="color: #fafafa;">${subscriptionName}</strong> wurde pausiert. Während der Pause werden keine Beiträge abgebucht. Du kannst jederzeit wieder einsteigen!`,
+        text: `dein Abonnement <strong style="color: #fafafa;">${subscriptionName}</strong> wurde pausiert.${effectiveDate ? ` Die Pause wird zum <strong style="color: #fafafa;">${effectiveDate}</strong> wirksam.` : ''} Während der Pause werden keine Beiträge abgebucht. Du kannst jederzeit wieder einsteigen!`,
       },
       active: {
         subject: 'Dein Abo wurde fortgesetzt – Salim Lee Gym',
