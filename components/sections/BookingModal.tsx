@@ -20,6 +20,22 @@ const TRIAL_COURSES = [
   { id: 'kids', label: 'Kinderkurse (kostenlos, max. 2 Kurse)' },
 ]
 
+const MEMBERSHIP_OPTIONS: Record<string, { value: string; label: string }[]> = {
+  Personaltraining: [
+    { value: 'Einzelstunde (60€)', label: 'Einzelstunde (60€)' },
+    { value: '10er Karte (Auf Anfrage)', label: '10er Karte (Vorauszahlung)' },
+  ],
+  Erwachsenenkurse: [
+    { value: '6 Monate (90€/mtl.)', label: '6 Monate (90€/mtl.)' },
+    { value: '12 Monate (80€/mtl.)', label: '12 Monate (80€/mtl.)' },
+    { value: 'Monatlich kündbar (120€/mtl.)', label: 'Monatlich kündbar (120€/mtl.)' },
+    { value: '10er Karte (160€)', label: '10er Karte – 6 Monate gültig (160€)' },
+  ],
+  Kinderkurse: [
+    { value: '12 Monate (50€/mtl.)', label: '12 Monate (50€/mtl.)' },
+  ],
+}
+
 function getInitialIntent(selectedService?: Service | null): string {
   if (!selectedService) return ''
   if (selectedService.id === 'trial') return 'probetraining'
@@ -39,9 +55,18 @@ const bookingSchema = z.object({
   phone: z.string().optional(),
   intent: z.string().min(1, 'Bitte Anliegen auswählen'),
   course: z.string().min(1, 'Bitte Kurs auswählen'),
+  membership: z.string().optional(),
   people: z.string().default('1'),
   date: z.string().optional(),
   message: z.string().optional(),
+}).superRefine((data, ctx) => {
+  if (data.intent === 'mitgliedschaft' && !data.membership) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Bitte Mitgliedschaft auswählen',
+      path: ['membership'],
+    })
+  }
 })
 
 type BookingFormData = z.infer<typeof bookingSchema>
@@ -74,15 +99,19 @@ export function BookingModal({ isOpen, onClose, selectedService }: BookingModalP
   })
 
   const selectedIntent = watch('intent')
+  const selectedCourse = watch('course')
 
   const courseOptions = selectedIntent === 'probetraining' ? TRIAL_COURSES : COURSES
+  const membershipOptions = selectedIntent === 'mitgliedschaft' && selectedCourse ? MEMBERSHIP_OPTIONS[selectedCourse] || [] : []
 
   const onSubmit = async (data: BookingFormData) => {
     setIsSubmitting(true)
     setSubmitError(null)
 
     const intentLabel = data.intent === 'probetraining' ? 'Probetraining' : 'Mitgliedschaft anfragen'
-    const service = `${intentLabel} – ${data.course}`
+    const service = data.membership
+      ? `${intentLabel} – ${data.course} – ${data.membership}`
+      : `${intentLabel} – ${data.course}`
 
     try {
       // API aufrufen für Email-Versand
@@ -211,7 +240,7 @@ export function BookingModal({ isOpen, onClose, selectedService }: BookingModalP
             </label>
             <select
               {...register('intent', {
-                onChange: () => setValue('course', ''),
+                onChange: () => { setValue('course', ''); setValue('membership', '') },
               })}
               className="input-field"
             >
@@ -231,7 +260,9 @@ export function BookingModal({ isOpen, onClose, selectedService }: BookingModalP
                 Kurs *
               </label>
               <select
-                {...register('course')}
+                {...register('course', {
+                  onChange: () => setValue('membership', ''),
+                })}
                 className="input-field"
               >
                 <option value="">Bitte wählen...</option>
@@ -243,6 +274,29 @@ export function BookingModal({ isOpen, onClose, selectedService }: BookingModalP
               </select>
               {errors.course && (
                 <p className="text-red-400 text-sm mt-1">{errors.course.message}</p>
+              )}
+            </div>
+          )}
+
+          {/* Mitgliedschaft */}
+          {membershipOptions.length > 0 && (
+            <div>
+              <label className="block text-sm font-bold mb-2 text-dark-300">
+                Mitgliedschaft *
+              </label>
+              <select
+                {...register('membership')}
+                className="input-field"
+              >
+                <option value="">Bitte wählen...</option>
+                {membershipOptions.map((m) => (
+                  <option key={m.value} value={m.value}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+              {errors.membership && (
+                <p className="text-red-400 text-sm mt-1">{errors.membership.message}</p>
               )}
             </div>
           )}
