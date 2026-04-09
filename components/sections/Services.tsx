@@ -19,7 +19,7 @@ interface ServicesProps {
 
 export function Services({ onServiceSelect }: ServicesProps) {
   return (
-    <section id="angebote" className="py-20 px-4">
+    <section id="angebote" className="py-20 px-4 scroll-mt-24">
       <div className="max-w-7xl mx-auto">
         {/* Section Header */}
         <div className="text-center mb-16">

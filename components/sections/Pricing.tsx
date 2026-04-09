@@ -19,7 +19,7 @@ export function Pricing() {
   }))
 
   return (
-    <section id="preise" className="py-20 px-4 bg-gradient-to-b from-transparent via-dark-900/30 to-transparent">
+    <section id="preise" className="py-20 px-4 scroll-mt-24 bg-gradient-to-b from-transparent via-dark-900/30 to-transparent">
       <div className="max-w-4xl mx-auto">
         {/* Section Header */}
         <div className="text-center mb-16">

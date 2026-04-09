@@ -5,7 +5,7 @@ import salimImage from '@/assets/salim_lee_potrait.jpg'
 
 export function About() {
   return (
-    <section id="about" className="py-16 px-4">
+    <section id="about" className="py-16 px-4 scroll-mt-24">
       <div className="max-w-4xl mx-auto">
         <h2 className="text-3xl md:text-4xl font-black mb-8 tracking-tight md:text-left text-center">
           ÜBER MICH
