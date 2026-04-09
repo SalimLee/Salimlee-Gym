@@ -6,15 +6,39 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
-import { SERVICES } from '@/lib/constants'
 import { Service } from '@/types'
+
+const COURSES = [
+  { id: 'personal', label: 'Personaltraining' },
+  { id: 'group', label: 'Erwachsenenkurse' },
+  { id: 'kids', label: 'Kinderkurse' },
+]
+
+const TRIAL_COURSES = [
+  { id: 'personal', label: 'Personaltraining (einmalig 40€)' },
+  { id: 'group', label: 'Erwachsenenkurse (kostenlos, max. 2 Kurse)' },
+  { id: 'kids', label: 'Kinderkurse (kostenlos, max. 2 Kurse)' },
+]
+
+function getInitialIntent(selectedService?: Service | null): string {
+  if (!selectedService) return ''
+  if (selectedService.id === 'trial') return 'probetraining'
+  return 'mitgliedschaft'
+}
+
+function getInitialCourse(selectedService?: Service | null): string {
+  if (!selectedService || selectedService.id === 'trial') return ''
+  const map: Record<string, string> = { personal: 'Personaltraining', group: 'Erwachsenenkurse', kids: 'Kinderkurse' }
+  return map[selectedService.id] || ''
+}
 
 // Validation Schema
 const bookingSchema = z.object({
   name: z.string().min(2, 'Name muss mindestens 2 Zeichen lang sein'),
   email: z.string().email('Bitte gültige E-Mail eingeben'),
   phone: z.string().optional(),
-  service: z.string().min(1, 'Bitte Service auswählen'),
+  intent: z.string().min(1, 'Bitte Anliegen auswählen'),
+  course: z.string().min(1, 'Bitte Kurs auswählen'),
   people: z.string().default('1'),
   date: z.string().optional(),
   message: z.string().optional(),
@@ -37,25 +61,43 @@ export function BookingModal({ isOpen, onClose, selectedService }: BookingModalP
     register,
     handleSubmit,
     reset,
+    watch,
+    setValue,
     formState: { errors },
   } = useForm<BookingFormData>({
     resolver: zodResolver(bookingSchema),
     defaultValues: {
-      service: selectedService?.title || '',
+      intent: getInitialIntent(selectedService),
+      course: getInitialCourse(selectedService),
       people: '1',
     },
   })
 
+  const selectedIntent = watch('intent')
+
+  const courseOptions = selectedIntent === 'probetraining' ? TRIAL_COURSES : COURSES
+
   const onSubmit = async (data: BookingFormData) => {
     setIsSubmitting(true)
     setSubmitError(null)
-    
+
+    const intentLabel = data.intent === 'probetraining' ? 'Probetraining' : 'Mitgliedschaft anfragen'
+    const service = `${intentLabel} – ${data.course}`
+
     try {
       // API aufrufen für Email-Versand
       const response = await fetch('/api/booking', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify({
+          name: data.name,
+          email: data.email,
+          phone: data.phone,
+          service,
+          people: data.people,
+          date: data.date,
+          message: data.message,
+        }),
       })
 
       const result = await response.json()
@@ -162,27 +204,48 @@ export function BookingModal({ isOpen, onClose, selectedService }: BookingModalP
             </div>
           </div>
 
-          {/* Service */}
+          {/* Anliegen */}
           <div>
             <label className="block text-sm font-bold mb-2 text-dark-300">
-              Service *
+              Anliegen *
             </label>
             <select
-              {...register('service')}
+              {...register('intent', {
+                onChange: () => setValue('course', ''),
+              })}
               className="input-field"
-              defaultValue={selectedService?.title || ''}
             >
               <option value="">Bitte wählen...</option>
-              {SERVICES.map((service) => (
-                <option key={service.id} value={service.title}>
-                  {service.title}
-                </option>
-              ))}
+              <option value="probetraining">Probetraining</option>
+              <option value="mitgliedschaft">Mitgliedschaft anfragen</option>
             </select>
-            {errors.service && (
-              <p className="text-red-400 text-sm mt-1">{errors.service.message}</p>
+            {errors.intent && (
+              <p className="text-red-400 text-sm mt-1">{errors.intent.message}</p>
             )}
           </div>
+
+          {/* Kurs */}
+          {selectedIntent && (
+            <div>
+              <label className="block text-sm font-bold mb-2 text-dark-300">
+                Kurs *
+              </label>
+              <select
+                {...register('course')}
+                className="input-field"
+              >
+                <option value="">Bitte wählen...</option>
+                {courseOptions.map((c) => (
+                  <option key={c.id} value={c.label.split(' (')[0]}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+              {errors.course && (
+                <p className="text-red-400 text-sm mt-1">{errors.course.message}</p>
+              )}
+            </div>
+          )}
 
           {/* People & Date */}
           <div className="grid md:grid-cols-2 gap-4">
