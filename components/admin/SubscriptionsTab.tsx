@@ -4,11 +4,12 @@ import { useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 interface Member { id: string; created_at: string; updated_at: string; name: string; email: string; phone: string | null; notes: string | null; active: boolean }
-interface Subscription { id: string; created_at: string; updated_at: string; member_id: string; name: string; type: string; start_date: string; end_date: string | null; total_units: number | null; remaining_units: number | null; price: number; status: 'active' | 'expired' | 'cancelled' | 'paused'; notes: string | null }
-type SubStatus = 'active' | 'expired' | 'cancelled' | 'paused'
+interface Subscription { id: string; created_at: string; updated_at: string; member_id: string; name: string; type: string; start_date: string; end_date: string | null; total_units: number | null; remaining_units: number | null; price: number; status: 'active' | 'expired' | 'cancelled' | 'paused' | 'pending'; notes: string | null; payment_status?: string | null; stripe_checkout_session_id?: string | null }
+type SubStatus = 'active' | 'expired' | 'cancelled' | 'paused' | 'pending'
 
 const STATUS_CONFIG: Record<SubStatus, { label: string; color: string; bg: string }> = {
   active: { label: 'Aktiv', color: 'text-green-400', bg: 'bg-green-400/10 border-green-400/30' },
+  pending: { label: 'Zahlung ausstehend', color: 'text-orange-400', bg: 'bg-orange-400/10 border-orange-400/30' },
   expired: { label: 'Abgelaufen', color: 'text-red-400', bg: 'bg-red-400/10 border-red-400/30' },
   cancelled: { label: 'Gekündigt', color: 'text-dark-500', bg: 'bg-dark-700/50 border-dark-600' },
   paused: { label: 'Pausiert', color: 'text-yellow-400', bg: 'bg-yellow-400/10 border-yellow-400/30' },
@@ -45,6 +46,7 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
 
   const stats = {
     active: subscriptions.filter(s => s.status === 'active').length,
+    pending: subscriptions.filter(s => s.status === 'pending').length,
     expired: subscriptions.filter(s => s.status === 'expired').length,
     paused: subscriptions.filter(s => s.status === 'paused').length,
   }
@@ -104,10 +106,14 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
   return (
     <div className="space-y-6">
       {/* Statistiken */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-4 gap-3">
         <button onClick={() => setFilter(filter === 'active' ? 'all' : 'active')} className={`p-4 rounded-xl border transition-all text-left ${filter === 'active' ? 'bg-green-500/10 border-green-500/50' : 'bg-dark-900/50 border-dark-800'}`}>
           <p className="text-2xl font-black text-green-400">{stats.active}</p>
           <p className="text-xs text-dark-400">Aktiv</p>
+        </button>
+        <button onClick={() => setFilter(filter === 'pending' ? 'all' : 'pending')} className={`p-4 rounded-xl border transition-all text-left ${filter === 'pending' ? 'bg-orange-500/10 border-orange-500/50' : 'bg-dark-900/50 border-dark-800'}`}>
+          <p className="text-2xl font-black text-orange-400">{stats.pending}</p>
+          <p className="text-xs text-dark-400">Ausstehend</p>
         </button>
         <button onClick={() => setFilter(filter === 'paused' ? 'all' : 'paused')} className={`p-4 rounded-xl border transition-all text-left ${filter === 'paused' ? 'bg-yellow-500/10 border-yellow-500/50' : 'bg-dark-900/50 border-dark-800'}`}>
           <p className="text-2xl font-black text-yellow-400">{stats.paused}</p>

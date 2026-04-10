@@ -98,8 +98,12 @@ export interface Database {
           total_units: number | null
           remaining_units: number | null
           price: number
-          status: 'active' | 'expired' | 'cancelled' | 'paused'
+          status: 'active' | 'expired' | 'cancelled' | 'paused' | 'pending'
           notes: string | null
+          stripe_checkout_session_id: string | null
+          stripe_subscription_id: string | null
+          stripe_customer_id: string | null
+          payment_status: string | null
         }
         Insert: {
           id?: string
@@ -113,8 +117,12 @@ export interface Database {
           total_units?: number | null
           remaining_units?: number | null
           price?: number
-          status?: 'active' | 'expired' | 'cancelled' | 'paused'
+          status?: 'active' | 'expired' | 'cancelled' | 'paused' | 'pending'
           notes?: string | null
+          stripe_checkout_session_id?: string | null
+          stripe_subscription_id?: string | null
+          stripe_customer_id?: string | null
+          payment_status?: string | null
         }
         Update: {
           id?: string
@@ -128,8 +136,12 @@ export interface Database {
           total_units?: number | null
           remaining_units?: number | null
           price?: number
-          status?: 'active' | 'expired' | 'cancelled' | 'paused'
+          status?: 'active' | 'expired' | 'cancelled' | 'paused' | 'pending'
           notes?: string | null
+          stripe_checkout_session_id?: string | null
+          stripe_subscription_id?: string | null
+          stripe_customer_id?: string | null
+          payment_status?: string | null
         }
       }
       invoices: {

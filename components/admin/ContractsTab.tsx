@@ -37,7 +37,8 @@ const INITIAL_FORM: ContractData = {
   geburtsdatum: '',
   notfallkontakt: '',
   mitgliedschaft: '',
-  zahlungsweise: '',
+  zahlungsweise: 'stripe',
+  abrechnungstag: '1' as const,
   vertragsbeginn: new Date().toISOString().split('T')[0],
   kontoinhaber: '',
   iban: '',
@@ -149,13 +150,116 @@ export function ContractsTab({ members, supabase, onRefresh }: ContractsTabProps
     setIsSending(true)
     setSendResult(null)
     try {
+      const fullName = `${formData.vorname} ${formData.nachname}`.trim()
+      const tempPassword = mobileAppRegistrieren ? Math.random().toString(36).slice(-8) + 'A1!' : undefined
+
+      // 1. Create/update member in Supabase
+      let memberId: string | null = null
+      try {
+        const { data: existing } = await supabase
+          .from('members')
+          .select('id')
+          .eq('email', formData.email)
+          .maybeSingle()
+
+        if (existing?.id) {
+          await supabase
+            .from('members')
+            .update({
+              name: fullName,
+              phone: formData.telefon || null,
+              active: true,
+              ...(mobileAppRegistrieren ? { is_temp_password: true, temp_password: tempPassword } : {})
+            })
+            .eq('id', existing.id)
+          memberId = existing.id
+        } else {
+          const { data: newMember } = await supabase
+            .from('members')
+            .insert({
+              name: fullName,
+              email: formData.email,
+              phone: formData.telefon || null,
+              active: true,
+              ...(mobileAppRegistrieren ? { is_temp_password: true, temp_password: tempPassword } : {})
+            })
+            .select('id')
+            .single()
+          memberId = newMember?.id ?? null
+        }
+      } catch (e) {
+        console.warn('Mitglied Erstellung fehlgeschlagen:', e)
+      }
+
+      if (!memberId) {
+        setSendResult({ success: false, message: 'Mitglied konnte nicht erstellt werden.' })
+        return
+      }
+
+      // 2. Create subscription with status 'pending'
+      const details = MEMBERSHIP_DETAILS[formData.mitgliedschaft]
+      const membershipLabel = MEMBERSHIP_OPTIONS.find((m) => m.id === formData.mitgliedschaft)?.label || formData.mitgliedschaft
+
+      let endDate: string | null = null
+      if (details?.months) {
+        const end = new Date(formData.vertragsbeginn)
+        end.setMonth(end.getMonth() + details.months)
+        endDate = end.toISOString().split('T')[0]
+      }
+
+      const { data: subscriptionData, error: subError } = await supabase
+        .from('subscriptions')
+        .insert({
+          member_id: memberId,
+          name: membershipLabel,
+          type: details?.type || 'monthly',
+          start_date: formData.vertragsbeginn,
+          end_date: endDate,
+          total_units: details?.units || null,
+          remaining_units: details?.units || null,
+          price: details?.price || 0,
+          status: 'pending',
+          payment_status: 'pending',
+        })
+        .select('id')
+        .single()
+
+      if (subError || !subscriptionData?.id) {
+        console.warn('Abo Erstellung fehlgeschlagen:', subError)
+        setSendResult({ success: false, message: 'Abo konnte nicht erstellt werden.' })
+        return
+      }
+
+      // 3. Create Stripe Checkout Session
+      let checkoutUrl: string | null = null
+      try {
+        const checkoutRes = await fetch('/api/stripe/create-checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            subscriptionId: subscriptionData.id,
+            memberEmail: formData.email,
+            memberName: fullName,
+            membershipId: formData.mitgliedschaft,
+            billingAnchorDay: parseInt(formData.abrechnungstag),
+          }),
+        })
+        const checkoutResult = await checkoutRes.json()
+        if (checkoutRes.ok) {
+          checkoutUrl = checkoutResult.checkoutUrl
+        } else {
+          console.warn('Stripe Checkout Erstellung fehlgeschlagen:', checkoutResult.error)
+        }
+      } catch (e) {
+        console.warn('Stripe Checkout Fehler:', e)
+      }
+
+      // 4. Generate PDF and send email with checkout link
       const blob = await pdf(<ContractPDF data={formData} />).toBlob()
       const arrayBuffer = await blob.arrayBuffer()
       const base64 = btoa(
         new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
       )
-
-      const tempPassword = mobileAppRegistrieren ? Math.random().toString(36).slice(-8) + 'A1!' : undefined
 
       const res = await fetch('/api/contract/send', {
         method: 'POST',
@@ -164,86 +268,23 @@ export function ContractsTab({ members, supabase, onRefresh }: ContractsTabProps
           contractData: formData,
           pdfBase64: base64,
           memberEmail: formData.email,
-          memberName: `${formData.vorname} ${formData.nachname}`,
+          memberName: fullName,
           tempPassword,
+          checkoutUrl,
+          membershipLabel,
+          abrechnungstag: formData.abrechnungstag,
         }),
       })
 
       const result = await res.json()
       if (res.ok) {
-        // Create member + subscription in Supabase
-        try {
-          const fullName = `${formData.vorname} ${formData.nachname}`.trim()
-
-          // Check if member with this email already exists
-          const { data: existing } = await supabase
-            .from('members')
-            .select('id')
-            .eq('email', formData.email)
-            .maybeSingle()
-
-          let memberId: string | null = null
-
-          if (existing?.id) {
-            // Update existing member
-            await supabase
-              .from('members')
-              .update({ 
-                name: fullName, 
-                phone: formData.telefon || null, 
-                active: true,
-                ...(mobileAppRegistrieren ? { is_temp_password: true, temp_password: tempPassword } : {})
-              })
-              .eq('id', existing.id)
-            memberId = existing.id
-          } else {
-            // Create new member
-            const { data: newMember } = await supabase
-              .from('members')
-              .insert({ 
-                name: fullName, 
-                email: formData.email, 
-                phone: formData.telefon || null, 
-                active: true,
-                ...(mobileAppRegistrieren ? { is_temp_password: true, temp_password: tempPassword } : {})
-              })
-              .select('id')
-              .single()
-            memberId = newMember?.id ?? null
-          }
-
-          const memberData = memberId ? { id: memberId } : null
-
-          if (memberData?.id) {
-            const details = MEMBERSHIP_DETAILS[formData.mitgliedschaft]
-            const membershipLabel = MEMBERSHIP_OPTIONS.find((m) => m.id === formData.mitgliedschaft)?.label || formData.mitgliedschaft
-
-            let endDate: string | null = null
-            if (details?.months) {
-              const end = new Date(formData.vertragsbeginn)
-              end.setMonth(end.getMonth() + details.months)
-              endDate = end.toISOString().split('T')[0]
-            }
-
-            await supabase.from('subscriptions').insert({
-              member_id: memberData.id,
-              name: membershipLabel,
-              type: details?.type || 'monthly',
-              start_date: formData.vertragsbeginn,
-              end_date: endDate,
-              total_units: details?.units || null,
-              remaining_units: details?.units || null,
-              price: details?.price || 0,
-              status: 'active',
-            })
-          }
-
-          onRefresh()
-        } catch (e) {
-          console.warn('Mitglied/Abo Erstellung fehlgeschlagen:', e)
-        }
-
-        setSendResult({ success: true, message: 'Vertrag wurde erfolgreich per E-Mail versendet!' })
+        onRefresh()
+        setSendResult({
+          success: true,
+          message: checkoutUrl
+            ? 'Vertrag versendet! Zahlungslink wurde in der E-Mail mitgesendet.'
+            : 'Vertrag versendet! Stripe Zahlungslink konnte nicht erstellt werden – bitte manuell nachsenden.'
+        })
         setStep('done')
       } else {
         setSendResult({ success: false, message: result.error || 'Fehler beim Versenden.' })
@@ -253,7 +294,7 @@ export function ContractsTab({ members, supabase, onRefresh }: ContractsTabProps
     } finally {
       setIsSending(false)
     }
-  }, [formData, supabase, onRefresh])
+  }, [formData, supabase, onRefresh, mobileAppRegistrieren])
 
   const handleReset = useCallback(() => {
     setFormData(INITIAL_FORM)
@@ -389,55 +430,56 @@ export function ContractsTab({ members, supabase, onRefresh }: ContractsTabProps
 
           {/* Zahlungsweise */}
           <div className="bg-dark-900/50 rounded-xl border border-dark-800 p-6">
-            <h3 className="text-lg font-bold mb-4">Zahlungsweise *</h3>
-            <div className="space-y-2">
-              {PAYMENT_OPTIONS.map((opt) => (
-                <label
-                  key={opt.id}
-                  className={`flex items-center gap-3 p-4 rounded-lg border cursor-pointer transition-all ${
-                    formData.zahlungsweise === opt.id
-                      ? 'border-brand-500 bg-brand-500/10'
-                      : 'border-dark-700 hover:border-dark-600'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="zahlungsweise"
-                    value={opt.id}
-                    checked={formData.zahlungsweise === opt.id}
-                    onChange={(e) => updateField('zahlungsweise', e.target.value)}
-                    className="accent-brand-500"
-                  />
-                  <span className="text-sm font-medium">{opt.label}</span>
-                </label>
-              ))}
-            </div>
-          </div>
+            <h3 className="text-lg font-bold mb-4">Zahlungsweise</h3>
+            <label
+              className="flex items-center gap-3 p-4 rounded-lg border border-brand-500 bg-brand-500/10 cursor-default"
+            >
+              <input
+                type="radio"
+                name="zahlungsweise"
+                value="stripe"
+                checked
+                readOnly
+                className="accent-brand-500"
+              />
+              <span className="text-sm font-medium">Online-Zahlung (Stripe)</span>
+            </label>
+            <p className="text-xs text-dark-400 mt-3">
+              Nach Vertragsabschluss erhält das Mitglied einen Zahlungslink per E-Mail.
+            </p>
 
-          {/* SEPA - nur bei Lastschrift */}
-          {(formData.zahlungsweise === 'sepa_monatlich' || formData.zahlungsweise === 'sepa_vorauszahlung') && (
-            <div className="bg-dark-900/50 rounded-xl border border-dark-800 p-6">
-              <h3 className="text-lg font-bold mb-4">SEPA-Lastschriftmandat</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {[
-                  { key: 'kontoinhaber', label: 'Kontoinhaber' },
-                  { key: 'iban', label: 'IBAN' },
-                  { key: 'bic', label: 'BIC' },
-                  { key: 'bank', label: 'Bank' },
-                ].map((field) => (
-                  <div key={field.key}>
-                    <label className="block text-sm font-semibold text-dark-300 mb-1">{field.label}</label>
-                    <input
-                      type="text"
-                      value={formData[field.key as keyof ContractData] as string}
-                      onChange={(e) => updateField(field.key as keyof ContractData, e.target.value)}
-                      className="w-full px-4 py-2.5 bg-dark-800 border border-dark-700 rounded-lg text-dark-100 focus:border-brand-500 focus:outline-none text-sm"
-                    />
-                  </div>
-                ))}
+            {/* Abrechnungstag - nur bei monatlichen Abos */}
+            {formData.mitgliedschaft && formData.mitgliedschaft !== '10er_karte' && (
+              <div className="mt-4 pt-4 border-t border-dark-700">
+                <label className="block text-sm font-semibold text-dark-300 mb-2">Monatlicher Abrechnungstag</label>
+                <div className="flex gap-3">
+                  {[
+                    { value: '1', label: '1. des Monats' },
+                    { value: '15', label: '15. des Monats' },
+                  ].map((opt) => (
+                    <label
+                      key={opt.value}
+                      className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border cursor-pointer transition-all text-sm ${
+                        formData.abrechnungstag === opt.value
+                          ? 'border-brand-500 bg-brand-500/10 font-bold'
+                          : 'border-dark-700 hover:border-dark-600'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="abrechnungstag"
+                        value={opt.value}
+                        checked={formData.abrechnungstag === opt.value}
+                        onChange={(e) => updateField('abrechnungstag', e.target.value)}
+                        className="accent-brand-500"
+                      />
+                      {opt.label}
+                    </label>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Vertragsbeginn */}
           <div className="bg-dark-900/50 rounded-xl border border-dark-800 p-6">
