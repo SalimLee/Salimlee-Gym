@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { pdfBase64, memberEmail, memberName, contractData, tempPassword } = await request.json()
+    const { pdfBase64, memberEmail, memberName, contractData, tempPassword, checkoutUrl, membershipLabel, abrechnungstag } = await request.json()
 
     if (!pdfBase64 || !memberEmail || !memberName) {
       return NextResponse.json(
@@ -67,8 +67,24 @@ export async function POST(request: NextRequest) {
               </p>
               <div style="background-color: #27272a; border-radius: 12px; padding: 25px; margin: 25px 0; border-left: 4px solid #b00000;">
                 <h3 style="color: #b00000; margin: 0 0 15px; font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">Vertragsdetails</h3>
+                ${membershipLabel ? `<p style="color: #fafafa; margin: 8px 0;"><strong>Mitgliedschaft:</strong> ${membershipLabel}</p>` : ''}
                 <p style="color: #fafafa; margin: 8px 0;"><strong>Vertragsbeginn:</strong> ${vertragsbeginn}</p>
+                ${abrechnungstag ? `<p style="color: #fafafa; margin: 8px 0;"><strong>Rechnungsdatum:</strong> Monatlich zum ${abrechnungstag}. des Monats</p>` : ''}
+                <div style="margin-top: 15px; padding: 12px 16px; background-color: #ffa50020; border: 1px solid #ffa500; border-radius: 8px; text-align: center;">
+                  <p style="color: #ffa500; margin: 0; font-weight: 900; font-size: 15px; text-transform: uppercase; letter-spacing: 1px;">⚠ Zahlung ausstehend</p>
+                  <p style="color: #d4d4d8; margin: 6px 0 0; font-size: 12px;">Bitte schließe deine Zahlung über den Button unten ab, um deine Mitgliedschaft zu aktivieren.</p>
+                </div>
               </div>
+              ${checkoutUrl ? `
+              <div style="text-align: center; margin: 30px 0;">
+                <a href="${checkoutUrl}" style="display: inline-block; padding: 16px 40px; background: linear-gradient(to right, #b00000, #900000); color: #ffffff; font-weight: bold; font-size: 16px; text-decoration: none; border-radius: 8px;">
+                  Jetzt bezahlen
+                </a>
+                <p style="color: #71717a; font-size: 12px; margin-top: 12px;">
+                  Klicke auf den Button, um deine Zahlung sicher über Stripe abzuschließen.
+                </p>
+              </div>
+              ` : ''}
               ${tempPassword ? `
               <div style="background-color: #27272a; border-radius: 12px; padding: 25px; margin: 25px 0; border-left: 4px solid #b00000;">
                 <h3 style="color: #b00000; margin: 0 0 15px; font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">Mobile App Zugang</h3>
@@ -138,6 +154,9 @@ export async function POST(request: NextRequest) {
                 <p style="color: #fafafa; margin: 6px 0;"><strong>Name:</strong> ${memberName}</p>
                 <p style="color: #fafafa; margin: 6px 0;"><strong>E-Mail:</strong> ${memberEmail}</p>
                 <p style="color: #fafafa; margin: 6px 0;"><strong>Vertragsbeginn:</strong> ${vertragsbeginn}</p>
+                ${membershipLabel ? `<p style="color: #fafafa; margin: 6px 0;"><strong>Mitgliedschaft:</strong> ${membershipLabel}</p>` : ''}
+                ${abrechnungstag ? `<p style="color: #fafafa; margin: 6px 0;"><strong>Rechnungsdatum:</strong> Monatlich zum ${abrechnungstag}.</p>` : ''}
+                <p style="color: #ffa500; margin: 6px 0; font-weight: bold;">Zahlung: ausstehend (Stripe Checkout Link wurde versendet)</p>
               </div>
               <p style="color: #71717a; font-size: 12px;">Der unterschriebene Vertrag ist als PDF angehängt.</p>
             </div>

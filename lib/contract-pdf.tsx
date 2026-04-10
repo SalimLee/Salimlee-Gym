@@ -27,6 +27,7 @@ export interface ContractData {
   // Zahlungsweise
   zahlungsweise: string
   vertragsbeginn: string
+  abrechnungstag: '1' | '15'
 
   // SEPA
   kontoinhaber: string
@@ -56,9 +57,7 @@ export const MEMBERSHIP_OPTIONS = [
 ]
 
 export const PAYMENT_OPTIONS = [
-  { id: 'sepa_monatlich', label: 'SEPA-Lastschrift monatlich' },
-  { id: 'barzahlung', label: 'Barzahlung der kompletten Laufzeit' },
-  { id: 'sepa_vorauszahlung', label: 'SEPA-Vorauszahlung der kompletten Laufzeit' },
+  { id: 'stripe', label: 'Online-Zahlung (Stripe)' },
 ]
 
 const BRAND_RED = '#b00000'
@@ -466,6 +465,13 @@ function Page1({ data }: { data: ContractData }) {
         </Text>
       </View>
 
+      <View style={{ flexDirection: 'row', marginTop: 6, alignItems: 'center' }}>
+        <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', marginRight: 10 }}>Abrechnungszyklus:</Text>
+        <Text style={{ fontSize: 9, borderBottom: '1px solid #cccccc', paddingBottom: 2, minWidth: 120 }}>
+          {`Monatlich zum ${data.abrechnungstag}. des Monats`}
+        </Text>
+      </View>
+
       <PageFooter pageNum={1} totalPages={4} />
     </Page>
   )
@@ -483,32 +489,12 @@ function Page2({ data }: { data: ContractData }) {
         </View>
       ))}
 
-      {/* SEPA */}
-      <SectionHeader title="SEPA-Lastschriftmandat" />
+      {/* Zahlungshinweis */}
+      <SectionHeader title="Zahlungsweise" />
       <Text style={{ fontSize: 8, marginBottom: 8, color: '#333333' }}>
-        Ich ermächtige das Salim Lee Boxing & Fitness Gym, Zahlungen mittels SEPA-Lastschrift einzuziehen.
+        Die Zahlung erfolgt online über Stripe. Nach Vertragsabschluss wird ein Zahlungslink per E-Mail zugesendet.
       </Text>
-      <FieldRow label="Kontoinhaber:" value={data.kontoinhaber} />
-      <FieldRow label="IBAN:" value={data.iban} />
-      <FieldRow label="BIC:" value={data.bic} />
-      <FieldRow label="Bank:" value={data.bank} />
-
-      <View style={{ flexDirection: 'row', marginTop: 15, gap: 30 }}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.signatureLabel}>Datum:</Text>
-          <View style={styles.signatureBox}>
-            <Text style={{ fontSize: 9, paddingTop: 3 }}>{data.ortDatum}</Text>
-          </View>
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.signatureLabel}>Unterschrift Kontoinhaber:</Text>
-          <View style={styles.signatureBox}>
-            {data.unterschriftMitglied && (
-              <Image style={styles.signatureImage} src={data.unterschriftMitglied} />
-            )}
-          </View>
-        </View>
-      </View>
+      <FieldRow label="Rechnungsdatum:" value={`Monatlich zum ${data.abrechnungstag}. des Monats`} />
 
       <PageFooter pageNum={2} totalPages={4} />
     </Page>
@@ -528,7 +514,7 @@ function Page3({ data }: { data: ContractData }) {
 
       <Text style={styles.agbTitle}>Zweck der Datenverarbeitung</Text>
       <Text style={styles.agbText}>
-        Ihre personenbezogenen Daten werden ausschließlich zum Zweck der Vertragsdurchführung und -verwaltung, der Abwicklung von Zahlungen (SEPA-Lastschrift), der Kommunikation im Rahmen der Mitgliedschaft, der Erfüllung gesetzlicher Aufbewahrungspflichten sowie zur Gewährleistung der Sicherheit im Trainingsbetrieb verarbeitet.
+        Ihre personenbezogenen Daten werden ausschließlich zum Zweck der Vertragsdurchführung und -verwaltung, der Abwicklung von Zahlungen, der Kommunikation im Rahmen der Mitgliedschaft, der Erfüllung gesetzlicher Aufbewahrungspflichten sowie zur Gewährleistung der Sicherheit im Trainingsbetrieb verarbeitet.
       </Text>
 
       <Text style={styles.agbTitle}>Rechtsgrundlage</Text>
@@ -538,7 +524,7 @@ function Page3({ data }: { data: ContractData }) {
 
       <Text style={styles.agbTitle}>Empfänger der Daten</Text>
       <Text style={styles.agbText}>
-        Ihre Daten werden weitergegeben an: das kontoführende Kreditinstitut (für SEPA-Lastschriften), ggf. Steuerberater (gesetzliche Pflicht), ggf. IT-Dienstleister (Auftragsverarbeitung mit AVV). Eine Weitergabe an Dritte zu Werbezwecken erfolgt nicht.
+        Ihre Daten werden weitergegeben an: den Zahlungsdienstleister Stripe (für die Zahlungsabwicklung), ggf. Steuerberater (gesetzliche Pflicht), ggf. IT-Dienstleister (Auftragsverarbeitung mit AVV). Eine Weitergabe an Dritte zu Werbezwecken erfolgt nicht.
       </Text>
 
       <Text style={styles.agbTitle}>Speicherdauer</Text>

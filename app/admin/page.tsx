@@ -55,8 +55,10 @@ interface Subscription {
   total_units: number | null
   remaining_units: number | null
   price: number
-  status: 'active' | 'expired' | 'cancelled' | 'paused'
+  status: 'active' | 'expired' | 'cancelled' | 'paused' | 'pending'
   notes: string | null
+  payment_status?: string | null
+  stripe_checkout_session_id?: string | null
 }
 
 interface Invoice {

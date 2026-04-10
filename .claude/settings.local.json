@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(npx tsc:*)",
+      "Bash(node -e \"const s = require\\('stripe'\\); console.log\\(s.Stripe.LATEST_API_VERSION || 'unknown'\\)\")",
+      "Bash(npm run:*)"
+    ]
+  }
+}
