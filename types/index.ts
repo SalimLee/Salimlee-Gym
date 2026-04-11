@@ -24,7 +24,6 @@ export interface BookingFormData {
   email: string
   phone: string
   service: string
-  people: string
   date: string
   message: string
 }

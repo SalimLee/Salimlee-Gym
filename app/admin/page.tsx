@@ -25,7 +25,6 @@ interface Booking {
   email: string
   phone: string | null
   service: string
-  people: number
   preferred_date: string | null
   message: string | null
   status: 'pending' | 'confirmed' | 'cancelled'

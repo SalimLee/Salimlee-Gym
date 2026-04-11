@@ -13,7 +13,6 @@ interface Booking {
   email: string
   phone: string | null
   service: string
-  people: number
   preferred_date: string | null
   message: string | null
   status: BookingStatus
@@ -115,7 +114,6 @@ export default function BookingsTab({ bookings, setBookings, supabase, onRefresh
                   name: booking.name,
                   email: booking.email,
                   service: booking.service,
-                  people: booking.people,
                   preferred_date: booking.preferred_date,
                 } : undefined,
               }),
@@ -252,7 +250,6 @@ export default function BookingsTab({ bookings, setBookings, supabase, onRefresh
                         <p className="text-xs text-dark-500 mt-1">{formatDate(booking.created_at)}</p>
                       </div>
                       <div className="text-right shrink-0">
-                        <p className="text-sm text-dark-400">{booking.people} Pers.</p>
                         <p className="text-xs text-dark-500">{formatPreferredDate(booking.preferred_date)}</p>
                       </div>
                     </div>
@@ -284,7 +281,6 @@ export default function BookingsTab({ bookings, setBookings, supabase, onRefresh
                   <p className="text-xs text-dark-500 uppercase tracking-wider mb-2">Buchung</p>
                   <div className="space-y-1.5 text-sm">
                     <div className="flex justify-between"><span className="text-dark-400">Service</span><span className="text-dark-100 font-medium">{selectedBooking.service}</span></div>
-                    <div className="flex justify-between"><span className="text-dark-400">Personen</span><span className="text-dark-100">{selectedBooking.people}</span></div>
                     <div className="flex justify-between"><span className="text-dark-400">Wunschtermin</span><span className="text-dark-100">{formatPreferredDate(selectedBooking.preferred_date)}</span></div>
                     <div className="flex justify-between"><span className="text-dark-400">Eingegangen</span><span className="text-dark-100">{formatDate(selectedBooking.created_at)}</span></div>
                   </div>

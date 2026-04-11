@@ -15,7 +15,7 @@ const EMAIL_FROM = process.env.EMAIL_FROM || 'Salim Lee Gym <noreply@salimlee-gy
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { name, email, phone, service, people, date, message } = body
+    const { name, email, phone, service, date, message } = body
 
     // Validierung
     if (!name || !email || !service) {
@@ -35,7 +35,6 @@ export async function POST(request: NextRequest) {
         email,
         phone: phone || null,
         service,
-        people: parseInt(people) || 1,
         preferred_date: date || null,
         message: message || null,
         status: 'pending',
@@ -86,7 +85,6 @@ export async function POST(request: NextRequest) {
                     <tr><td style="padding: 12px 0; border-bottom: 1px solid #27272a; color: #a1a1aa;">Email</td><td style="padding: 12px 0; border-bottom: 1px solid #27272a; color: #fafafa;"><a href="mailto:${email}" style="color: #f59e0b;">${email}</a></td></tr>
                     <tr><td style="padding: 12px 0; border-bottom: 1px solid #27272a; color: #a1a1aa;">Telefon</td><td style="padding: 12px 0; border-bottom: 1px solid #27272a; color: #fafafa;">${phone || '-'}</td></tr>
                     <tr><td style="padding: 12px 0; border-bottom: 1px solid #27272a; color: #a1a1aa;">Service</td><td style="padding: 12px 0; border-bottom: 1px solid #27272a; color: #f59e0b; font-weight: bold;">${service}</td></tr>
-                    <tr><td style="padding: 12px 0; border-bottom: 1px solid #27272a; color: #a1a1aa;">Personen</td><td style="padding: 12px 0; border-bottom: 1px solid #27272a; color: #fafafa;">${people} Person(en)</td></tr>
                     <tr><td style="padding: 12px 0; border-bottom: 1px solid #27272a; color: #a1a1aa;">Wunschtermin</td><td style="padding: 12px 0; border-bottom: 1px solid #27272a; color: #fafafa;">${formattedDate}</td></tr>
                     ${message ? `<tr><td style="padding: 12px 0; color: #a1a1aa; vertical-align: top;">Nachricht</td><td style="padding: 12px 0; color: #fafafa;">${message}</td></tr>` : ''}
                   </table>
@@ -122,7 +120,6 @@ export async function POST(request: NextRequest) {
                   <div style="background-color: #27272a; border-radius: 12px; padding: 25px; margin: 25px 0; border-left: 4px solid #f59e0b;">
                     <h3 style="color: #f59e0b; margin: 0 0 15px; font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">Deine Anfrage</h3>
                     <p style="color: #fafafa; margin: 8px 0;"><strong>Service:</strong> ${service}</p>
-                    <p style="color: #fafafa; margin: 8px 0;"><strong>Personen:</strong> ${people}</p>
                     <p style="color: #fafafa; margin: 8px 0;"><strong>Wunschtermin:</strong> ${formattedDate}</p>
                   </div>
                   <p style="color: #a1a1aa; margin-top: 30px; line-height: 1.8;">Sportliche Grüße,<br><strong style="color: #f59e0b;">Dein Salim Lee Team</strong></p>

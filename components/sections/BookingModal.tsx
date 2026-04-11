@@ -56,7 +56,6 @@ const bookingSchema = z.object({
   intent: z.string().min(1, 'Bitte Anliegen auswählen'),
   course: z.string().min(1, 'Bitte Kurs auswählen'),
   membership: z.string().optional(),
-  people: z.string().default('1'),
   date: z.string().optional(),
   message: z.string().optional(),
 }).superRefine((data, ctx) => {
@@ -94,7 +93,6 @@ export function BookingModal({ isOpen, onClose, selectedService }: BookingModalP
     defaultValues: {
       intent: getInitialIntent(selectedService),
       course: getInitialCourse(selectedService),
-      people: '1',
     },
   })
 
@@ -123,7 +121,6 @@ export function BookingModal({ isOpen, onClose, selectedService }: BookingModalP
           email: data.email,
           phone: data.phone,
           service,
-          people: data.people,
           date: data.date,
           message: data.message,
         }),
@@ -301,29 +298,16 @@ export function BookingModal({ isOpen, onClose, selectedService }: BookingModalP
             </div>
           )}
 
-          {/* People & Date */}
-          <div className="grid md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-bold mb-2 text-dark-300">
-                Anzahl Personen
-              </label>
-              <select {...register('people')} className="input-field">
-                <option value="1">1 Person</option>
-                <option value="2">2 Personen</option>
-                <option value="3">3 Personen</option>
-                <option value="4">4 Personen</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-bold mb-2 text-dark-300">
-                Wunschtermin
-              </label>
-              <input
-                {...register('date')}
-                type="date"
-                className="input-field"
-              />
-            </div>
+          {/* Date */}
+          <div>
+            <label className="block text-sm font-bold mb-2 text-dark-300">
+              Wunschtermin
+            </label>
+            <input
+              {...register('date')}
+              type="date"
+              className="input-field"
+            />
           </div>
 
           {/* Message */}

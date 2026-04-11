@@ -18,7 +18,6 @@ export interface Database {
           email: string
           phone: string | null
           service: string
-          people: number
           preferred_date: string | null
           message: string | null
           status: 'pending' | 'confirmed' | 'cancelled'
@@ -32,7 +31,6 @@ export interface Database {
           email: string
           phone?: string | null
           service: string
-          people?: number
           preferred_date?: string | null
           message?: string | null
           status?: 'pending' | 'confirmed' | 'cancelled'
@@ -46,7 +44,6 @@ export interface Database {
           email?: string
           phone?: string | null
           service?: string
-          people?: number
           preferred_date?: string | null
           message?: string | null
           status?: 'pending' | 'confirmed' | 'cancelled'

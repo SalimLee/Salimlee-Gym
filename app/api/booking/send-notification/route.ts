@@ -56,7 +56,6 @@ export async function POST(request: NextRequest) {
                 <div style="background-color: #27272a; border-radius: 12px; padding: 25px; margin: 25px 0; border-left: 4px solid #22c55e;">
                   <h3 style="color: #22c55e; margin: 0 0 15px; font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">Deine bestätigte Buchung</h3>
                   <p style="color: #fafafa; margin: 8px 0;"><strong>Service:</strong> ${booking.service}</p>
-                  <p style="color: #fafafa; margin: 8px 0;"><strong>Personen:</strong> ${booking.people}</p>
                   <p style="color: #fafafa; margin: 8px 0;"><strong>Termin:</strong> ${formattedDate}</p>
                 </div>
                 ${personalMessage ? `
