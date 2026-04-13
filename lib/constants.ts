@@ -40,12 +40,12 @@ export const SERVICES: Service[] = [
   {
     id: 'group',
     title: 'Erwachsenenkurse',
-    subtitle: 'MO, MI & FR · 17:30–20:30',
+    subtitle: 'MO, MI & FR · 19:00–20:00',
     price: 'ab 80€/mtl.',
     features: [
       'Boxen & Fitness',
+      'Freies Training 17:00–19:00',
       'Motivierende Atmosphäre',
-      'Alle Fitnesslevel',
       'Probetraining kostenlos (max. 2 Kurse)',
     ],
     icon: 'Award',

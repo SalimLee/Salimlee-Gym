@@ -7,7 +7,7 @@ export function KurseInfos() {
     {
       icon: Dumbbell,
       label: 'Erwachsenenkurse',
-      detail: 'MO, MI & FR\nGruppe A · 17:30–18:30\nGruppe B · 19:00–20:30',
+      detail: 'MO, MI & FR\nKurs · 19:00–20:00\nFreies Training · 17:00–19:00',
     },
     {
       icon: Baby,
