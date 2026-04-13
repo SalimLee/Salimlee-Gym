@@ -50,6 +50,7 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
   })
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [sendingReminder, setSendingReminder] = useState<string | null>(null)
 
   // Modal state for status changes with email
   const [showStatusModal, setShowStatusModal] = useState(false)
@@ -181,6 +182,32 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
     }
     setDeleting(false)
     setDeleteConfirm(null)
+  }
+
+  const sendReminder = async (sub: Subscription) => {
+    setSendingReminder(sub.id)
+    setEmailError(null)
+    const memberEmail = getMemberEmail(sub.member_id)
+    const memberName = getMemberName(sub.member_id)
+    try {
+      const res = await fetch('/api/subscription/send-reminder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subscriptionId: sub.id,
+          memberEmail,
+          memberName,
+          subscriptionName: sub.name,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) {
+        setEmailError(data.error || 'Erinnerung konnte nicht gesendet werden')
+      }
+    } catch {
+      setEmailError('Erinnerung fehlgeschlagen.')
+    }
+    setSendingReminder(null)
   }
 
   const updateUnits = async (id: string, remaining: number) => {
@@ -395,6 +422,16 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
                       {isExpired && (
                         <button onClick={() => updateStatus(sub.id, 'expired')} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 transition-all">
                           Als abgelaufen markieren
+                        </button>
+                      )}
+                      {sub.status === 'pending' && (
+                        <button
+                          onClick={() => sendReminder(sub)}
+                          disabled={sendingReminder === sub.id}
+                          className="px-3 py-1.5 text-xs font-bold rounded-lg bg-orange-500/10 text-orange-400 border border-orange-500/30 hover:bg-orange-500/20 transition-all disabled:opacity-50"
+                          title="Zahlungserinnerung senden"
+                        >
+                          {sendingReminder === sub.id ? 'Sendet...' : 'Erinnerung'}
                         </button>
                       )}
                       {deleteConfirm === sub.id ? (

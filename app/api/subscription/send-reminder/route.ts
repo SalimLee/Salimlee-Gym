@@ -1,0 +1,163 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { stripe, getOrCreateStripePrice, getOrCreateStripeCustomer, MEMBERSHIP_STRIPE_MAP } from '@/lib/stripe'
+import { createClient } from '@supabase/supabase-js'
+
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
+
+// Reverse-lookup: find membershipId by subscription display name
+function findMembershipId(subscriptionName: string): string | null {
+  for (const [id, config] of Object.entries(MEMBERSHIP_STRIPE_MAP)) {
+    if (config.name === subscriptionName) return id
+  }
+  return null
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    if (!process.env.STRIPE_SECRET_KEY) {
+      return NextResponse.json({ error: 'Stripe nicht konfiguriert' }, { status: 500 })
+    }
+    if (!process.env.RESEND_API_KEY) {
+      return NextResponse.json({ error: 'Resend nicht konfiguriert' }, { status: 500 })
+    }
+
+    const { subscriptionId, memberEmail, memberName, subscriptionName } = await request.json()
+
+    if (!subscriptionId || !memberEmail || !memberName || !subscriptionName) {
+      return NextResponse.json({ error: 'subscriptionId, memberEmail, memberName und subscriptionName sind erforderlich' }, { status: 400 })
+    }
+
+    const membershipId = findMembershipId(subscriptionName)
+    if (!membershipId) {
+      return NextResponse.json({ error: `Unbekannte Mitgliedschaft: ${subscriptionName}` }, { status: 400 })
+    }
+
+    const config = MEMBERSHIP_STRIPE_MAP[membershipId]
+
+    // Create new Stripe checkout session
+    const [priceId, customerId] = await Promise.all([
+      getOrCreateStripePrice(membershipId),
+      getOrCreateStripeCustomer(memberEmail, memberName),
+    ])
+
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+
+    const sessionParams: Parameters<typeof stripe.checkout.sessions.create>[0] = {
+      customer: customerId,
+      locale: 'de',
+      success_url: `${baseUrl}/zahlung-erfolgreich?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${baseUrl}/zahlung-abgebrochen`,
+      metadata: {
+        subscription_id: subscriptionId,
+        membership_id: membershipId,
+      },
+    }
+
+    if (config.recurring) {
+      sessionParams.mode = 'subscription'
+      sessionParams.line_items = [{ price: priceId, quantity: 1 }]
+
+      const now = new Date()
+      const isFirstOfMonth = now.getDate() === 1
+      const firstOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+      const trialEnd = isFirstOfMonth ? undefined : Math.floor(firstOfNextMonth.getTime() / 1000)
+
+      sessionParams.subscription_data = {
+        ...(trialEnd ? { trial_end: trialEnd } : {}),
+        metadata: {
+          subscription_id: subscriptionId,
+          membership_id: membershipId,
+          ...(config.intervalCount ? { cancel_after_months: String(config.intervalCount) } : {}),
+        },
+      }
+    } else {
+      sessionParams.mode = 'payment'
+      sessionParams.line_items = [{ price: priceId, quantity: 1 }]
+    }
+
+    const session = await stripe.checkout.sessions.create(sessionParams)
+    const checkoutUrl = session.url
+
+    // Update subscription with new checkout session ID
+    await supabaseAdmin
+      .from('subscriptions')
+      .update({
+        stripe_checkout_session_id: session.id,
+        stripe_customer_id: customerId,
+      })
+      .eq('id', subscriptionId)
+
+    // Send reminder email via Resend
+    const { Resend } = await import('resend')
+    const resend = new Resend(process.env.RESEND_API_KEY)
+    const EMAIL_FROM = process.env.EMAIL_FROM || 'Salim Lee Gym <noreply@salimlee-gym.de>'
+
+    const { error: emailError } = await resend.emails.send({
+      from: EMAIL_FROM,
+      to: memberEmail,
+      subject: 'Zahlungserinnerung – Salim Lee Gym',
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head><meta charset="utf-8"></head>
+        <body style="font-family: Arial, sans-serif; background-color: #09090b; margin: 0; padding: 20px;">
+          <div style="max-width: 600px; margin: 0 auto; background-color: #18181b; border-radius: 16px; overflow: hidden; border: 1px solid rgba(176,0,0,0.3);">
+            <div style="background: linear-gradient(to right, #b00000, #900000); padding: 30px; text-align: center;">
+              <div style="font-size: 32px; font-weight: 900; color: #ffffff; margin-bottom: 5px;">SALIM LEE</div>
+              <div style="color: #ffffff; letter-spacing: 3px; font-size: 12px; opacity: 0.9;">BOXING & FITNESS GYM</div>
+            </div>
+            <div style="padding: 40px 30px;">
+              <div style="text-align: center; margin-bottom: 30px;">
+                <div style="width: 64px; height: 64px; background: #ffa50020; border-radius: 50%; margin: 0 auto 16px; display: flex; align-items: center; justify-content: center;">
+                  <span style="font-size: 28px;">⚠</span>
+                </div>
+                <h2 style="color: #ffa500; margin: 0 0 10px; font-size: 24px;">Zahlungserinnerung</h2>
+              </div>
+              <p style="color: #a1a1aa; line-height: 1.8; margin: 0 0 25px;">
+                Hallo <strong style="color: #fafafa;">${memberName}</strong>,<br><br>
+                wir möchten dich freundlich daran erinnern, dass die Zahlung für dein Abonnement
+                <strong style="color: #fafafa;">${subscriptionName}</strong> noch aussteht.
+                Bitte schließe deine Zahlung über den Button unten ab, um deine Mitgliedschaft zu aktivieren.
+              </p>
+              <div style="text-align: center; margin: 30px 0;">
+                <a href="${checkoutUrl}" style="display: inline-block; padding: 16px 40px; background: linear-gradient(to right, #b00000, #900000); color: #ffffff; font-weight: bold; font-size: 16px; text-decoration: none; border-radius: 8px;">
+                  Jetzt bezahlen
+                </a>
+                <p style="color: #71717a; font-size: 12px; margin-top: 12px;">
+                  Klicke auf den Button, um deine Zahlung sicher über Stripe abzuschließen.
+                </p>
+              </div>
+              <p style="color: #a1a1aa; line-height: 1.8;">
+                Bei Fragen erreichst du uns jederzeit unter
+                <a href="mailto:info@salimlee-gym.de" style="color: #b00000;">info@salimlee-gym.de</a>
+                oder telefonisch unter <strong style="color: #fafafa;">+49 151 68457943</strong>.
+              </p>
+              <p style="color: #a1a1aa; margin-top: 30px; line-height: 1.8;">
+                Sportliche Grüße,<br>
+                <strong style="color: #b00000;">Dein Salim Lee Team</strong>
+              </p>
+            </div>
+            <div style="background-color: #09090b; padding: 20px; text-align: center; color: #71717a; font-size: 12px;">
+              Wörthstrasse 17, 72764 Reutlingen<br>
+              &copy; ${new Date().getFullYear()} Salim Lee Boxing & Fitness Gym
+            </div>
+          </div>
+        </body>
+        </html>
+      `,
+    })
+
+    if (emailError) {
+      console.error('Zahlungserinnerung fehlgeschlagen:', emailError)
+      return NextResponse.json({ error: `E-Mail fehlgeschlagen: ${emailError.message}` }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('Zahlungserinnerung fehlgeschlagen:', error)
+    return NextResponse.json({ error: 'Zahlungserinnerung konnte nicht gesendet werden' }, { status: 500 })
+  }
+}
