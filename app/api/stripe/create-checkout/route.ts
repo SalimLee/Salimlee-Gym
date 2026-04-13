@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { subscriptionId, memberEmail, memberName, membershipId, billingAnchorDay } = await request.json()
+    const { subscriptionId, memberEmail, memberName, membershipId } = await request.json()
 
     if (!subscriptionId || !memberEmail || !memberName || !membershipId) {
       return NextResponse.json(
@@ -58,12 +58,18 @@ export async function POST(request: NextRequest) {
       sessionParams.mode = 'subscription'
       sessionParams.line_items = [{ price: priceId, quantity: 1 }]
 
+      // Trial bis zum 1. des nächsten Monats — erste Abbuchung am 1.
+      const now = new Date()
+      const isFirstOfMonth = now.getDate() === 1
+      const firstOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+      const trialEnd = isFirstOfMonth ? undefined : Math.floor(firstOfNextMonth.getTime() / 1000)
+
       sessionParams.subscription_data = {
+        ...(trialEnd ? { trial_end: trialEnd } : {}),
         metadata: {
           subscription_id: subscriptionId,
           membership_id: membershipId,
           ...(config.intervalCount ? { cancel_after_months: String(config.intervalCount) } : {}),
-          ...(billingAnchorDay ? { billing_anchor_day: String(billingAnchorDay) } : {}),
         },
       }
     } else {

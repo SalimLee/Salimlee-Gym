@@ -59,28 +59,11 @@ export async function POST(request: NextRequest) {
           try {
             const stripeSub = await stripe.subscriptions.retrieve(stripeSubId)
             const cancelAfterMonths = stripeSub.metadata?.cancel_after_months
-            const billingAnchorDay = stripeSub.metadata?.billing_anchor_day
-
-            const updateParams: Record<string, unknown> = {}
 
             if (cancelAfterMonths) {
-              updateParams.cancel_at = Math.floor(Date.now() / 1000) + parseInt(cancelAfterMonths) * 30 * 24 * 60 * 60
-            }
-
-            if (billingAnchorDay) {
-              // Set billing_cycle_anchor to the next occurrence of the anchor day
-              const anchorDay = parseInt(billingAnchorDay)
-              const now = new Date()
-              const anchorDate = new Date(now.getFullYear(), now.getMonth(), anchorDay)
-              if (anchorDate <= now) {
-                anchorDate.setMonth(anchorDate.getMonth() + 1)
-              }
-              updateParams.billing_cycle_anchor = Math.floor(anchorDate.getTime() / 1000)
-              updateParams.proration_behavior = 'create_prorations'
-            }
-
-            if (Object.keys(updateParams).length > 0) {
-              await stripe.subscriptions.update(stripeSubId, updateParams as Stripe.SubscriptionUpdateParams)
+              await stripe.subscriptions.update(stripeSubId, {
+                cancel_at: Math.floor(Date.now() / 1000) + parseInt(cancelAfterMonths) * 30 * 24 * 60 * 60,
+              } as Stripe.SubscriptionUpdateParams)
             }
           } catch (e) {
             console.warn('Konnte Subscription-Parameter nicht setzen:', e)
