@@ -12,7 +12,7 @@ export function KurseInfos() {
     {
       icon: Baby,
       label: 'Kinderkurse (3–14 Jahre)',
-      detail: 'DI & DO\nGruppe A · 17:00–18:00\nGruppe B · 18:30–19:30',
+      detail: 'DI & DO · 17:00–18:00',
     },
     {
       icon: Swords,

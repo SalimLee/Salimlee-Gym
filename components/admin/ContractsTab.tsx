@@ -5,6 +5,12 @@ import dynamic from 'next/dynamic'
 import { pdf } from '@react-pdf/renderer'
 import { ContractPDF, MEMBERSHIP_OPTIONS, PAYMENT_OPTIONS } from '@/lib/contract-pdf'
 import type { ContractData } from '@/lib/contract-pdf'
+import {
+  loadOwnerSignature,
+  saveOwnerSignature,
+  clearOwnerSignature,
+  fileToDataUrl,
+} from '@/lib/owner-signature'
 
 const SignaturePad = dynamic(
   () => import('./SignaturePad').then((mod) => ({ default: mod.SignaturePad })),
@@ -71,6 +77,22 @@ export function ContractsTab({ members, supabase, onRefresh }: ContractsTabProps
   const getMemberSig = useRef<(() => string | null) | null>(null)
   const getGuardianSig = useRef<(() => string | null) | null>(null)
   const getOwnerSig = useRef<(() => string | null) | null>(null)
+
+  // Persistent owner signature (localStorage) – damit der Inhaber nicht
+  // jedes Mal neu unterschreiben muss. Kann überschrieben oder zurückgesetzt
+  // werden.
+  const [savedOwnerSig, setSavedOwnerSig] = useState<string | null>(null)
+  const [ownerSigNotice, setOwnerSigNotice] = useState<string | null>(null)
+  const ownerFileInputRef = useRef<HTMLInputElement | null>(null)
+
+  // Load the saved owner signature once on mount
+  useEffect(() => {
+    const stored = loadOwnerSignature()
+    if (stored) {
+      setSavedOwnerSig(stored)
+      setFormData((prev) => ({ ...prev, unterschriftInhaber: stored }))
+    }
+  }, [])
 
   // Auto-fill from selected member
   useEffect(() => {
@@ -141,6 +163,15 @@ export function ContractsTab({ members, supabase, onRefresh }: ContractsTabProps
     try { guardianSig = getGuardianSig.current?.() || '' } catch (e) { console.warn('Sig read error (guardian):', e) }
     try { ownerSig = getOwnerSig.current?.() || '' } catch (e) { console.warn('Sig read error (owner):', e) }
 
+    // Falls eine neue Inhaber-Unterschrift gezeichnet wurde, dauerhaft speichern
+    if (ownerSig) {
+      saveOwnerSignature(ownerSig)
+      setSavedOwnerSig(ownerSig)
+    } else if (savedOwnerSig) {
+      // Fallback: gespeicherte Unterschrift verwenden
+      ownerSig = savedOwnerSig
+    }
+
     setFormData((prev) => ({
       ...prev,
       unterschriftMitglied: memberSig,
@@ -149,6 +180,29 @@ export function ContractsTab({ members, supabase, onRefresh }: ContractsTabProps
     }))
 
     setStep('send')
+  }, [savedOwnerSig])
+
+  const handleUploadOwnerSignature = useCallback(async (file: File) => {
+    try {
+      const dataUrl = await fileToDataUrl(file)
+      saveOwnerSignature(dataUrl)
+      setSavedOwnerSig(dataUrl)
+      setFormData((prev) => ({ ...prev, unterschriftInhaber: dataUrl }))
+      setOwnerSigNotice('Unterschrift gespeichert')
+      setTimeout(() => setOwnerSigNotice(null), 2500)
+    } catch (e) {
+      setOwnerSigNotice(
+        e instanceof Error ? e.message : 'Fehler beim Laden der Datei'
+      )
+    }
+  }, [])
+
+  const handleResetOwnerSignature = useCallback(() => {
+    clearOwnerSignature()
+    setSavedOwnerSig(null)
+    setFormData((prev) => ({ ...prev, unterschriftInhaber: '' }))
+    setOwnerSigNotice('Unterschrift entfernt')
+    setTimeout(() => setOwnerSigNotice(null), 2500)
   }, [])
 
   const handleSendDraft = useCallback(async () => {
@@ -659,10 +713,81 @@ export function ContractsTab({ members, supabase, onRefresh }: ContractsTabProps
                 signatureRef={getGuardianSig}
               />
 
-              <SignaturePad
-                label="Unterschrift Inhaber (Saleem Fahmi Muhammad Shareef)"
-                signatureRef={getOwnerSig}
-              />
+              {/* Inhaber-Unterschrift: einmalig speichern, danach automatisch */}
+              <div>
+                <label className="block text-sm font-semibold text-dark-300 mb-2">
+                  Unterschrift Inhaber (Saleem Fahmi Muhammad Shareef)
+                </label>
+
+                {savedOwnerSig ? (
+                  <div className="space-y-3">
+                    <div className="border border-dark-700 rounded-lg bg-white p-3 flex items-center justify-center">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={savedOwnerSig}
+                        alt="Gespeicherte Unterschrift"
+                        className="max-h-[120px] object-contain"
+                      />
+                    </div>
+                    <p className="text-xs text-green-400">
+                      ✓ Gespeicherte Unterschrift wird automatisch im Vertrag verwendet
+                    </p>
+                    <div className="flex flex-wrap gap-3">
+                      <button
+                        type="button"
+                        onClick={() => ownerFileInputRef.current?.click()}
+                        className="text-xs text-dark-400 hover:text-brand-500 transition-colors"
+                      >
+                        Anderes Bild hochladen
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleResetOwnerSignature}
+                        className="text-xs text-dark-400 hover:text-red-400 transition-colors"
+                      >
+                        Zurücksetzen
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <SignaturePad
+                      label=""
+                      signatureRef={getOwnerSig}
+                    />
+                    <div className="flex flex-wrap items-center gap-4">
+                      <button
+                        type="button"
+                        onClick={() => ownerFileInputRef.current?.click()}
+                        className="text-xs text-brand-400 hover:text-brand-300 transition-colors"
+                      >
+                        Oder Unterschrift als Bild hochladen
+                      </button>
+                      <span className="text-xs text-dark-500">
+                        Die gezeichnete bzw. hochgeladene Unterschrift wird
+                        dauerhaft gespeichert und für alle zukünftigen Verträge
+                        automatisch verwendet.
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                <input
+                  ref={ownerFileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (file) handleUploadOwnerSignature(file)
+                    e.target.value = ''
+                  }}
+                />
+
+                {ownerSigNotice && (
+                  <p className="mt-2 text-xs text-brand-400">{ownerSigNotice}</p>
+                )}
+              </div>
             </div>
           </div>
 

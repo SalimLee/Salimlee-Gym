@@ -53,7 +53,7 @@ export const SERVICES: Service[] = [
   {
     id: 'kids',
     title: 'Kinderkurse',
-    subtitle: 'DI & DO · 17:00–19:30',
+    subtitle: 'DI & DO · 17:00–18:00',
     price: 'ab 50€/mtl.',
     features: [
       'Für Kinder von 3-14 Jahren',
