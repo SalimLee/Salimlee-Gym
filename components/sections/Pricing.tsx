@@ -74,7 +74,7 @@ export function Pricing() {
 
         {/* Info Text */}
         <p className="text-center text-dark-400 mt-8 text-sm">
-          * Alle Preise inkl. MwSt. Kurszeiten: Erwachsene MO, MI &amp; FR 18–19 Uhr · Kinder DI &amp; DO 17–18 Uhr.
+          * Alle Preise inkl. MwSt. Kurszeiten: Erwachsene MO, MI &amp; FR – Gruppe A 17:30–18:30, Gruppe B 19:00–20:30 · Kinder DI &amp; DO – Gruppe A 17:00–18:00, Gruppe B 18:30–19:30.
         </p>
       </div>
     </section>

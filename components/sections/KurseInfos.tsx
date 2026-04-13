@@ -7,12 +7,12 @@ export function KurseInfos() {
     {
       icon: Dumbbell,
       label: 'Erwachsenenkurse',
-      detail: 'MO, MI & FR · 18–19 Uhr',
+      detail: 'MO, MI & FR\nGruppe A · 17:30–18:30\nGruppe B · 19:00–20:30',
     },
     {
       icon: Baby,
       label: 'Kinderkurse (3–14 Jahre)',
-      detail: 'DI & DO · 17–18 Uhr',
+      detail: 'DI & DO\nGruppe A · 17:00–18:00\nGruppe B · 18:30–19:30',
     },
     {
       icon: Swords,
@@ -46,7 +46,7 @@ export function KurseInfos() {
               {kurse.map((item) => (
                 <div
                   key={item.label}
-                  className="flex items-center gap-4 p-4 bg-dark-900/40 rounded-xl border border-dark-800 hover:border-brand-500/30 transition-all duration-300 group"
+                  className="flex items-start gap-4 p-4 bg-dark-900/40 rounded-xl border border-dark-800 hover:border-brand-500/30 transition-all duration-300 group"
                 >
                   <div className="w-10 h-10 bg-brand-500/15 rounded-lg flex items-center justify-center text-brand-500 group-hover:bg-brand-500/25 transition-colors shrink-0">
                     <item.icon className="w-5 h-5" />
@@ -55,7 +55,7 @@ export function KurseInfos() {
                     <span className="text-lg font-semibold text-dark-200 block">
                       {item.label}
                     </span>
-                    <span className="text-sm text-dark-400">
+                    <span className="text-sm text-dark-400 whitespace-pre-line">
                       {item.detail}
                     </span>
                   </div>

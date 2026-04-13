@@ -40,7 +40,7 @@ export const SERVICES: Service[] = [
   {
     id: 'group',
     title: 'Erwachsenenkurse',
-    subtitle: 'MO, MI & FR · 18-19 Uhr',
+    subtitle: 'MO, MI & FR · 17:30–20:30',
     price: 'ab 80€/mtl.',
     features: [
       'Boxen & Fitness',
@@ -53,7 +53,7 @@ export const SERVICES: Service[] = [
   {
     id: 'kids',
     title: 'Kinderkurse',
-    subtitle: 'DI & DO · 17-18 Uhr',
+    subtitle: 'DI & DO · 17:00–19:30',
     price: 'ab 50€/mtl.',
     features: [
       'Für Kinder von 3-14 Jahren',
