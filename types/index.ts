@@ -16,6 +16,7 @@ export interface PriceItem {
   discount: string | null
   category: 'membership' | 'personal' | 'trial' | 'service'
   hasServiceFee?: boolean
+  perUnit?: string
 }
 
 // Booking Types

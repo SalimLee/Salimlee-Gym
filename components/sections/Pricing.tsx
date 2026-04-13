@@ -55,8 +55,15 @@ export function Pricing() {
                         <div className="text-xs text-dark-500 mt-1">zzgl. 40€ halbjährliche Service Pauschale</div>
                       )}
                     </div>
-                    <div className="text-2xl font-black text-brand-500 ml-4">
-                      {item.price}
+                    <div className="text-right ml-4">
+                      <div className="text-2xl font-black text-brand-500">
+                        {item.price}
+                      </div>
+                      {item.perUnit && (
+                        <div className="text-xs font-semibold text-brand-300 bg-brand-500/10 rounded-full px-3 py-0.5 mt-1 whitespace-nowrap">
+                          {item.perUnit}
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}

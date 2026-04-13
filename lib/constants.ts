@@ -83,7 +83,7 @@ export const PRICES: PriceItem[] = [
   { id: '2', name: 'Erwachsene & Jugendliche – 12 Monate', price: '80€/mtl.', discount: 'Beste Ersparnis', category: 'membership', hasServiceFee: true },
   { id: '3', name: 'Kinder (3-14 Jahre) – 12 Monate', price: '50€/mtl.', discount: null, category: 'membership', hasServiceFee: true },
   { id: '4', name: 'Monatlich kündbar', price: '120€/mtl.', discount: 'Flexibel', category: 'membership', hasServiceFee: true },
-  { id: '5', name: '10er Karte – 6 Monate gültig', price: '160€', discount: 'Einmalzahlung', category: 'membership' },
+  { id: '5', name: '10er Karte – 6 Monate gültig', price: '160€', discount: 'Einmalzahlung', category: 'membership', perUnit: '16€ pro Trainingseinheit' },
   { id: '6', name: 'Einzelstunde Personaltraining', price: '60€', discount: null, category: 'personal' },
   { id: '7', name: '10er Karte Personaltraining', price: 'Auf Anfrage', discount: 'Vorauszahlung', category: 'personal' },
   { id: '8', name: 'Probetraining Personaltraining (einmalig)', price: '40€', discount: null, category: 'trial' },
