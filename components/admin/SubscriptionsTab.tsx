@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { adminDelete } from '@/lib/admin-delete'
 
 interface Member { id: string; created_at: string; updated_at: string; name: string; email: string; phone: string | null; notes: string | null; active: boolean }
 interface Subscription { id: string; created_at: string; updated_at: string; member_id: string; name: string; type: string; start_date: string; end_date: string | null; total_units: number | null; remaining_units: number | null; price: number; status: 'active' | 'expired' | 'cancelled' | 'paused' | 'pending'; notes: string | null; payment_status?: string | null; stripe_checkout_session_id?: string | null }
@@ -172,9 +173,11 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
 
   const deleteSub = async (id: string) => {
     setDeleting(true)
-    const { error } = await supabase.from('subscriptions').delete().eq('id', id)
+    const { error } = await adminDelete(supabase, 'subscriptions', id)
     if (!error) {
       setSubscriptions(prev => prev.filter(s => s.id !== id))
+    } else {
+      setEmailError(error)
     }
     setDeleting(false)
     setDeleteConfirm(null)

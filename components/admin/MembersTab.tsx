@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { adminDelete } from '@/lib/admin-delete'
 
 interface Member { id: string; created_at: string; updated_at: string; name: string; email: string; phone: string | null; notes: string | null; active: boolean }
 interface Subscription { id: string; created_at: string; updated_at: string; member_id: string; name: string; type: string; start_date: string; end_date: string | null; total_units: number | null; remaining_units: number | null; price: number; status: 'active' | 'expired' | 'cancelled' | 'paused' | 'pending'; notes: string | null }
@@ -28,6 +29,7 @@ export default function MembersTab({ members, setMembers, subscriptions, invoice
   const [editingId, setEditingId] = useState<string | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const filteredMembers = members.filter(m =>
     search === '' ||
@@ -91,16 +93,29 @@ export default function MembersTab({ members, setMembers, subscriptions, invoice
 
   const deleteMember = async (member: Member) => {
     setDeleting(true)
-    // Delete related subscriptions and invoices first
-    await supabase.from('subscriptions').delete().eq('member_id', member.id)
-    await supabase.from('invoices').delete().eq('member_id', member.id)
-    const { error } = await supabase.from('members').delete().eq('id', member.id)
+    setDeleteError(null)
+    // Abhängige Einträge zuerst löschen
+    const subsRes = await adminDelete(supabase, 'subscriptions', member.id, 'member_id')
+    if (subsRes.error) {
+      setDeleteError(subsRes.error)
+      setDeleting(false)
+      return
+    }
+    const invRes = await adminDelete(supabase, 'invoices', member.id, 'member_id')
+    if (invRes.error) {
+      setDeleteError(invRes.error)
+      setDeleting(false)
+      return
+    }
+    const { error } = await adminDelete(supabase, 'members', member.id)
     if (!error) {
       setMembers(prev => prev.filter(m => m.id !== member.id))
       if (selectedMember?.id === member.id) setSelectedMember(null)
+      setDeleteConfirm(null)
+    } else {
+      setDeleteError(error)
     }
     setDeleting(false)
-    setDeleteConfirm(null)
   }
 
   const startEdit = (member: Member) => {
@@ -240,13 +255,18 @@ export default function MembersTab({ members, setMembers, subscriptions, invoice
                       <button onClick={() => deleteMember(selectedMember)} disabled={deleting} className="text-xs text-red-400 font-bold hover:underline disabled:opacity-50">
                         {deleting ? '...' : 'Bestätigen'}
                       </button>
-                      <button onClick={() => setDeleteConfirm(null)} className="text-xs text-dark-500 hover:underline">Abbruch</button>
+                      <button onClick={() => { setDeleteConfirm(null); setDeleteError(null) }} className="text-xs text-dark-500 hover:underline">Abbruch</button>
                     </>
                   ) : (
-                    <button onClick={() => setDeleteConfirm(selectedMember.id)} className="text-xs text-red-400/60 hover:text-red-400 hover:underline">Löschen</button>
+                    <button onClick={() => { setDeleteConfirm(selectedMember.id); setDeleteError(null) }} className="text-xs text-red-400/60 hover:text-red-400 hover:underline">Löschen</button>
                   )}
                 </div>
               </div>
+              {deleteError && (
+                <div className="mx-4 mt-3 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+                  <p className="text-xs text-red-400 font-medium">Löschen fehlgeschlagen: {deleteError}</p>
+                </div>
+              )}
               <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
                 {/* Kontaktdaten */}
                 <div>
