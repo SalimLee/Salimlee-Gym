@@ -53,8 +53,18 @@ export const MEMBERSHIP_OPTIONS = [
   { id: 'erwachsene_12', label: 'Erwachsene & Jugendliche – 12 Monate', price: '80 Euro/Monat' },
   { id: 'kinder_12', label: 'Kinder (3–14 Jahre) – 12 Monate', price: '50 Euro/Monat' },
   { id: 'monatlich', label: 'Monatlich kündbar', price: '120 Euro/Monat' },
+  { id: 'schueler_6', label: 'Schüler / Azubi / Student – 6 Monate (Nachweis erforderlich)', price: '55 Euro/Monat' },
+  { id: 'schueler_monatlich', label: 'Schüler / Azubi / Student – Monatlich kündbar (Nachweis erforderlich)', price: '80 Euro/Monat' },
   { id: '10er_karte', label: '10er Karte – 6 Monate gültig', price: '160 Euro Einmalzahlung' },
 ]
+
+/**
+ * Liefert `true`, wenn die Mitgliedschaft ein Schüler-/Azubi-/Student-Tarif ist.
+ * Wird für den Nachweis-Badge und besondere Darstellung im Vertrag genutzt.
+ */
+export function isStudentMembership(membershipId: string): boolean {
+  return membershipId.startsWith('schueler_')
+}
 
 export const PAYMENT_OPTIONS = [
   { id: 'stripe', label: 'Online-Zahlung (Stripe)' },
@@ -249,6 +259,26 @@ const styles = StyleSheet.create({
     fontFamily: 'Helvetica-Bold',
     marginTop: 4,
   },
+  // Badge für Schüler/Azubi/Student
+  studentBadge: {
+    backgroundColor: BRAND_RED,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginBottom: 15,
+    marginTop: -5,
+    alignItems: 'center',
+  },
+  studentBadgeTitle: {
+    fontSize: 11,
+    fontFamily: 'Helvetica-Bold',
+    color: '#ffffff',
+    letterSpacing: 1,
+  },
+  studentBadgeSubtitle: {
+    fontSize: 8,
+    color: '#ffffff',
+    marginTop: 2,
+  },
 })
 
 const EHRENKODEX = [
@@ -391,6 +421,16 @@ function Page1({ data }: { data: ContractData }) {
 
       <View style={styles.headerLine} />
       <Text style={styles.pageTitle}>MITGLIEDSCHAFTSVERTRAG</Text>
+
+      {/* Tarif-Badge (nur bei Schüler/Azubi/Student) */}
+      {isStudentMembership(data.mitgliedschaft) && (
+        <View style={styles.studentBadge}>
+          <Text style={styles.studentBadgeTitle}>TARIF: SCHÜLER / AZUBI / STUDENT</Text>
+          <Text style={styles.studentBadgeSubtitle}>
+            Nachweis erbracht (Schülerausweis, Immatrikulationsbescheinigung oder Ausbildungs-/Arbeitsvertrag)
+          </Text>
+        </View>
+      )}
 
       {/* Mitgliedsdaten */}
       <SectionHeader title="Mitgliedsdaten" />

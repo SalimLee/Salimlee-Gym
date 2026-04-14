@@ -38,6 +38,19 @@ export const MEMBERSHIP_STRIPE_MAP: Record<string, MembershipConfig> = {
     unitAmount: 12000,
     recurring: true,
   },
+  schueler_6: {
+    name: 'Schüler / Azubi / Student – 6 Monate',
+    description: '55 €/Monat, 6 Monate Laufzeit (nur mit Nachweis ab 14 Jahren)',
+    unitAmount: 5500,
+    recurring: true,
+    intervalCount: 6,
+  },
+  schueler_monatlich: {
+    name: 'Schüler / Azubi / Student – Monatlich kündbar',
+    description: '80 €/Monat, monatlich kündbar (nur mit Nachweis ab 14 Jahren)',
+    unitAmount: 8000,
+    recurring: true,
+  },
   '10er_karte': {
     name: '10er Karte – 6 Monate gültig',
     description: '160 € Einmalzahlung',

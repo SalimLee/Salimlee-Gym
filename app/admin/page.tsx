@@ -8,6 +8,7 @@ import MembersTab from '@/components/admin/MembersTab'
 import SubscriptionsTab from '@/components/admin/SubscriptionsTab'
 import InvoicesTab from '@/components/admin/InvoicesTab'
 import { ContractsTab } from '@/components/admin/ContractsTab'
+import ContractArchiveTab from '@/components/admin/ContractArchiveTab'
 import TrainingTab from '@/components/admin/TrainingTab'
 import type { Exercise, WorkoutWithExercises } from '@/types'
 
@@ -74,7 +75,7 @@ interface Invoice {
   notes: string | null
 }
 
-type TabId = 'overview' | 'bookings' | 'members' | 'subscriptions' | 'invoices' | 'contracts' | 'training'
+type TabId = 'overview' | 'bookings' | 'members' | 'subscriptions' | 'invoices' | 'contracts' | 'contract_archive' | 'training'
 
 const TABS: { id: TabId; label: string; icon: JSX.Element }[] = [
   {
@@ -100,6 +101,10 @@ const TABS: { id: TabId; label: string; icon: JSX.Element }[] = [
   {
     id: 'contracts', label: 'Verträge',
     icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>,
+  },
+  {
+    id: 'contract_archive', label: 'Vertragsarchiv',
+    icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>,
   },
   {
     id: 'training', label: 'Trainingsdaten',
@@ -396,6 +401,9 @@ export default function AdminDashboard() {
             )}
             {activeTab === 'contracts' && (
               <ContractsTab members={members} supabase={supabase} onRefresh={loadData} />
+            )}
+            {activeTab === 'contract_archive' && (
+              <ContractArchiveTab members={members} supabase={supabase} />
             )}
             {activeTab === 'training' && (
               <TrainingTab exercises={exercises} workouts={workouts} supabase={supabase} onRefresh={loadData} userId={userId} />
