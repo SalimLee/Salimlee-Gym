@@ -60,6 +60,8 @@ const MEMBERSHIP_DETAILS: Record<string, { price: number; months: number | null;
   erwachsene_12: { price: 80, months: 12, type: 'monthly' },
   kinder_12: { price: 50, months: 12, type: 'monthly' },
   monatlich: { price: 120, months: null, type: 'monthly' },
+  schueler_6: { price: 55, months: 6, type: 'monthly' },
+  schueler_monatlich: { price: 80, months: null, type: 'monthly' },
   '10er_karte': { price: 160, months: 6, type: 'punch_card', units: 10 },
 }
 
@@ -371,12 +373,47 @@ export function ContractsTab({ members, supabase, onRefresh }: ContractsTabProps
 
       const result = await res.json()
       if (res.ok) {
+        // 5. Vertrag automatisch im Archiv ablegen (Best-Effort).
+        // Fehler hier blockieren den Success-Flow nicht, werden aber geloggt
+        // und in der Success-Message ergänzt.
+        let archiveWarning = ''
+        try {
+          const { data: sessionData } = await supabase.auth.getSession()
+          const accessToken = sessionData?.session?.access_token
+          if (accessToken) {
+            const archiveForm = new FormData()
+            const safeFileName = `Vertrag_${fullName.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`
+            archiveForm.append('file', blob, safeFileName)
+            archiveForm.append('member_id', memberId)
+            archiveForm.append('member_name', fullName)
+            archiveForm.append('member_email', formData.email)
+            archiveForm.append('membership_label', membershipLabel)
+            archiveForm.append('uploaded_manually', 'false')
+
+            const archiveRes = await fetch('/api/admin/contracts/upload', {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${accessToken}` },
+              body: archiveForm,
+            })
+            if (!archiveRes.ok) {
+              const archiveErr = await archiveRes.json().catch(() => ({}))
+              console.warn('Archiv-Upload fehlgeschlagen:', archiveErr)
+              archiveWarning = ' (Archiv-Upload fehlgeschlagen – bitte manuell nachtragen.)'
+            }
+          } else {
+            archiveWarning = ' (Archiv-Upload übersprungen – keine Session.)'
+          }
+        } catch (e) {
+          console.warn('Archiv-Upload Fehler:', e)
+          archiveWarning = ' (Archiv-Upload fehlgeschlagen – bitte manuell nachtragen.)'
+        }
+
         onRefresh()
         setSendResult({
           success: true,
-          message: checkoutUrl
+          message: (checkoutUrl
             ? 'Vertrag versendet! Zahlungslink wurde in der E-Mail mitgesendet.'
-            : 'Vertrag versendet! Stripe Zahlungslink konnte nicht erstellt werden – bitte manuell nachsenden.'
+            : 'Vertrag versendet! Stripe Zahlungslink konnte nicht erstellt werden – bitte manuell nachsenden.') + archiveWarning
         })
         setStep('done')
       } else {
@@ -519,6 +556,15 @@ export function ContractsTab({ members, supabase, onRefresh }: ContractsTabProps
             <p className="text-xs text-brand-500 mt-3 font-semibold">
               Hinweis: Zusätzlich wird eine Servicepauschale von 30 Euro alle 6 Monate automatisch eingezogen.
             </p>
+            {formData.mitgliedschaft.startsWith('schueler_') && (
+              <div className="mt-3 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30 text-xs text-yellow-200">
+                <p className="font-bold mb-1">⚠ Schüler / Azubi / Student – Nachweis prüfen</p>
+                <p className="text-yellow-200/80">
+                  Gilt ab 14 Jahren. Bitte vor Vertragsabschluss einen gültigen Nachweis einsehen:
+                  Schülerausweis, Immatrikulationsbescheinigung oder Ausbildungs-/Arbeitsvertrag.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Zahlungsweise */}

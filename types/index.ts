@@ -14,7 +14,7 @@ export interface PriceItem {
   name: string
   price: string
   discount: string | null
-  category: 'membership' | 'personal' | 'trial' | 'service'
+  category: 'membership' | 'student' | 'personal' | 'trial' | 'service'
   hasServiceFee?: boolean
   perUnit?: string
 }

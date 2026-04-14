@@ -4,12 +4,13 @@ import { PRICES } from '@/lib/constants'
 
 const CATEGORY_LABELS: Record<string, string> = {
   membership: 'Mitgliedschaft (Kurse)',
+  student: 'Schüler / Azubi / Student (ab 14 Jahren)',
   personal: 'Personaltraining',
   trial: 'Probetraining',
   service: 'Service Pauschale',
 }
 
-const CATEGORY_ORDER = ['membership', 'personal', 'trial', 'service'] as const
+const CATEGORY_ORDER = ['membership', 'student', 'personal', 'trial', 'service'] as const
 
 export function Pricing() {
   const grouped = CATEGORY_ORDER.map((cat) => ({
@@ -38,6 +39,19 @@ export function Pricing() {
               <h3 className="text-lg font-black text-brand-400 mb-3 uppercase tracking-wider">
                 {group.label}
               </h3>
+              {group.category === 'student' && (
+                <div className="mb-3 p-4 rounded-xl bg-brand-500/5 border border-brand-500/20 text-sm text-dark-300">
+                  <p className="font-semibold text-brand-400 mb-1">Voraussetzungen für den Schüler-, Azubi- &amp; Studenten-Tarif</p>
+                  <ul className="list-disc list-inside space-y-1 text-dark-400">
+                    <li>Gültig ab <strong className="text-dark-200">14 Jahren</strong> (darunter gelten die Kinderkurs-Preise)</li>
+                    <li>Nur als <strong className="text-dark-200">6-Monats-Vertrag</strong> oder <strong className="text-dark-200">monatlich kündbar</strong> – keine 12-Monats-Verträge</li>
+                    <li>
+                      Der Vertrag kommt nur mit gültigem <strong className="text-dark-200">Nachweis</strong> zustande (Schülerausweis,
+                      Immatrikulationsbescheinigung oder Arbeitsvertrag / Ausbildungsvertrag)
+                    </li>
+                  </ul>
+                </div>
+              )}
               <div className="bg-dark-900/50 rounded-2xl border border-brand-600/20 overflow-hidden">
                 {group.items.map((item, index) => (
                   <div
