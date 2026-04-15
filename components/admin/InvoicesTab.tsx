@@ -106,9 +106,49 @@ export default function InvoicesTab({ invoices, setInvoices, members, supabase, 
     if (!error) setInvoices(prev => prev.map(i => i.id === id ? { ...i, status: 'paid' as InvoiceStatus, paid_date: today } : i))
   }
 
+  const [sendingDunning, setSendingDunning] = useState<string | null>(null)
+
   const markAsOverdue = async (id: string) => {
+    const inv = invoices.find(i => i.id === id)
+    if (!inv) return
+
+    setSendingDunning(id)
+
+    // Status auf overdue setzen
     const { error } = await supabase.from('invoices').update({ status: 'overdue' as InvoiceStatus }).eq('id', id)
     if (!error) setInvoices(prev => prev.map(i => i.id === id ? { ...i, status: 'overdue' as InvoiceStatus } : i))
+
+    // Mahn-E-Mail senden
+    const memberEmail = members.find(m => m.id === inv.member_id)?.email
+    const memberName = getMemberName(inv.member_id)
+    if (memberEmail) {
+      try {
+        const res = await fetch('/api/invoice/send-dunning', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            memberName,
+            memberEmail,
+            invoiceNumber: inv.invoice_number,
+            description: inv.description,
+            amount: inv.amount,
+            dueDate: inv.due_date,
+          }),
+        })
+        const data = await res.json()
+        if (res.ok && !data.error) {
+          setSnackbar({ message: `Mahnung versendet an ${memberName}`, type: 'success' })
+        } else {
+          setSnackbar({ message: data.error || 'Mahnung fehlgeschlagen', type: 'error' })
+        }
+      } catch {
+        setSnackbar({ message: 'Mahnung fehlgeschlagen', type: 'error' })
+      }
+    } else {
+      setSnackbar({ message: 'Keine E-Mail-Adresse hinterlegt', type: 'error' })
+    }
+
+    setSendingDunning(null)
   }
 
   const cancelInvoice = async (id: string) => {
@@ -295,8 +335,8 @@ export default function InvoicesTab({ invoices, setInvoices, members, supabase, 
                           </button>
                         )}
                         {!isStripe && inv.status === 'open' && !isOverdue && (
-                          <button onClick={() => markAsOverdue(inv.id)} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 transition-all">
-                            Mahnen
+                          <button onClick={() => markAsOverdue(inv.id)} disabled={sendingDunning === inv.id} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 transition-all disabled:opacity-50">
+                            {sendingDunning === inv.id ? 'Sendet...' : 'Mahnen'}
                           </button>
                         )}
                         {!isStripe && inv.status !== 'cancelled' && inv.status !== 'paid' && (
