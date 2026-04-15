@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { adminDelete } from '@/lib/admin-delete'
 
@@ -58,6 +58,24 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
   const [personalMessage, setPersonalMessage] = useState('')
   const [sendingStatus, setSendingStatus] = useState(false)
   const [emailError, setEmailError] = useState<string | null>(null)
+
+  // Snackbar
+  const [snackbar, setSnackbar] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+
+  // Alle erinnern
+  const [showRemindAllModal, setShowRemindAllModal] = useState(false)
+  const [sendingRemindAll, setSendingRemindAll] = useState(false)
+  const [remindAllProgress, setRemindAllProgress] = useState({ sent: 0, failed: 0, total: 0 })
+
+  const showSnackbar = useCallback((message: string, type: 'success' | 'error' = 'success') => {
+    setSnackbar({ message, type })
+  }, [])
+
+  useEffect(() => {
+    if (!snackbar) return
+    const timer = setTimeout(() => setSnackbar(null), 4000)
+    return () => clearTimeout(timer)
+  }, [snackbar])
 
   const getMemberName = (memberId: string) => members.find(m => m.id === memberId)?.name || 'Unbekannt'
   const getMemberEmail = (memberId: string) => members.find(m => m.id === memberId)?.email || ''
@@ -227,12 +245,57 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
       })
       const data = await res.json()
       if (!res.ok || data.error) {
-        setEmailError(data.error || 'Erinnerung konnte nicht gesendet werden')
+        showSnackbar(data.error || 'Erinnerung fehlgeschlagen', 'error')
+      } else {
+        showSnackbar(`Erinnerung versendet an ${memberName}`)
       }
     } catch {
-      setEmailError('Erinnerung fehlgeschlagen.')
+      showSnackbar('Erinnerung fehlgeschlagen', 'error')
     }
     setSendingReminder(null)
+  }
+
+  const pendingSubs = subscriptions.filter(s => s.status === 'pending')
+
+  const sendRemindAll = async () => {
+    setSendingRemindAll(true)
+    setRemindAllProgress({ sent: 0, failed: 0, total: pendingSubs.length })
+
+    let sent = 0
+    let failed = 0
+    for (const sub of pendingSubs) {
+      const memberEmail = getMemberEmail(sub.member_id)
+      const memberName = getMemberName(sub.member_id)
+      try {
+        const res = await fetch('/api/subscription/send-reminder', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            subscriptionId: sub.id,
+            memberEmail,
+            memberName,
+            subscriptionName: sub.name,
+          }),
+        })
+        const data = await res.json()
+        if (!res.ok || data.error) {
+          failed++
+        } else {
+          sent++
+        }
+      } catch {
+        failed++
+      }
+      setRemindAllProgress({ sent, failed, total: pendingSubs.length })
+    }
+
+    setSendingRemindAll(false)
+    setShowRemindAllModal(false)
+    if (failed === 0) {
+      showSnackbar(`${sent} Erinnerung${sent !== 1 ? 'en' : ''} erfolgreich versendet`)
+    } else {
+      showSnackbar(`${sent} versendet, ${failed} fehlgeschlagen`, 'error')
+    }
   }
 
   const updateUnits = async (id: string, remaining: number) => {
@@ -340,7 +403,17 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
             Abonnements
             <span className="text-dark-500 font-normal ml-2 text-sm">{filteredSubs.length} Ergebnisse</span>
           </h2>
-          <button onClick={onRefresh} className="text-sm text-dark-400 hover:text-brand-500 transition-colors">Aktualisieren</button>
+          <div className="flex items-center gap-2">
+            {pendingSubs.length > 0 && (
+              <button
+                onClick={() => setShowRemindAllModal(true)}
+                className="px-3 py-1.5 text-xs font-bold rounded-lg bg-orange-500/10 text-orange-400 border border-orange-500/30 hover:bg-orange-500/20 transition-all"
+              >
+                Alle erinnern ({pendingSubs.length})
+              </button>
+            )}
+            <button onClick={onRefresh} className="text-sm text-dark-400 hover:text-brand-500 transition-colors">Aktualisieren</button>
+          </div>
         </div>
 
         {filteredSubs.length === 0 ? (
@@ -609,6 +682,87 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
                   : 'Kündigen & E-Mail senden'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Alle erinnern Modal */}
+      {showRemindAllModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => !sendingRemindAll && setShowRemindAllModal(false)}>
+          <div className="bg-dark-900 border border-dark-700 rounded-2xl w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="p-5 border-b border-dark-800 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-orange-500/20 flex items-center justify-center text-lg">
+                ⚠
+              </div>
+              <div>
+                <h3 className="font-bold text-dark-100 text-lg">Alle erinnern?</h3>
+                <p className="text-dark-500 text-sm">{pendingSubs.length} ausstehende Zahlung{pendingSubs.length !== 1 ? 'en' : ''}</p>
+              </div>
+            </div>
+
+            <div className="p-5 space-y-3">
+              <div className="p-3 bg-orange-500/10 border border-orange-500/20 rounded-lg">
+                <p className="text-xs text-orange-400">
+                  Es wird an <strong>{pendingSubs.length} Mitglied{pendingSubs.length !== 1 ? 'er' : ''}</strong> eine Zahlungserinnerung mit neuem Checkout-Link gesendet.
+                </p>
+              </div>
+
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {pendingSubs.map(sub => (
+                  <div key={sub.id} className="flex items-center justify-between p-2 bg-dark-800/50 rounded-lg text-sm">
+                    <span className="text-dark-200">{getMemberName(sub.member_id)}</span>
+                    <span className="text-dark-400 text-xs">{sub.name}</span>
+                  </div>
+                ))}
+              </div>
+
+              {sendingRemindAll && (
+                <div className="space-y-2">
+                  <div className="h-2 bg-dark-700 rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-orange-500 transition-all"
+                      style={{ width: `${remindAllProgress.total > 0 ? ((remindAllProgress.sent + remindAllProgress.failed) / remindAllProgress.total) * 100 : 0}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-dark-400 text-center">{remindAllProgress.sent + remindAllProgress.failed} / {remindAllProgress.total} verarbeitet</p>
+                </div>
+              )}
+            </div>
+
+            <div className="p-5 border-t border-dark-800 flex gap-3">
+              <button
+                onClick={() => setShowRemindAllModal(false)}
+                disabled={sendingRemindAll}
+                className="flex-1 px-4 py-3 text-sm font-bold rounded-xl bg-dark-800 text-dark-300 border border-dark-700 hover:border-dark-600 transition-all disabled:opacity-50"
+              >
+                Abbrechen
+              </button>
+              <button
+                onClick={sendRemindAll}
+                disabled={sendingRemindAll}
+                className="flex-1 px-4 py-3 text-sm font-bold rounded-xl bg-orange-500/20 text-orange-400 border border-orange-500/30 hover:bg-orange-500/30 transition-all disabled:opacity-50"
+              >
+                {sendingRemindAll ? 'Wird gesendet...' : `Ja, alle ${pendingSubs.length} erinnern`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Snackbar */}
+      {snackbar && (
+        <div
+          className={`fixed bottom-6 left-6 z-50 px-5 py-3 rounded-xl shadow-2xl border backdrop-blur-sm ${
+            snackbar.type === 'success'
+              ? 'bg-green-500/10 border-green-500/30 text-green-400'
+              : 'bg-red-500/10 border-red-500/30 text-red-400'
+          }`}
+          style={{ animation: 'snackbarSlideIn 0.3s ease-out' }}
+        >
+          <style>{`@keyframes snackbarSlideIn { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }`}</style>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">{snackbar.type === 'success' ? '✓' : '✕'}</span>
+            <p className="text-sm font-medium">{snackbar.message}</p>
           </div>
         </div>
       )}
