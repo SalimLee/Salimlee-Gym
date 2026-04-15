@@ -35,6 +35,7 @@ export default function InvoicesTab({ invoices, setInvoices, members, supabase, 
   const [syncing, setSyncing] = useState(false)
   const [snackbar, setSnackbar] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
   const [showExportModal, setShowExportModal] = useState(false)
+  const [viewInvoice, setViewInvoice] = useState<Invoice | null>(null)
 
   useEffect(() => {
     if (!snackbar) return
@@ -285,6 +286,9 @@ export default function InvoicesTab({ invoices, setInvoices, members, supabase, 
                         {Number(inv.amount).toFixed(2)}€
                       </p>
                       <div className="flex gap-1">
+                        <button onClick={() => setViewInvoice(inv)} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-dark-700/50 text-dark-300 border border-dark-600 hover:border-dark-500 hover:text-dark-100 transition-all">
+                          Ansehen
+                        </button>
                         {!isStripe && (inv.status === 'open' || inv.status === 'overdue') && (
                           <button onClick={() => markAsPaid(inv.id)} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-green-500/10 text-green-400 border border-green-500/30 hover:bg-green-500/20 transition-all">
                             Bezahlt
@@ -314,6 +318,92 @@ export default function InvoicesTab({ invoices, setInvoices, members, supabase, 
           </div>
         )}
       </div>
+
+      {/* Rechnungsdetail Modal */}
+      {viewInvoice && (() => {
+        const inv = viewInvoice
+        const member = members.find(m => m.id === inv.member_id)
+        const isStripe = (inv.source || 'manual') === 'stripe'
+        const isOverdue = inv.status === 'open' && new Date(inv.due_date) < new Date()
+        const statusInfo = isOverdue ? STATUS_CONFIG.overdue : STATUS_CONFIG[inv.status]
+
+        return (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setViewInvoice(null)}>
+            <div className="bg-dark-900 border border-dark-700 rounded-2xl w-full max-w-lg shadow-2xl" onClick={e => e.stopPropagation()}>
+              {/* Header */}
+              <div className="p-5 border-b border-dark-800 flex items-center justify-between">
+                <div>
+                  <h3 className="font-bold text-dark-100 text-lg">{inv.invoice_number}</h3>
+                  <p className="text-dark-500 text-sm">{member?.name || 'Unbekannt'}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`px-3 py-1 rounded-full text-xs font-bold border ${statusInfo.bg} ${statusInfo.color}`}>
+                    {isOverdue ? 'Überfällig' : statusInfo.label}
+                  </span>
+                  <span className={`px-3 py-1 rounded-full text-xs font-bold border ${isStripe ? 'bg-purple-400/10 text-purple-400 border-purple-400/30' : 'bg-dark-700/50 text-dark-500 border-dark-600'}`}>
+                    {isStripe ? 'Stripe' : 'Manuell'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Details */}
+              <div className="p-5 space-y-4">
+                <div className="bg-dark-800/50 rounded-xl p-4 space-y-3 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-dark-400">Beschreibung</span>
+                    <span className="text-dark-100 font-medium text-right max-w-[60%]">{inv.description}</span>
+                  </div>
+                  <div className="flex justify-between border-t border-dark-700 pt-3">
+                    <span className="text-dark-400">Betrag</span>
+                    <span className="text-xl font-black text-dark-100">{Number(inv.amount).toFixed(2)} €</span>
+                  </div>
+                  <div className="flex justify-between border-t border-dark-700 pt-3">
+                    <span className="text-dark-400">Rechnungsdatum</span>
+                    <span className="text-dark-200">{formatDate(inv.created_at)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-dark-400">Fällig am</span>
+                    <span className={isOverdue ? 'text-red-400 font-bold' : 'text-dark-200'}>{formatDate(inv.due_date)}</span>
+                  </div>
+                  {inv.paid_date && (
+                    <div className="flex justify-between">
+                      <span className="text-dark-400">Bezahlt am</span>
+                      <span className="text-green-400 font-bold">{formatDate(inv.paid_date)}</span>
+                    </div>
+                  )}
+                  {inv.notes && (
+                    <div className="flex justify-between border-t border-dark-700 pt-3">
+                      <span className="text-dark-400">Notizen</span>
+                      <span className="text-dark-300 text-right max-w-[60%]">{inv.notes}</span>
+                    </div>
+                  )}
+                  {member?.email && (
+                    <div className="flex justify-between border-t border-dark-700 pt-3">
+                      <span className="text-dark-400">E-Mail</span>
+                      <a href={`mailto:${member.email}`} className="text-brand-500 hover:underline">{member.email}</a>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="p-5 border-t border-dark-800 flex gap-3">
+                {isStripe && inv.stripe_invoice_pdf_url && (
+                  <a href={inv.stripe_invoice_pdf_url} target="_blank" rel="noopener noreferrer" className="flex-1 px-4 py-3 text-sm font-bold rounded-xl bg-purple-500/20 text-purple-400 border border-purple-500/30 hover:bg-purple-500/30 transition-all text-center">
+                    Stripe-PDF öffnen
+                  </a>
+                )}
+                <button
+                  onClick={() => setViewInvoice(null)}
+                  className="flex-1 px-4 py-3 text-sm font-bold rounded-xl bg-dark-800 text-dark-300 border border-dark-700 hover:border-dark-600 transition-all"
+                >
+                  Schließen
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Steuer-Export Modal */}
       {showExportModal && (
