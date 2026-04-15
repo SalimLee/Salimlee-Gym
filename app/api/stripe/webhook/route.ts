@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { stripe } from '@/lib/stripe'
+import { stripe, SERVICE_FEE, getOrCreateServiceFeeProduct } from '@/lib/stripe'
 import { createClient } from '@supabase/supabase-js'
 import type Stripe from 'stripe'
 
@@ -76,6 +76,49 @@ export async function POST(request: NextRequest) {
           .eq('id', subscriptionId)
 
         console.log(`Subscription ${subscriptionId} aktiviert (Zahlung erfolgreich)`)
+        break
+      }
+
+      case 'invoice.created': {
+        // Servicepauschale: €40 alle 6 Monate automatisch auf die Rechnung drauf
+        const createdInvoice = event.data.object as Stripe.Invoice
+        const invoiceSubId = (createdInvoice as unknown as Record<string, unknown>).subscription as string | null
+
+        if (invoiceSubId && createdInvoice.billing_reason === 'subscription_cycle') {
+          try {
+            const sub = await stripe.subscriptions.retrieve(invoiceSubId)
+            const membershipId = sub.metadata?.membership_id
+
+            // Nur für recurring Abos (keine 10er Karte)
+            if (membershipId && membershipId !== '10er_karte') {
+              // Berechne welcher Monat das ist seit Subscription-Start
+              const anchorDate = new Date((sub.start_date || sub.created) * 1000)
+              const now = new Date()
+              const monthsSinceStart = (now.getFullYear() - anchorDate.getFullYear()) * 12 + (now.getMonth() - anchorDate.getMonth())
+
+              // Alle 6 Monate die Servicepauschale draufpacken (Monat 6, 12, 18, ...)
+              if (monthsSinceStart > 0 && monthsSinceStart % SERVICE_FEE.intervalMonths === 0) {
+                const productId = await getOrCreateServiceFeeProduct()
+
+                await stripe.invoiceItems.create({
+                  customer: createdInvoice.customer as string,
+                  invoice: createdInvoice.id,
+                  amount: SERVICE_FEE.unitAmount,
+                  currency: 'eur',
+                  description: `${SERVICE_FEE.name} (halbjährlich)`,
+                  metadata: {
+                    type: 'service_fee',
+                    product_id: productId,
+                  },
+                })
+
+                console.log(`Servicepauschale (${SERVICE_FEE.unitAmount / 100}€) hinzugefügt für Subscription ${invoiceSubId} (Monat ${monthsSinceStart})`)
+              }
+            }
+          } catch (e) {
+            console.warn('Servicepauschale konnte nicht hinzugefügt werden:', e)
+          }
+        }
         break
       }
 

@@ -59,6 +59,36 @@ export const MEMBERSHIP_STRIPE_MAP: Record<string, MembershipConfig> = {
   },
 }
 
+// Servicepauschale: €40 alle 6 Monate, wird automatisch auf die Rechnung draufgepackt
+export const SERVICE_FEE = {
+  name: 'Servicepauschale',
+  description: 'Halbjährliche Servicepauschale',
+  unitAmount: 4000, // 40€ in Cent
+  intervalMonths: 6,
+}
+
+/**
+ * Finds or creates the Servicepauschale product in Stripe.
+ * Returns the product ID (not a price — we use invoice items).
+ */
+export async function getOrCreateServiceFeeProduct(): Promise<string> {
+  const existing = await stripe.products.search({
+    query: `metadata['type']:'service_fee'`,
+  })
+
+  if (existing.data.length > 0) {
+    return existing.data[0].id
+  }
+
+  const product = await stripe.products.create({
+    name: SERVICE_FEE.name,
+    description: SERVICE_FEE.description,
+    metadata: { type: 'service_fee' },
+  })
+
+  return product.id
+}
+
 /**
  * Finds or creates a Stripe Product + Price for a given membership ID.
  * Uses metadata to identify existing products.
