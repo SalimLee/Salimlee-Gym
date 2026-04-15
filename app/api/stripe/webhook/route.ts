@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { stripe, SERVICE_FEE, getOrCreateServiceFeeProduct } from '@/lib/stripe'
+import { upsertStripeInvoice } from '@/lib/stripe-invoice-sync'
 import { createClient } from '@supabase/supabase-js'
 import type Stripe from 'stripe'
 
@@ -118,6 +119,19 @@ export async function POST(request: NextRequest) {
           } catch (e) {
             console.warn('Servicepauschale konnte nicht hinzugefügt werden:', e)
           }
+        }
+        break
+      }
+
+      case 'invoice.paid':
+      case 'invoice.finalized': {
+        // Stripe Invoice in lokale DB synchronisieren
+        const syncInvoice = event.data.object as Stripe.Invoice
+        try {
+          await upsertStripeInvoice(syncInvoice.id)
+          console.log(`Stripe Invoice ${syncInvoice.id} synchronisiert (${event.type})`)
+        } catch (e) {
+          console.warn('Invoice Sync fehlgeschlagen:', e)
         }
         break
       }

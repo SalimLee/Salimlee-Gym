@@ -74,6 +74,9 @@ interface Invoice {
   due_date: string
   paid_date: string | null
   notes: string | null
+  source?: 'manual' | 'stripe'
+  stripe_invoice_id?: string | null
+  stripe_invoice_pdf_url?: string | null
 }
 
 type TabId = 'overview' | 'bookings' | 'members' | 'subscriptions' | 'invoices' | 'contracts' | 'contract_archive' | 'training'
