@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { stripe, SERVICE_FEE, getOrCreateServiceFeeProduct } from '@/lib/stripe'
+import { stripe, SERVICE_FEE, getOrCreateServiceFeeProduct, getOrCreateTaxRate } from '@/lib/stripe'
 import { upsertStripeInvoice } from '@/lib/stripe-invoice-sync'
 import { createClient } from '@supabase/supabase-js'
 import type Stripe from 'stripe'
@@ -99,7 +99,10 @@ export async function POST(request: NextRequest) {
 
               // Alle 6 Monate die Servicepauschale draufpacken (Monat 6, 12, 18, ...)
               if (monthsSinceStart > 0 && monthsSinceStart % SERVICE_FEE.intervalMonths === 0) {
-                const productId = await getOrCreateServiceFeeProduct()
+                const [productId, taxRateId] = await Promise.all([
+                  getOrCreateServiceFeeProduct(),
+                  getOrCreateTaxRate(),
+                ])
 
                 await stripe.invoiceItems.create({
                   customer: createdInvoice.customer as string,
@@ -107,6 +110,7 @@ export async function POST(request: NextRequest) {
                   amount: SERVICE_FEE.unitAmount,
                   currency: 'eur',
                   description: `${SERVICE_FEE.name} (halbjährlich)`,
+                  tax_rates: [taxRateId],
                   metadata: {
                     type: 'service_fee',
                     product_id: productId,

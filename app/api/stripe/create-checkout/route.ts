@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { stripe, getOrCreateStripePrice, getOrCreateStripeCustomer, MEMBERSHIP_STRIPE_MAP } from '@/lib/stripe'
+import { stripe, getOrCreateStripePrice, getOrCreateStripeCustomer, getOrCreateTaxRate, MEMBERSHIP_STRIPE_MAP } from '@/lib/stripe'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseAdmin = createClient(
@@ -33,10 +33,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get or create Stripe price and customer
-    const [priceId, customerId] = await Promise.all([
+    // Get or create Stripe price, customer, and tax rate
+    const [priceId, customerId, taxRateId] = await Promise.all([
       getOrCreateStripePrice(membershipId),
       getOrCreateStripeCustomer(memberEmail, memberName),
+      getOrCreateTaxRate(),
     ])
 
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
@@ -56,7 +57,7 @@ export async function POST(request: NextRequest) {
     if (config.recurring) {
       // Subscription mode for recurring memberships
       sessionParams.mode = 'subscription'
-      sessionParams.line_items = [{ price: priceId, quantity: 1 }]
+      sessionParams.line_items = [{ price: priceId, quantity: 1, tax_rates: [taxRateId] }]
 
       // Trial bis zum 1. des nächsten Monats — erste Abbuchung am 1.
       const now = new Date()
@@ -66,6 +67,7 @@ export async function POST(request: NextRequest) {
 
       sessionParams.subscription_data = {
         ...(trialEnd ? { trial_end: trialEnd } : {}),
+        default_tax_rates: [taxRateId],
         metadata: {
           subscription_id: subscriptionId,
           membership_id: membershipId,
@@ -75,7 +77,7 @@ export async function POST(request: NextRequest) {
     } else {
       // Payment mode for one-time purchases (10er Karte)
       sessionParams.mode = 'payment'
-      sessionParams.line_items = [{ price: priceId, quantity: 1 }]
+      sessionParams.line_items = [{ price: priceId, quantity: 1, tax_rates: [taxRateId] }]
     }
 
     const session = await stripe.checkout.sessions.create(sessionParams)

@@ -90,6 +90,27 @@ export async function getOrCreateServiceFeeProduct(): Promise<string> {
 }
 
 /**
+ * Finds or creates the 19% MwSt tax rate in Stripe.
+ */
+export async function getOrCreateTaxRate(): Promise<string> {
+  const existing = await stripe.taxRates.list({ active: true, limit: 100 })
+  const mwst = existing.data.find(
+    t => t.percentage === 19 && t.inclusive === true && t.country === 'DE'
+  )
+  if (mwst) return mwst.id
+
+  const taxRate = await stripe.taxRates.create({
+    display_name: 'MwSt',
+    description: 'Mehrwertsteuer 19%',
+    percentage: 19,
+    inclusive: true, // Preise sind bereits inkl. MwSt
+    country: 'DE',
+    jurisdiction: 'DE',
+  })
+  return taxRate.id
+}
+
+/**
  * Finds or creates a Stripe Product + Price for a given membership ID.
  * Uses metadata to identify existing products.
  */
