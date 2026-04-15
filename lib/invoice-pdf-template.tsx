@@ -18,14 +18,18 @@ const styles = StyleSheet.create({
   colDesc: { flex: 1 },
   colAmount: { width: 100, textAlign: 'right' },
   thText: { fontSize: 8, color: '#999', fontFamily: 'Helvetica-Bold' },
-  totalRow: { flexDirection: 'row', marginTop: 10, paddingTop: 10, borderTop: '2 solid #1a1a1a' },
+  subtotalRow: { flexDirection: 'row', paddingVertical: 4 },
+  subtotalLabel: { flex: 1, fontSize: 9, color: '#666' },
+  subtotalValue: { width: 100, textAlign: 'right', fontSize: 9, color: '#666' },
+  totalRow: { flexDirection: 'row', marginTop: 4, paddingTop: 8, borderTop: '2 solid #1a1a1a' },
   totalLabel: { flex: 1, fontFamily: 'Helvetica-Bold', fontSize: 12 },
   totalValue: { width: 100, textAlign: 'right', fontFamily: 'Helvetica-Bold', fontSize: 14 },
   statusBadge: { marginTop: 20, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 4, alignSelf: 'flex-start' },
+  cancelledOverlay: { marginTop: 20, padding: 16, borderRadius: 4, backgroundColor: '#fef2f2', borderLeft: '4 solid #991b1b' },
   footer: { position: 'absolute', bottom: 30, left: 40, right: 40, borderTop: '0.5 solid #e0e0e0', paddingTop: 10, fontSize: 7, color: '#999', textAlign: 'center' },
 })
 
-interface InvoicePDFProps {
+export interface InvoicePDFProps {
   invoiceNumber: string
   memberName: string
   description: string
@@ -35,6 +39,7 @@ interface InvoicePDFProps {
   status: string
   createdAt: string
   notes?: string | null
+  source?: 'manual' | 'stripe'
 }
 
 function formatDateDE(date: string) {
@@ -42,6 +47,14 @@ function formatDateDE(date: string) {
 }
 
 export function InvoicePDFDocument(props: InvoicePDFProps) {
+  const isManual = (props.source || 'manual') === 'manual'
+  const isCancelled = props.status === 'cancelled'
+
+  // MwSt nur bei manuellen Rechnungen (Stripe hat MwSt schon konfiguriert)
+  const brutto = props.amount
+  const netto = isManual ? brutto / 1.19 : brutto
+  const mwst = isManual ? brutto - netto : 0
+
   const statusColors: Record<string, { bg: string; text: string; label: string }> = {
     paid: { bg: '#dcfce7', text: '#166534', label: 'Bezahlt' },
     open: { bg: '#fef9c3', text: '#854d0e', label: 'Offen' },
@@ -63,7 +76,7 @@ export function InvoicePDFDocument(props: InvoicePDFProps) {
             </Text>
           </View>
           <View style={{ alignItems: 'flex-end' }}>
-            <Text style={styles.invoiceTitle}>RECHNUNG</Text>
+            <Text style={styles.invoiceTitle}>{isCancelled ? 'STORNORECHNUNG' : 'RECHNUNG'}</Text>
             <Text style={{ fontSize: 9, color: '#666' }}>{props.invoiceNumber}</Text>
           </View>
         </View>
@@ -84,6 +97,18 @@ export function InvoicePDFDocument(props: InvoicePDFProps) {
           </View>
         </View>
 
+        {/* Stornierung Hinweis */}
+        {isCancelled && (
+          <View style={styles.cancelledOverlay}>
+            <Text style={{ color: '#991b1b', fontFamily: 'Helvetica-Bold', fontSize: 11, marginBottom: 4 }}>
+              Diese Rechnung wurde storniert.
+            </Text>
+            <Text style={{ color: '#991b1b', fontSize: 9 }}>
+              Der ausgewiesene Betrag ist nicht mehr fällig. Bereits geleistete Zahlungen werden erstattet.
+            </Text>
+          </View>
+        )}
+
         {/* Table */}
         <View style={styles.table}>
           <View style={styles.tableHeader}>
@@ -91,8 +116,10 @@ export function InvoicePDFDocument(props: InvoicePDFProps) {
             <Text style={[styles.thText, styles.colAmount]}>BETRAG</Text>
           </View>
           <View style={styles.tableRow}>
-            <Text style={styles.colDesc}>{props.description}</Text>
-            <Text style={styles.colAmount}>{props.amount.toFixed(2)} €</Text>
+            <Text style={[styles.colDesc, isCancelled ? { textDecoration: 'line-through', color: '#999' } : {}]}>{props.description}</Text>
+            <Text style={[styles.colAmount, isCancelled ? { textDecoration: 'line-through', color: '#999' } : {}]}>
+              {isCancelled ? '-' : ''}{brutto.toFixed(2)} €
+            </Text>
           </View>
           {props.notes && (
             <View style={{ marginTop: 4 }}>
@@ -101,10 +128,26 @@ export function InvoicePDFDocument(props: InvoicePDFProps) {
           )}
         </View>
 
+        {/* MwSt Aufschlüsselung (nur manuelle Rechnungen) */}
+        {isManual && (
+          <View style={{ marginTop: 12 }}>
+            <View style={styles.subtotalRow}>
+              <Text style={styles.subtotalLabel}>Nettobetrag</Text>
+              <Text style={styles.subtotalValue}>{netto.toFixed(2)} €</Text>
+            </View>
+            <View style={styles.subtotalRow}>
+              <Text style={styles.subtotalLabel}>USt. 19%</Text>
+              <Text style={styles.subtotalValue}>{mwst.toFixed(2)} €</Text>
+            </View>
+          </View>
+        )}
+
         {/* Total */}
         <View style={styles.totalRow}>
-          <Text style={styles.totalLabel}>Gesamtbetrag</Text>
-          <Text style={styles.totalValue}>{props.amount.toFixed(2)} €</Text>
+          <Text style={styles.totalLabel}>{isCancelled ? 'Stornobetrag' : 'Gesamtbetrag (brutto)'}</Text>
+          <Text style={[styles.totalValue, isCancelled ? { color: '#991b1b' } : {}]}>
+            {isCancelled ? '-' : ''}{brutto.toFixed(2)} €
+          </Text>
         </View>
 
         {/* Status */}
@@ -117,7 +160,7 @@ export function InvoicePDFDocument(props: InvoicePDFProps) {
 
         {/* Footer */}
         <View style={styles.footer}>
-          <Text>Salim Lee Boxing & Fitness Gym · Wörthstrasse 17 · 72764 Reutlingen</Text>
+          <Text>Salim Lee Boxing & Fitness Gym · Wörthstrasse 17 · 72764 Reutlingen · USt-IdNr. folgt</Text>
         </View>
       </Page>
     </Document>

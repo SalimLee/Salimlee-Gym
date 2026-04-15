@@ -9,9 +9,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Resend nicht konfiguriert' }, { status: 200 })
     }
 
-    const { memberName, memberEmail, invoiceNumber, description, amount, dueDate, createdAt, notes } = await request.json()
+    const { memberName, memberEmail, invoiceNumber, description, amount, dueDate, paidDate, createdAt, notes } = await request.json()
 
-    if (!memberEmail || !memberName || !invoiceNumber || !amount || !dueDate) {
+    if (!memberEmail || !memberName || !invoiceNumber || !amount) {
       return NextResponse.json({ error: 'Alle Pflichtfelder erforderlich' }, { status: 400 })
     }
 
@@ -22,7 +22,8 @@ export async function POST(request: NextRequest) {
       description,
       amount: Number(amount),
       dueDate,
-      status: 'overdue',
+      paidDate,
+      status: 'paid',
       createdAt: createdAt || new Date().toISOString(),
       notes: notes || null,
       source: 'manual' as const,
@@ -35,12 +36,11 @@ export async function POST(request: NextRequest) {
     const EMAIL_FROM = process.env.EMAIL_FROM || 'Salim Lee Gym <noreply@salimlee-gym.de>'
 
     const formattedAmount = Number(amount).toFixed(2)
-    const formattedDate = new Date(dueDate).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
     const { error: emailError } = await resend.emails.send({
       from: EMAIL_FROM,
       to: memberEmail,
-      subject: `Zahlungserinnerung – Rechnung ${invoiceNumber} – Salim Lee Gym`,
+      subject: `Zahlungsbestätigung – Rechnung ${invoiceNumber} – Salim Lee Gym`,
       attachments: [
         {
           filename: `${invoiceNumber}.pdf`,
@@ -59,47 +59,22 @@ export async function POST(request: NextRequest) {
             </div>
             <div style="padding: 40px 30px;">
               <div style="text-align: center; margin-bottom: 30px;">
-                <div style="width: 64px; height: 64px; background: #eab30820; border-radius: 50%; margin: 0 auto 16px; display: flex; align-items: center; justify-content: center;">
-                  <span style="font-size: 28px;">📋</span>
+                <div style="width: 64px; height: 64px; background: #22c55e20; border-radius: 50%; margin: 0 auto 16px; display: flex; align-items: center; justify-content: center;">
+                  <span style="font-size: 28px;">✓</span>
                 </div>
-                <h2 style="color: #eab308; margin: 0 0 10px; font-size: 24px;">Freundliche Zahlungserinnerung</h2>
+                <h2 style="color: #22c55e; margin: 0 0 10px; font-size: 24px;">Zahlung erhalten</h2>
               </div>
               <p style="color: #a1a1aa; line-height: 1.8; margin: 0 0 25px;">
                 Hallo <strong style="color: #fafafa;">${memberName}</strong>,<br><br>
-                wir möchten dich freundlich daran erinnern, dass die folgende Rechnung noch offen ist. Möglicherweise hat sich die Zahlung mit dieser Erinnerung bereits überschnitten — in diesem Fall kannst du diese Nachricht einfach ignorieren.
+                vielen Dank! Wir bestätigen den Eingang deiner Zahlung für die Rechnung <strong style="color: #fafafa;">${invoiceNumber}</strong> über <strong style="color: #22c55e;">${formattedAmount} €</strong>.
               </p>
-
-              <div style="background-color: #27272a; border-radius: 12px; padding: 25px; margin: 25px 0; border-left: 4px solid #eab308;">
-                <table style="width: 100%; border-collapse: collapse;">
-                  <tr>
-                    <td style="padding: 8px 0; color: #71717a; font-size: 13px;">Rechnungsnr.</td>
-                    <td style="padding: 8px 0; color: #fafafa; font-size: 13px; text-align: right; font-weight: bold;">${invoiceNumber}</td>
-                  </tr>
-                  <tr>
-                    <td style="padding: 8px 0; color: #71717a; font-size: 13px;">Beschreibung</td>
-                    <td style="padding: 8px 0; color: #e4e4e7; font-size: 13px; text-align: right;">${description}</td>
-                  </tr>
-                  <tr>
-                    <td style="padding: 8px 0; color: #71717a; font-size: 13px;">Fällig seit</td>
-                    <td style="padding: 8px 0; color: #eab308; font-size: 13px; text-align: right; font-weight: bold;">${formattedDate}</td>
-                  </tr>
-                  <tr style="border-top: 1px solid #3f3f46;">
-                    <td style="padding: 12px 0 8px; color: #71717a; font-size: 14px; font-weight: bold;">Offener Betrag</td>
-                    <td style="padding: 12px 0 8px; color: #fafafa; font-size: 20px; text-align: right; font-weight: 900;">${formattedAmount} €</td>
-                  </tr>
-                </table>
-              </div>
 
               <p style="color: #a1a1aa; line-height: 1.6; margin: 0 0 15px; font-size: 13px;">
-                📎 Die Rechnung findest du als PDF im Anhang dieser E-Mail.
-              </p>
-
-              <p style="color: #a1a1aa; line-height: 1.8; margin: 0 0 25px;">
-                Wir bitten dich, den offenen Betrag zeitnah zu begleichen. Falls du Fragen zur Rechnung hast oder eine Ratenzahlung vereinbaren möchtest, melde dich gerne bei uns — wir finden gemeinsam eine Lösung.
+                📎 Deine Rechnung findest du als PDF im Anhang dieser E-Mail.
               </p>
 
               <p style="color: #a1a1aa; line-height: 1.8;">
-                Du erreichst uns jederzeit unter
+                Bei Fragen erreichst du uns jederzeit unter
                 <a href="mailto:info@salimlee-gym.de" style="color: #b00000;">info@salimlee-gym.de</a>
                 oder telefonisch unter <strong style="color: #fafafa;">+49 151 68457943</strong>.
               </p>
@@ -119,13 +94,13 @@ export async function POST(request: NextRequest) {
     })
 
     if (emailError) {
-      console.error('Mahnungs-E-Mail fehlgeschlagen:', emailError)
+      console.error('Zahlungsbestätigung fehlgeschlagen:', emailError)
       return NextResponse.json({ error: `E-Mail fehlgeschlagen: ${emailError.message}` }, { status: 500 })
     }
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Mahnungs-E-Mail fehlgeschlagen:', error)
+    console.error('Zahlungsbestätigung fehlgeschlagen:', error)
     return NextResponse.json({ error: 'E-Mail konnte nicht gesendet werden' }, { status: 500 })
   }
 }

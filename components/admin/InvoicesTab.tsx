@@ -100,10 +100,50 @@ export default function InvoicesTab({ invoices, setInvoices, members, supabase, 
     resetForm()
   }
 
+  const [sendingPaid, setSendingPaid] = useState<string | null>(null)
+
   const markAsPaid = async (id: string) => {
+    const inv = invoices.find(i => i.id === id)
+    if (!inv) return
+
+    setSendingPaid(id)
     const today = new Date().toISOString().split('T')[0]
+
     const { error } = await supabase.from('invoices').update({ status: 'paid' as InvoiceStatus, paid_date: today }).eq('id', id)
     if (!error) setInvoices(prev => prev.map(i => i.id === id ? { ...i, status: 'paid' as InvoiceStatus, paid_date: today } : i))
+
+    // Zahlungsbestätigung mit PDF senden
+    const memberEmail = members.find(m => m.id === inv.member_id)?.email
+    const memberName = getMemberName(inv.member_id)
+    if (memberEmail) {
+      try {
+        const res = await fetch('/api/invoice/send-paid', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            memberName,
+            memberEmail,
+            invoiceNumber: inv.invoice_number,
+            description: inv.description,
+            amount: inv.amount,
+            dueDate: inv.due_date,
+            paidDate: today,
+            createdAt: inv.created_at,
+            notes: inv.notes,
+          }),
+        })
+        const data = await res.json()
+        if (res.ok && !data.error) {
+          setSnackbar({ message: `Zahlungsbestätigung versendet an ${memberName}`, type: 'success' })
+        } else {
+          setSnackbar({ message: data.error || 'E-Mail fehlgeschlagen', type: 'error' })
+        }
+      } catch {
+        setSnackbar({ message: 'E-Mail fehlgeschlagen', type: 'error' })
+      }
+    }
+
+    setSendingPaid(null)
   }
 
   const [sendingDunning, setSendingDunning] = useState<string | null>(null)
@@ -133,6 +173,8 @@ export default function InvoicesTab({ invoices, setInvoices, members, supabase, 
             description: inv.description,
             amount: inv.amount,
             dueDate: inv.due_date,
+            createdAt: inv.created_at,
+            notes: inv.notes,
           }),
         })
         const data = await res.json()
@@ -330,8 +372,8 @@ export default function InvoicesTab({ invoices, setInvoices, members, supabase, 
                           Ansehen
                         </button>
                         {!isStripe && (inv.status === 'open' || inv.status === 'overdue') && (
-                          <button onClick={() => markAsPaid(inv.id)} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-green-500/10 text-green-400 border border-green-500/30 hover:bg-green-500/20 transition-all">
-                            Bezahlt
+                          <button onClick={() => markAsPaid(inv.id)} disabled={sendingPaid === inv.id} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-green-500/10 text-green-400 border border-green-500/30 hover:bg-green-500/20 transition-all disabled:opacity-50">
+                            {sendingPaid === inv.id ? 'Sendet...' : 'Bezahlt'}
                           </button>
                         )}
                         {!isStripe && inv.status === 'open' && !isOverdue && (
