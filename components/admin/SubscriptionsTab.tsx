@@ -51,6 +51,8 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [sendingReminder, setSendingReminder] = useState<string | null>(null)
+  const [fixingTax, setFixingTax] = useState(false)
+  const [taxFixed, setTaxFixed] = useState(false)
 
   // Modal state for status changes with email
   const [showStatusModal, setShowStatusModal] = useState(false)
@@ -404,6 +406,34 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
             <span className="text-dark-500 font-normal ml-2 text-sm">{filteredSubs.length} Ergebnisse</span>
           </h2>
           <div className="flex items-center gap-2">
+            {!taxFixed && (
+              <button
+                onClick={async () => {
+                  setFixingTax(true)
+                  try {
+                    const { data: { session } } = await supabase.auth.getSession()
+                    const res = await fetch('/api/admin/fix-tax-rates', {
+                      method: 'POST',
+                      headers: { Authorization: `Bearer ${session?.access_token}` },
+                    })
+                    const data = await res.json()
+                    if (res.ok) {
+                      setTaxFixed(true)
+                      showSnackbar(`MwSt aktiviert: ${data.updated} aktualisiert, ${data.skipped} bereits vorhanden`)
+                    } else {
+                      showSnackbar(data.error || 'Fehlgeschlagen', 'error')
+                    }
+                  } catch {
+                    showSnackbar('Verbindung fehlgeschlagen', 'error')
+                  }
+                  setFixingTax(false)
+                }}
+                disabled={fixingTax}
+                className="px-3 py-1.5 text-xs font-bold rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20 transition-all disabled:opacity-50"
+              >
+                {fixingTax ? 'Wird aktiviert...' : '19% MwSt aktivieren'}
+              </button>
+            )}
             {pendingSubs.length > 0 && (
               <button
                 onClick={() => setShowRemindAllModal(true)}
