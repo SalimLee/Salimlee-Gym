@@ -59,6 +59,7 @@ interface Subscription {
   notes: string | null
   payment_status?: string | null
   stripe_checkout_session_id?: string | null
+  stripe_subscription_id?: string | null
 }
 
 interface Invoice {

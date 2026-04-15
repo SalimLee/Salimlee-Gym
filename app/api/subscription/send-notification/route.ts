@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
         title: 'Kündigung bestätigt',
         color: '#ef4444',
         icon: '✕',
-        text: `deine Kündigung für <strong style="color: #fafafa;">${subscriptionName}</strong> wurde bestätigt.${effectiveDate ? ` Die Kündigung wird zum <strong style="color: #fafafa;">${effectiveDate}</strong> wirksam. Bis dahin kannst du dein Abo weiterhin nutzen.` : ''}`,
+        text: `deine Kündigung für <strong style="color: #fafafa;">${subscriptionName}</strong> wurde bestätigt. Die Kündigung ist <strong style="color: #fafafa;">sofort wirksam</strong> und es werden keine weiteren Beiträge abgebucht.`,
       },
     }
 

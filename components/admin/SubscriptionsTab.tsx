@@ -5,7 +5,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { adminDelete } from '@/lib/admin-delete'
 
 interface Member { id: string; created_at: string; updated_at: string; name: string; email: string; phone: string | null; notes: string | null; active: boolean }
-interface Subscription { id: string; created_at: string; updated_at: string; member_id: string; name: string; type: string; start_date: string; end_date: string | null; total_units: number | null; remaining_units: number | null; price: number; status: 'active' | 'expired' | 'cancelled' | 'paused' | 'pending'; notes: string | null; payment_status?: string | null; stripe_checkout_session_id?: string | null }
+interface Subscription { id: string; created_at: string; updated_at: string; member_id: string; name: string; type: string; start_date: string; end_date: string | null; total_units: number | null; remaining_units: number | null; price: number; status: 'active' | 'expired' | 'cancelled' | 'paused' | 'pending'; notes: string | null; payment_status?: string | null; stripe_checkout_session_id?: string | null; stripe_subscription_id?: string | null }
 type SubStatus = 'active' | 'expired' | 'cancelled' | 'paused' | 'pending'
 
 const STATUS_CONFIG: Record<SubStatus, { label: string; color: string; bg: string }> = {
@@ -129,6 +129,31 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
     setSendingStatus(true)
     setEmailError(null)
 
+    // Sync with Stripe first (pause/resume/cancel)
+    const stripeAction = newStatus === 'paused' ? 'pause' : newStatus === 'active' ? 'resume' : newStatus === 'cancelled' ? 'cancel' : null
+    if (stripeAction) {
+      try {
+        const stripeRes = await fetch('/api/subscription/stripe-action', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: stripeAction,
+            stripeSubscriptionId: sub.stripe_subscription_id,
+          }),
+        })
+        const stripeData = await stripeRes.json()
+        if (!stripeRes.ok) {
+          setEmailError(stripeData.error || 'Stripe-Aktion fehlgeschlagen')
+          setSendingStatus(false)
+          return
+        }
+      } catch {
+        setEmailError('Stripe-Verbindung fehlgeschlagen')
+        setSendingStatus(false)
+        return
+      }
+    }
+
     // Update status in Supabase
     const { error } = await supabase.from('subscriptions').update({ status: newStatus }).eq('id', sub.id)
     if (error) {
@@ -144,7 +169,7 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
     const memberName = getMemberName(sub.member_id)
     if (memberEmail) {
       try {
-        const effectiveDate = (newStatus === 'cancelled' || newStatus === 'paused') ? formatDateDE(getFirstOfNextMonth()) : undefined
+        const effectiveDate = newStatus === 'cancelled' ? 'Sofort' : newStatus === 'paused' ? formatDateDE(getFirstOfNextMonth()) : undefined
         const res = await fetch('/api/subscription/send-notification', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -402,22 +427,14 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
                           Fortsetzen
                         </button>
                       )}
-                      {(sub.status === 'active' || sub.status === 'paused') && !inBinding && (
+                      {(sub.status === 'active' || sub.status === 'paused') && (
                         <button
                           onClick={() => openStatusModal(sub, 'cancelled')}
-                          className="px-3 py-1.5 text-xs font-bold rounded-lg bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 transition-all"
-                          title={`Kündigung zum ${cancelDate}`}
+                          className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${inBinding ? 'bg-orange-500/10 text-orange-400 border border-orange-500/30 hover:bg-orange-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20'}`}
+                          title={inBinding ? `Sonderkündigung – Vertragslaufzeit bis ${formatDateDE(sub.end_date!)}` : 'Kündigung sofort wirksam'}
                         >
-                          Kündigen
+                          {inBinding ? 'Sonderkündigung' : 'Kündigen'}
                         </button>
-                      )}
-                      {(sub.status === 'active' || sub.status === 'paused') && inBinding && (
-                        <span
-                          className="px-3 py-1.5 text-xs rounded-lg bg-dark-800 text-dark-500 border border-dark-700 cursor-not-allowed"
-                          title={`Vertragslaufzeit bis ${formatDateDE(sub.end_date!)} – Kündigung erst danach möglich`}
-                        >
-                          Kündigen
-                        </span>
                       )}
                       {isExpired && (
                         <button onClick={() => updateStatus(sub.id, 'expired')} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 transition-all">
@@ -499,7 +516,7 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
                 {pendingAction.newStatus === 'cancelled' && (
                   <div className="flex justify-between pt-2 border-t border-dark-700">
                     <span className="text-dark-400">Kündigung wirksam ab</span>
-                    <span className="text-red-400 font-bold">{formatDateDE(getFirstOfNextMonth())}</span>
+                    <span className="text-red-400 font-bold">Sofort</span>
                   </div>
                 )}
                 {pendingAction.newStatus === 'paused' && (
@@ -511,11 +528,23 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
               </div>
 
               {pendingAction.newStatus === 'cancelled' && (
-                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-                  <p className="text-xs text-red-400">
-                    Die Kündigung wird zum <strong>{formatDateDE(getFirstOfNextMonth())}</strong> wirksam. Bis dahin kann das Mitglied das Abo weiterhin nutzen.
-                  </p>
-                </div>
+                <>
+                  {isInBindingPeriod(pendingAction.sub) && (
+                    <div className="p-3 bg-orange-500/10 border border-orange-500/20 rounded-lg">
+                      <p className="text-xs text-orange-400 font-bold">
+                        ⚠ Sonderkündigung — Vertragslaufzeit bis {formatDateDE(pendingAction.sub.end_date!)}
+                      </p>
+                      <p className="text-xs text-orange-400 mt-1">
+                        Das Abo wird trotz laufender Bindung sofort gekündigt (z.B. Umzug, Sonderkündigungsrecht). Stripe bucht ab sofort nichts mehr ab.
+                      </p>
+                    </div>
+                  )}
+                  <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+                    <p className="text-xs text-red-400">
+                      Die Kündigung wird <strong>sofort wirksam</strong>. Stripe bucht ab sofort nichts mehr ab.
+                    </p>
+                  </div>
+                </>
               )}
 
               {pendingAction.newStatus === 'paused' && (
