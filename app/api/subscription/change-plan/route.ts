@@ -56,6 +56,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Abo nicht gefunden' }, { status: 404 })
     }
 
+    // 14-Tage-Widerrufsfrist ab created_at prüfen
+    const REVOCATION_DAYS = 14
+    const deadline = new Date(sub.created_at)
+    deadline.setDate(deadline.getDate() + REVOCATION_DAYS)
+    if (Date.now() > deadline.getTime()) {
+      return NextResponse.json(
+        { error: 'Dieser Benutzer ist in der Vertragslaufzeit und kann nicht wechseln und widerrufen.' },
+        { status: 403 }
+      )
+    }
+
     // Laufzeit neu berechnen
     const newPrice = newConfig.unitAmount / 100
     let newEndDateIso: string | null = null

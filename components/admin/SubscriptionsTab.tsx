@@ -48,6 +48,21 @@ function isInBindingPeriod(sub: Subscription): boolean {
   return new Date(sub.end_date).getTime() > new Date().getTime()
 }
 
+/** 14-Tage-Widerrufsfrist ab Vertragserstellung (created_at) */
+const REVOCATION_DAYS = 14
+function getRevocationDeadline(sub: Subscription): Date {
+  const d = new Date(sub.created_at)
+  d.setDate(d.getDate() + REVOCATION_DAYS)
+  return d
+}
+function isWithinRevocationPeriod(sub: Subscription): boolean {
+  return new Date().getTime() <= getRevocationDeadline(sub).getTime()
+}
+function daysLeftInRevocation(sub: Subscription): number {
+  const diff = getRevocationDeadline(sub).getTime() - new Date().getTime()
+  return Math.ceil(diff / (1000 * 60 * 60 * 24))
+}
+
 export default function SubscriptionsTab({ subscriptions, setSubscriptions, members, supabase, onRefresh }: SubscriptionsTabProps) {
   const [filter, setFilter] = useState<SubStatus | 'all'>('all')
   const [search, setSearch] = useState('')
@@ -815,15 +830,21 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
       )}
 
       {/* Tarifwechsel Modal */}
-      {showChangePlanModal && changePlanSub && (
+      {showChangePlanModal && changePlanSub && (() => {
+        const canChange = isWithinRevocationPeriod(changePlanSub)
+        const daysLeft = daysLeftInRevocation(changePlanSub)
+        const deadline = getRevocationDeadline(changePlanSub)
+        return (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => !changingPlan && setShowChangePlanModal(false)}>
           <div className="bg-dark-900 border border-dark-700 rounded-2xl w-full max-w-lg shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="p-5 border-b border-dark-800 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-purple-500/20 text-purple-400 flex items-center justify-center text-lg">
-                ⇄
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg ${canChange ? 'bg-purple-500/20 text-purple-400' : 'bg-red-500/20 text-red-400'}`}>
+                {canChange ? '⇄' : '✕'}
               </div>
               <div>
-                <h3 className="font-bold text-dark-100 text-lg">Tarif wechseln</h3>
+                <h3 className="font-bold text-dark-100 text-lg">
+                  {canChange ? 'Tarif wechseln' : 'Wechsel nicht möglich'}
+                </h3>
                 <p className="text-dark-500 text-sm">
                   {getMemberName(changePlanSub.member_id)} – aktuell: {changePlanSub.name}
                 </p>
@@ -833,6 +854,14 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
             <div className="p-5 space-y-4">
               <div className="bg-dark-800/50 rounded-xl p-4 space-y-2 text-sm">
                 <div className="flex justify-between">
+                  <span className="text-dark-400">Vertrag erstellt</span>
+                  <span className="text-dark-100 font-medium">{formatDateDE(changePlanSub.created_at)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-dark-400">Widerrufsfrist bis</span>
+                  <span className={`font-medium ${canChange ? 'text-dark-100' : 'text-red-400'}`}>{formatDateDE(deadline)}</span>
+                </div>
+                <div className="flex justify-between">
                   <span className="text-dark-400">Aktueller Tarif</span>
                   <span className="text-dark-100 font-medium">{changePlanSub.name}</span>
                 </div>
@@ -840,45 +869,60 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
                   <span className="text-dark-400">Aktueller Preis</span>
                   <span className="text-dark-100 font-medium">{Number(changePlanSub.price).toFixed(0)} €</span>
                 </div>
-                {changePlanSub.end_date && (
-                  <div className="flex justify-between">
-                    <span className="text-dark-400">Aktuelles Ende</span>
-                    <span className="text-dark-300">{formatDateDE(changePlanSub.end_date)}</span>
+              </div>
+
+              {!canChange ? (
+                <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+                  <p className="text-sm text-red-400 font-bold mb-1">
+                    Dieser Benutzer ist in der Vertragslaufzeit und kann nicht wechseln und widerrufen.
+                  </p>
+                  <p className="text-xs text-red-400/80">
+                    Die 14-tägige Widerrufsfrist endete am {formatDateDE(deadline)}.
+                    Ein Tarifwechsel ist nur innerhalb der gesetzlichen Widerrufsfrist möglich.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
+                    <p className="text-xs text-green-400">
+                      <strong>In Widerrufsfrist:</strong> Noch {daysLeft} Tag{daysLeft !== 1 ? 'e' : ''}
+                      bis zum Ende am {formatDateDE(deadline)}. Wechsel ist möglich.
+                    </p>
                   </div>
-                )}
-              </div>
 
-              <div>
-                <label className="block text-sm font-medium text-dark-300 mb-2">
-                  Neuer Tarif
-                </label>
-                <select
-                  value={selectedPlanId}
-                  onChange={(e) => setSelectedPlanId(e.target.value)}
-                  className="w-full px-4 py-3 bg-dark-800/50 border border-dark-700 rounded-xl text-dark-100 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 text-sm"
-                >
-                  <option value="">Tarif wählen…</option>
-                  {PLAN_OPTIONS.map(p => (
-                    <option key={p.id} value={p.id}>{p.label} — {p.price} €/Monat</option>
-                  ))}
-                </select>
-              </div>
+                  <div>
+                    <label className="block text-sm font-medium text-dark-300 mb-2">
+                      Neuer Tarif
+                    </label>
+                    <select
+                      value={selectedPlanId}
+                      onChange={(e) => setSelectedPlanId(e.target.value)}
+                      className="w-full px-4 py-3 bg-dark-800/50 border border-dark-700 rounded-xl text-dark-100 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 text-sm"
+                    >
+                      <option value="">Tarif wählen…</option>
+                      {PLAN_OPTIONS.map(p => (
+                        <option key={p.id} value={p.id}>{p.label} — {p.price} €/Monat</option>
+                      ))}
+                    </select>
+                  </div>
 
-              <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg">
-                {changePlanSub.status === 'pending' ? (
-                  <p className="text-xs text-purple-400">
-                    <strong>Hinweis:</strong> Dieses Abo ist noch nicht aktiv — der alte Zahlungslink wird
-                    deaktiviert und das Abo auf den neuen Tarif umgestellt. Danach bitte auf
-                    <strong> „Erinnerung"</strong> klicken, um den neuen Zahlungslink an das Mitglied zu senden.
-                  </p>
-                ) : (
-                  <p className="text-xs text-purple-400">
-                    <strong>Hinweis:</strong> Der Wechsel wird sofort auf Stripe übertragen.
-                    Während einer laufenden Trial wird nichts abgebucht.
-                    Nach Trial-Ende gilt der neue Preis ab der nächsten Abrechnungsperiode (keine Proration).
-                  </p>
-                )}
-              </div>
+                  <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg">
+                    {changePlanSub.status === 'pending' ? (
+                      <p className="text-xs text-purple-400">
+                        <strong>Hinweis:</strong> Dieses Abo ist noch nicht aktiv — der alte Zahlungslink wird
+                        deaktiviert und das Abo auf den neuen Tarif umgestellt. Danach bitte auf
+                        <strong> „Erinnerung"</strong> klicken, um den neuen Zahlungslink an das Mitglied zu senden.
+                      </p>
+                    ) : (
+                      <p className="text-xs text-purple-400">
+                        <strong>Hinweis:</strong> Der Wechsel wird sofort auf Stripe übertragen.
+                        Während einer laufenden Trial wird nichts abgebucht.
+                        Nach Trial-Ende gilt der neue Preis ab der nächsten Abrechnungsperiode (keine Proration).
+                      </p>
+                    )}
+                  </div>
+                </>
+              )}
 
               {changePlanError && (
                 <div className="p-2 bg-red-500/10 border border-red-500/30 rounded-lg">
@@ -893,19 +937,22 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
                 disabled={changingPlan}
                 className="flex-1 px-4 py-3 text-sm font-bold rounded-xl bg-dark-800 text-dark-300 border border-dark-700 hover:border-dark-600 transition-all disabled:opacity-50"
               >
-                Abbrechen
+                {canChange ? 'Abbrechen' : 'Schließen'}
               </button>
-              <button
-                onClick={confirmChangePlan}
-                disabled={changingPlan || !selectedPlanId}
-                className="flex-1 px-4 py-3 text-sm font-bold rounded-xl bg-purple-500/20 text-purple-400 border border-purple-500/30 hover:bg-purple-500/30 transition-all disabled:opacity-50"
-              >
-                {changingPlan ? 'Wird gewechselt…' : 'Tarif wechseln'}
-              </button>
+              {canChange && (
+                <button
+                  onClick={confirmChangePlan}
+                  disabled={changingPlan || !selectedPlanId}
+                  className="flex-1 px-4 py-3 text-sm font-bold rounded-xl bg-purple-500/20 text-purple-400 border border-purple-500/30 hover:bg-purple-500/30 transition-all disabled:opacity-50"
+                >
+                  {changingPlan ? 'Wird gewechselt…' : 'Tarif wechseln'}
+                </button>
+              )}
             </div>
           </div>
         </div>
-      )}
+        )
+      })()}
 
       {/* Snackbar */}
       {snackbar && (
