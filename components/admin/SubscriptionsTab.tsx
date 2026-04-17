@@ -546,7 +546,7 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
                           -1
                         </button>
                       )}
-                      {(sub.status === 'active' || sub.status === 'paused' || sub.status === 'pending') && sub.stripe_subscription_id && sub.type !== 'punch_card' && (
+                      {(sub.status === 'active' || sub.status === 'paused' || sub.status === 'pending') && (sub.stripe_subscription_id || sub.stripe_checkout_session_id) && sub.type !== 'punch_card' && (
                         <button
                           onClick={() => openChangePlanModal(sub)}
                           className="px-3 py-1.5 text-xs font-bold rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/30 hover:bg-purple-500/20 transition-all"
@@ -865,11 +865,19 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
               </div>
 
               <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg">
-                <p className="text-xs text-purple-400">
-                  <strong>Hinweis:</strong> Der Wechsel wird sofort auf Stripe übertragen.
-                  Während einer laufenden Trial wird nichts abgebucht.
-                  Nach Trial-Ende gilt der neue Preis ab der nächsten Abrechnungsperiode (keine Proration).
-                </p>
+                {changePlanSub.status === 'pending' ? (
+                  <p className="text-xs text-purple-400">
+                    <strong>Hinweis:</strong> Dieses Abo ist noch nicht aktiv — der alte Zahlungslink wird
+                    deaktiviert und das Abo auf den neuen Tarif umgestellt. Danach bitte auf
+                    <strong> „Erinnerung"</strong> klicken, um den neuen Zahlungslink an das Mitglied zu senden.
+                  </p>
+                ) : (
+                  <p className="text-xs text-purple-400">
+                    <strong>Hinweis:</strong> Der Wechsel wird sofort auf Stripe übertragen.
+                    Während einer laufenden Trial wird nichts abgebucht.
+                    Nach Trial-Ende gilt der neue Preis ab der nächsten Abrechnungsperiode (keine Proration).
+                  </p>
+                )}
               </div>
 
               {changePlanError && (

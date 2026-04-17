@@ -9,11 +9,16 @@ const supabaseAdmin = createClient(
 
 /**
  * Wechselt den Tarif eines bestehenden Abos.
- * - Aktualisiert Stripe Subscription (Preis, Metadaten, cancel_at)
- * - Behält Trial-Ende bei (keine sofortige Abbuchung während Trial)
- * - Aktualisiert Supabase (name, price, end_date)
  *
- * Hinweis: Wechsel von/zu 10er-Karte ist nicht möglich (payment vs. subscription mode).
+ * Zwei Fälle:
+ * A) Abo hat Stripe-Subscription (active/paused/active-with-trial):
+ *    - Stripe Subscription updaten (neuer Price, Tax Rate, Metadaten, cancel_at)
+ *    - Trial bleibt erhalten, proration_behavior: 'none'
+ *
+ * B) Abo ist pending, nur Checkout-Session existiert (Kunde hat Link noch nicht geklickt):
+ *    - Alte Checkout-Session läuft aus
+ *    - Supabase (name, price, end_date) wird upgedatet
+ *    - Admin klickt danach "Erinnerung" → neuer Link mit neuem Tarif geht raus
  */
 export async function POST(request: NextRequest) {
   try {
@@ -41,7 +46,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Supabase-Abo laden
     const { data: sub, error: subError } = await supabaseAdmin
       .from('subscriptions')
       .select('*')
@@ -52,107 +56,111 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Abo nicht gefunden' }, { status: 404 })
     }
 
-    if (!sub.stripe_subscription_id) {
-      return NextResponse.json(
-        { error: 'Kein Stripe-Abo verknüpft. Tarifwechsel nur für Stripe-Abos möglich.' },
-        { status: 400 }
-      )
-    }
-
-    // Stripe-Subscription laden
-    let stripeSub
-    try {
-      stripeSub = await stripe.subscriptions.retrieve(sub.stripe_subscription_id)
-    } catch {
-      return NextResponse.json(
-        { error: 'Stripe-Subscription nicht gefunden' },
-        { status: 404 }
-      )
-    }
-
-    if (stripeSub.status === 'canceled') {
-      return NextResponse.json(
-        { error: 'Stripe-Subscription ist bereits gekündigt' },
-        { status: 400 }
-      )
-    }
-
-    const currentItem = stripeSub.items.data[0]
-    if (!currentItem) {
-      return NextResponse.json(
-        { error: 'Stripe-Subscription hat keine Line Items' },
-        { status: 500 }
-      )
-    }
-
-    // Neuen Stripe-Preis besorgen
-    const [newPriceId, taxRateId] = await Promise.all([
-      getOrCreateStripePrice(newMembershipId),
-      getOrCreateTaxRate(),
-    ])
-
-    // Neues cancel_at berechnen (bei Fix-Laufzeit vom Start-Date an)
-    // Für monatlich kündbar: cancel_at entfernen
-    const startTs = stripeSub.start_date || stripeSub.created
-    const startDate = new Date(startTs * 1000)
-    let newCancelAt: number | null = null
+    // Laufzeit neu berechnen
+    const newPrice = newConfig.unitAmount / 100
     let newEndDateIso: string | null = null
 
-    if (newConfig.intervalCount) {
-      const endDate = new Date(startDate)
-      endDate.setMonth(endDate.getMonth() + newConfig.intervalCount)
-      newCancelAt = Math.floor(endDate.getTime() / 1000)
-      newEndDateIso = endDate.toISOString().slice(0, 10)
-    }
+    // ─── Fall A: Stripe-Subscription existiert ───────────────────────────
+    if (sub.stripe_subscription_id) {
+      let stripeSub
+      try {
+        stripeSub = await stripe.subscriptions.retrieve(sub.stripe_subscription_id)
+      } catch {
+        return NextResponse.json({ error: 'Stripe-Subscription nicht gefunden' }, { status: 404 })
+      }
 
-    // Stripe Subscription updaten:
-    // - Neues Line Item (ersetzt altes)
-    // - Tax Rate neu setzen
-    // - Metadaten updaten (membership_id, cancel_after_months)
-    // - proration_behavior: 'none' — während Trial keine Charges, nach Trial fair ab neuer Periode
-    // - trial_end bleibt unverändert (Stripe fasst es nicht an, wenn nicht übergeben)
-    const updateParams: Parameters<typeof stripe.subscriptions.update>[1] = {
-      items: [
-        {
-          id: currentItem.id,
-          price: newPriceId,
-          tax_rates: [taxRateId],
+      if (stripeSub.status === 'canceled') {
+        return NextResponse.json({ error: 'Stripe-Subscription ist bereits gekündigt' }, { status: 400 })
+      }
+
+      const currentItem = stripeSub.items.data[0]
+      if (!currentItem) {
+        return NextResponse.json({ error: 'Stripe-Subscription hat keine Line Items' }, { status: 500 })
+      }
+
+      const [newPriceId, taxRateId] = await Promise.all([
+        getOrCreateStripePrice(newMembershipId),
+        getOrCreateTaxRate(),
+      ])
+
+      // Neues cancel_at vom Original-Start-Datum aus berechnen
+      const startTs = stripeSub.start_date || stripeSub.created
+      const startDate = new Date(startTs * 1000)
+      let newCancelAt: number | null = null
+
+      if (newConfig.intervalCount) {
+        const endDate = new Date(startDate)
+        endDate.setMonth(endDate.getMonth() + newConfig.intervalCount)
+        newCancelAt = Math.floor(endDate.getTime() / 1000)
+        newEndDateIso = endDate.toISOString().slice(0, 10)
+      }
+
+      const updateParams: Parameters<typeof stripe.subscriptions.update>[1] = {
+        items: [{ id: currentItem.id, price: newPriceId, tax_rates: [taxRateId] }],
+        default_tax_rates: [taxRateId],
+        proration_behavior: 'none',
+        metadata: {
+          ...stripeSub.metadata,
+          subscription_id: subscriptionId,
+          membership_id: newMembershipId,
+          ...(newConfig.intervalCount
+            ? { cancel_after_months: String(newConfig.intervalCount) }
+            : { cancel_after_months: '' }),
         },
-      ],
-      default_tax_rates: [taxRateId],
-      proration_behavior: 'none',
-      metadata: {
-        ...stripeSub.metadata,
-        subscription_id: subscriptionId,
-        membership_id: newMembershipId,
-        ...(newConfig.intervalCount
-          ? { cancel_after_months: String(newConfig.intervalCount) }
-          : { cancel_after_months: '' }),
-      },
-    }
+      }
 
-    if (newCancelAt) {
-      updateParams.cancel_at = newCancelAt
+      if (newCancelAt) {
+        updateParams.cancel_at = newCancelAt
+      } else {
+        updateParams.cancel_at = null
+      }
+
+      await stripe.subscriptions.update(sub.stripe_subscription_id, updateParams)
+    }
+    // ─── Fall B: Nur Checkout-Session, noch nicht durchgeklickt ─────────
+    else if (sub.stripe_checkout_session_id) {
+      // Alte Session laufen lassen (sofern noch offen)
+      try {
+        const oldSession = await stripe.checkout.sessions.retrieve(sub.stripe_checkout_session_id)
+        if (oldSession.status === 'open') {
+          await stripe.checkout.sessions.expire(sub.stripe_checkout_session_id)
+        }
+      } catch {
+        // Session bereits abgelaufen/weg — ignorieren
+      }
+
+      // end_date für Fix-Laufzeit ab Start-Date
+      if (newConfig.intervalCount && sub.start_date) {
+        const startDate = new Date(sub.start_date)
+        const endDate = new Date(startDate)
+        endDate.setMonth(endDate.getMonth() + newConfig.intervalCount)
+        newEndDateIso = endDate.toISOString().slice(0, 10)
+      }
+      // Neue Checkout-Session wird erst beim nächsten "Erinnerung"-Klick
+      // via send-reminder erzeugt (nutzt dann den aktualisierten sub.name)
     } else {
-      // Monatlich kündbar → bestehendes cancel_at entfernen
-      updateParams.cancel_at = null
+      return NextResponse.json(
+        { error: 'Abo hat weder Stripe-Subscription noch Checkout-Session. Bitte Abo löschen und neu anlegen.' },
+        { status: 400 }
+      )
     }
 
-    await stripe.subscriptions.update(sub.stripe_subscription_id, updateParams)
+    // Supabase updaten (beide Fälle)
+    const updatePayload: Record<string, unknown> = {
+      name: newConfig.name,
+      price: newPrice,
+    }
+    if (newEndDateIso !== null || newConfig.intervalCount) {
+      updatePayload.end_date = newEndDateIso
+    }
 
-    // Supabase updaten
-    const newPrice = newConfig.unitAmount / 100
     const { error: updateError } = await supabaseAdmin
       .from('subscriptions')
-      .update({
-        name: newConfig.name,
-        price: newPrice,
-        end_date: newEndDateIso,
-      })
+      .update(updatePayload)
       .eq('id', subscriptionId)
 
     if (updateError) {
-      console.error('Supabase-Update nach Stripe-Plan-Wechsel fehlgeschlagen:', updateError)
+      console.error('Supabase-Update nach Tarifwechsel fehlgeschlagen:', updateError)
       return NextResponse.json(
         { error: 'Stripe wurde aktualisiert, aber Supabase-Update fehlgeschlagen. Bitte manuell prüfen.' },
         { status: 500 }
@@ -164,6 +172,7 @@ export async function POST(request: NextRequest) {
       newName: newConfig.name,
       newPrice,
       newEndDate: newEndDateIso,
+      pendingCheckout: !sub.stripe_subscription_id,
     })
   } catch (error) {
     console.error('Tarifwechsel fehlgeschlagen:', error)
