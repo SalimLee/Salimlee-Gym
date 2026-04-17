@@ -4,6 +4,15 @@ import { useState, useEffect, useCallback } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { adminDelete } from '@/lib/admin-delete'
 
+const PLAN_OPTIONS: { id: string; label: string; price: number }[] = [
+  { id: 'erwachsene_6', label: 'Erwachsene & Jugendliche – 6 Monate', price: 90 },
+  { id: 'erwachsene_12', label: 'Erwachsene & Jugendliche – 12 Monate', price: 80 },
+  { id: 'kinder_12', label: 'Kinder (3–14 Jahre) – 12 Monate', price: 50 },
+  { id: 'monatlich', label: 'Monatlich kündbar', price: 120 },
+  { id: 'schueler_6', label: 'Schüler/Azubi/Student – 6 Monate', price: 55 },
+  { id: 'schueler_monatlich', label: 'Schüler/Azubi/Student – Monatlich', price: 80 },
+]
+
 interface Member { id: string; created_at: string; updated_at: string; name: string; email: string; phone: string | null; notes: string | null; active: boolean }
 interface Subscription { id: string; created_at: string; updated_at: string; member_id: string; name: string; type: string; start_date: string; end_date: string | null; total_units: number | null; remaining_units: number | null; price: number; status: 'active' | 'expired' | 'cancelled' | 'paused' | 'pending'; notes: string | null; payment_status?: string | null; stripe_checkout_session_id?: string | null; stripe_subscription_id?: string | null }
 type SubStatus = 'active' | 'expired' | 'cancelled' | 'paused' | 'pending'
@@ -66,6 +75,13 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
   const [showRemindAllModal, setShowRemindAllModal] = useState(false)
   const [sendingRemindAll, setSendingRemindAll] = useState(false)
   const [remindAllProgress, setRemindAllProgress] = useState({ sent: 0, failed: 0, total: 0 })
+
+  // Tarifwechsel
+  const [showChangePlanModal, setShowChangePlanModal] = useState(false)
+  const [changePlanSub, setChangePlanSub] = useState<Subscription | null>(null)
+  const [selectedPlanId, setSelectedPlanId] = useState<string>('')
+  const [changingPlan, setChangingPlan] = useState(false)
+  const [changePlanError, setChangePlanError] = useState<string | null>(null)
 
   const showSnackbar = useCallback((message: string, type: 'success' | 'error' = 'success') => {
     setSnackbar({ message, type })
@@ -298,6 +314,46 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
     }
   }
 
+  const openChangePlanModal = (sub: Subscription) => {
+    setChangePlanSub(sub)
+    setSelectedPlanId('')
+    setChangePlanError(null)
+    setShowChangePlanModal(true)
+  }
+
+  const confirmChangePlan = async () => {
+    if (!changePlanSub || !selectedPlanId) return
+    setChangingPlan(true)
+    setChangePlanError(null)
+    try {
+      const res = await fetch('/api/subscription/change-plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subscriptionId: changePlanSub.id,
+          newMembershipId: selectedPlanId,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) {
+        setChangePlanError(data.error || 'Tarifwechsel fehlgeschlagen')
+        setChangingPlan(false)
+        return
+      }
+      setSubscriptions(prev => prev.map(s => s.id === changePlanSub.id
+        ? { ...s, name: data.newName, price: data.newPrice, end_date: data.newEndDate }
+        : s))
+      showSnackbar(`Tarif gewechselt zu ${data.newName}`)
+      setShowChangePlanModal(false)
+      setChangePlanSub(null)
+      setSelectedPlanId('')
+    } catch {
+      setChangePlanError('Verbindung fehlgeschlagen')
+    } finally {
+      setChangingPlan(false)
+    }
+  }
+
   const updateUnits = async (id: string, remaining: number) => {
     const { error } = await supabase.from('subscriptions').update({ remaining_units: remaining }).eq('id', id)
     if (!error) {
@@ -488,6 +544,15 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
                           title="Eine Einheit abziehen"
                         >
                           -1
+                        </button>
+                      )}
+                      {(sub.status === 'active' || sub.status === 'paused') && sub.stripe_subscription_id && sub.type !== 'punch_card' && (
+                        <button
+                          onClick={() => openChangePlanModal(sub)}
+                          className="px-3 py-1.5 text-xs font-bold rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/30 hover:bg-purple-500/20 transition-all"
+                          title="Auf anderen Tarif wechseln"
+                        >
+                          Tarif wechseln
                         </button>
                       )}
                       {sub.status === 'active' && (
@@ -743,6 +808,91 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
                 className="flex-1 px-4 py-3 text-sm font-bold rounded-xl bg-orange-500/20 text-orange-400 border border-orange-500/30 hover:bg-orange-500/30 transition-all disabled:opacity-50"
               >
                 {sendingRemindAll ? 'Wird gesendet...' : `Ja, alle ${pendingSubs.length} erinnern`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tarifwechsel Modal */}
+      {showChangePlanModal && changePlanSub && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => !changingPlan && setShowChangePlanModal(false)}>
+          <div className="bg-dark-900 border border-dark-700 rounded-2xl w-full max-w-lg shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="p-5 border-b border-dark-800 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-purple-500/20 text-purple-400 flex items-center justify-center text-lg">
+                ⇄
+              </div>
+              <div>
+                <h3 className="font-bold text-dark-100 text-lg">Tarif wechseln</h3>
+                <p className="text-dark-500 text-sm">
+                  {getMemberName(changePlanSub.member_id)} – aktuell: {changePlanSub.name}
+                </p>
+              </div>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div className="bg-dark-800/50 rounded-xl p-4 space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-dark-400">Aktueller Tarif</span>
+                  <span className="text-dark-100 font-medium">{changePlanSub.name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-dark-400">Aktueller Preis</span>
+                  <span className="text-dark-100 font-medium">{Number(changePlanSub.price).toFixed(0)} €</span>
+                </div>
+                {changePlanSub.end_date && (
+                  <div className="flex justify-between">
+                    <span className="text-dark-400">Aktuelles Ende</span>
+                    <span className="text-dark-300">{formatDateDE(changePlanSub.end_date)}</span>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-dark-300 mb-2">
+                  Neuer Tarif
+                </label>
+                <select
+                  value={selectedPlanId}
+                  onChange={(e) => setSelectedPlanId(e.target.value)}
+                  className="w-full px-4 py-3 bg-dark-800/50 border border-dark-700 rounded-xl text-dark-100 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 text-sm"
+                >
+                  <option value="">Tarif wählen…</option>
+                  {PLAN_OPTIONS.map(p => (
+                    <option key={p.id} value={p.id}>{p.label} — {p.price} €/Monat</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg">
+                <p className="text-xs text-purple-400">
+                  <strong>Hinweis:</strong> Der Wechsel wird sofort auf Stripe übertragen.
+                  Während einer laufenden Trial wird nichts abgebucht.
+                  Nach Trial-Ende gilt der neue Preis ab der nächsten Abrechnungsperiode (keine Proration).
+                </p>
+              </div>
+
+              {changePlanError && (
+                <div className="p-2 bg-red-500/10 border border-red-500/30 rounded-lg">
+                  <p className="text-xs text-red-400 font-medium">{changePlanError}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="p-5 border-t border-dark-800 flex gap-3">
+              <button
+                onClick={() => { setShowChangePlanModal(false); setChangePlanSub(null); setSelectedPlanId('') }}
+                disabled={changingPlan}
+                className="flex-1 px-4 py-3 text-sm font-bold rounded-xl bg-dark-800 text-dark-300 border border-dark-700 hover:border-dark-600 transition-all disabled:opacity-50"
+              >
+                Abbrechen
+              </button>
+              <button
+                onClick={confirmChangePlan}
+                disabled={changingPlan || !selectedPlanId}
+                className="flex-1 px-4 py-3 text-sm font-bold rounded-xl bg-purple-500/20 text-purple-400 border border-purple-500/30 hover:bg-purple-500/30 transition-all disabled:opacity-50"
+              >
+                {changingPlan ? 'Wird gewechselt…' : 'Tarif wechseln'}
               </button>
             </div>
           </div>
