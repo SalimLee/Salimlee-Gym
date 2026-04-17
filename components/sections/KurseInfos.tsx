@@ -1,6 +1,6 @@
 'use client'
 
-import { Swords, Dumbbell, Baby, UserCheck, Euro, Clock, Gift, MapPin, Info } from 'lucide-react'
+import { Swords, Dumbbell, Baby, UserCheck, Users, Euro, Clock, Gift, MapPin, Info } from 'lucide-react'
 
 export function KurseInfos() {
   const kurse = [
@@ -8,6 +8,11 @@ export function KurseInfos() {
       icon: Dumbbell,
       label: 'Erwachsenenkurse',
       detail: 'MO, MI & FR\nKurs · 19:00–20:00\nFreies Training · 17:00–19:00',
+    },
+    {
+      icon: Users,
+      label: 'Frauenkurse',
+      detail: 'DI & DO · 18:30–19:30',
     },
     {
       icon: Baby,
