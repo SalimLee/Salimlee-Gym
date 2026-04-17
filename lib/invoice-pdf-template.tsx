@@ -161,6 +161,7 @@ export function InvoicePDFDocument(props: InvoicePDFProps) {
         {/* Footer */}
         <View style={styles.footer}>
           <Text>Salim Lee Boxing & Fitness Gym · Wörthstrasse 17 · 72764 Reutlingen · USt-IdNr. folgt</Text>
+          <Text>IBAN: LT94 3250 0682 1087 9885 · BIC: REVOLT21</Text>
         </View>
       </Page>
     </Document>
