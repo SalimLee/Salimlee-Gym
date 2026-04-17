@@ -90,7 +90,7 @@ export const PRICES: PriceItem[] = [
   { id: '7', name: '10er Karte Personaltraining', price: 'Auf Anfrage', discount: 'Vorauszahlung', category: 'personal' },
   { id: '8', name: 'Probetraining Personaltraining (einmalig)', price: '40€', discount: null, category: 'trial' },
   { id: '9', name: 'Probetraining Kurse (max. 2 Kurse)', price: 'Kostenlos', discount: 'Unverbindlich', category: 'trial' },
-  { id: '10', name: 'Halbjährliche Service Pauschale', price: '40€', discount: 'Halbjährlich fällig', category: 'service' },
+  { id: '10', name: 'Halbjährliche Service Pauschale', price: '30€', discount: 'Halbjährlich fällig', category: 'service' },
 ]
 
 export const STATS: Stat[] = [

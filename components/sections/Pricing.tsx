@@ -66,7 +66,7 @@ export function Pricing() {
                         <div className="text-sm text-brand-400 mt-1">{item.discount}</div>
                       )}
                       {item.hasServiceFee && (
-                        <div className="text-xs text-dark-500 mt-1">zzgl. 40€ halbjährliche Service Pauschale</div>
+                        <div className="text-xs text-dark-500 mt-1">zzgl. 30€ halbjährliche Service Pauschale</div>
                       )}
                     </div>
                     <div className="text-right ml-4">

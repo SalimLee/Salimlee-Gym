@@ -52,6 +52,13 @@ export async function POST(request: NextRequest) {
         subscription_id: subscriptionId,
         membership_id: membershipId,
       },
+      custom_text: {
+        submit: {
+          message: config.recurring
+            ? 'Hinweis: Zusätzlich wird eine Servicepauschale von 30 € alle 6 Monate automatisch eingezogen.'
+            : 'Einmalzahlung — keine weiteren Kosten.',
+        },
+      },
     }
 
     if (config.recurring) {

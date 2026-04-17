@@ -59,11 +59,11 @@ export const MEMBERSHIP_STRIPE_MAP: Record<string, MembershipConfig> = {
   },
 }
 
-// Servicepauschale: €40 alle 6 Monate, wird automatisch auf die Rechnung draufgepackt
+// Servicepauschale: €30 alle 6 Monate, wird automatisch auf die Rechnung draufgepackt
 export const SERVICE_FEE = {
   name: 'Servicepauschale',
   description: 'Halbjährliche Servicepauschale',
-  unitAmount: 4000, // 40€ in Cent
+  unitAmount: 3000, // 30€ in Cent
   intervalMonths: 6,
 }
 

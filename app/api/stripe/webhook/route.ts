@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
       }
 
       case 'invoice.created': {
-        // Servicepauschale: €40 alle 6 Monate automatisch auf die Rechnung drauf
+        // Servicepauschale: €30 alle 6 Monate automatisch auf die Rechnung drauf
         const createdInvoice = event.data.object as Stripe.Invoice
         const invoiceSubId = (createdInvoice as unknown as Record<string, unknown>).subscription as string | null
 
