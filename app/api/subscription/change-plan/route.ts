@@ -139,10 +139,13 @@ export async function POST(request: NextRequest) {
       // Neue Checkout-Session wird erst beim nächsten "Erinnerung"-Klick
       // via send-reminder erzeugt (nutzt dann den aktualisierten sub.name)
     } else {
-      return NextResponse.json(
-        { error: 'Abo hat weder Stripe-Subscription noch Checkout-Session. Bitte Abo löschen und neu anlegen.' },
-        { status: 400 }
-      )
+      // Kein Stripe-Link vorhanden — nur lokalen Datensatz aktualisieren
+      if (newConfig.intervalCount && sub.start_date) {
+        const startDate = new Date(sub.start_date)
+        const endDate = new Date(startDate)
+        endDate.setMonth(endDate.getMonth() + newConfig.intervalCount)
+        newEndDateIso = endDate.toISOString().slice(0, 10)
+      }
     }
 
     // Supabase updaten (beide Fälle)

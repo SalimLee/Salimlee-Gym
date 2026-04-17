@@ -546,7 +546,7 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
                           -1
                         </button>
                       )}
-                      {(sub.status === 'active' || sub.status === 'paused' || sub.status === 'pending') && (sub.stripe_subscription_id || sub.stripe_checkout_session_id) && sub.type !== 'punch_card' && (
+                      {(sub.status === 'active' || sub.status === 'paused' || sub.status === 'pending') && sub.type !== 'punch_card' && (
                         <button
                           onClick={() => openChangePlanModal(sub)}
                           className="px-3 py-1.5 text-xs font-bold rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/30 hover:bg-purple-500/20 transition-all"
