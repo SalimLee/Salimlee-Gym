@@ -11,7 +11,6 @@ const PLAN_OPTIONS: { id: string; label: string; price: number }[] = [
   { id: 'monatlich', label: 'Monatlich kündbar', price: 120 },
   { id: 'schueler_6', label: 'Schüler/Azubi/Student – 6 Monate', price: 65 },
   { id: 'schueler_12', label: 'Schüler/Azubi/Student – 12 Monate', price: 55 },
-  { id: 'schueler_monatlich', label: 'Schüler/Azubi/Student – Monatlich', price: 80 },
 ]
 
 interface Member { id: string; created_at: string; updated_at: string; name: string; email: string; phone: string | null; notes: string | null; active: boolean }
