@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { stripe, getOrCreateStripePrice, getOrCreateStripeCustomer, getOrCreateTaxRate, MEMBERSHIP_STRIPE_MAP } from '@/lib/stripe'
+import { stripe, getOrCreateStripePrice, getOrCreateStripeCustomer, getOrCreateTaxRate, getOrCreateActionCoupon, MEMBERSHIP_STRIPE_MAP } from '@/lib/stripe'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseAdmin = createClient(
@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { subscriptionId, memberEmail, memberName, membershipId } = await request.json()
+    const { subscriptionId, memberEmail, memberName, membershipId, customAction } = await request.json()
 
     if (!subscriptionId || !memberEmail || !memberName || !membershipId) {
       return NextResponse.json(
@@ -26,33 +26,71 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const config = MEMBERSHIP_STRIPE_MAP[membershipId]
+    // Für individuelle Aktionen läuft die Subscription technisch auf dem gewählten Basis-Tarif.
+    // Der Aktionsrabatt wird als repeating Coupon angehängt (siehe unten) und nach
+    // `aktionsMonate` Monaten automatisch von Stripe beendet — Subscription läuft
+    // dann regulär zum Basis-Preis weiter.
+    const isCustomAction = membershipId === 'individuell'
+    if (isCustomAction) {
+      if (
+        !customAction ||
+        typeof customAction.basisId !== 'string' ||
+        typeof customAction.aktionsPreis !== 'number' ||
+        typeof customAction.aktionsMonate !== 'number' ||
+        typeof customAction.bezeichnung !== 'string'
+      ) {
+        return NextResponse.json(
+          { error: 'customAction mit basisId, aktionsPreis, aktionsMonate und bezeichnung ist für individuelle Aktionen erforderlich' },
+          { status: 400 }
+        )
+      }
+    }
+
+    const effectiveMembershipId: string = isCustomAction ? customAction.basisId : membershipId
+
+    const config = MEMBERSHIP_STRIPE_MAP[effectiveMembershipId]
     if (!config) {
       return NextResponse.json(
-        { error: `Unbekannte Mitgliedschaft: ${membershipId}` },
+        { error: `Unbekannte Mitgliedschaft: ${effectiveMembershipId}` },
         { status: 400 }
       )
     }
 
-    // Get or create Stripe price, customer, and tax rate
-    const [priceId, customerId, taxRateId] = await Promise.all([
-      getOrCreateStripePrice(membershipId),
+    // Get or create Stripe price, customer, tax rate — und bei Aktionen zusätzlich den Coupon
+    const [priceId, customerId, taxRateId, actionCouponId] = await Promise.all([
+      getOrCreateStripePrice(effectiveMembershipId),
       getOrCreateStripeCustomer(memberEmail, memberName),
       getOrCreateTaxRate(),
+      isCustomAction
+        ? getOrCreateActionCoupon(customAction.basisId, customAction.aktionsPreis, customAction.aktionsMonate)
+        : Promise.resolve(null as string | null),
     ])
 
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
 
     // Build checkout session params
+    const baseMetadata: Record<string, string> = {
+      subscription_id: subscriptionId,
+      // Webhook/Resync nutzen membership_id als Ankerpunkt — bei Aktionen zeigt er auf den Basis-Tarif,
+      // damit bestehende Logik (Preis, Laufzeit, Servicepauschale) ohne Sonderfälle greift.
+      membership_id: effectiveMembershipId,
+      ...(isCustomAction
+        ? {
+            is_custom_action: 'true',
+            custom_action_bezeichnung: String(customAction.bezeichnung).slice(0, 250),
+            custom_action_preis_euro: String(customAction.aktionsPreis),
+            custom_action_monate: String(customAction.aktionsMonate),
+            custom_action_basis_id: String(customAction.basisId),
+          }
+        : {}),
+    }
+
     const sessionParams: Parameters<typeof stripe.checkout.sessions.create>[0] = {
       customer: customerId,
       locale: 'de',
       success_url: `${baseUrl}/zahlung-erfolgreich?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${baseUrl}/zahlung-abgebrochen`,
-      metadata: {
-        subscription_id: subscriptionId,
-        membership_id: membershipId,
-      },
+      metadata: baseMetadata,
       custom_text: {
         submit: {
           message: config.recurring
@@ -77,10 +115,15 @@ export async function POST(request: NextRequest) {
         ...(trialEnd ? { trial_end: trialEnd } : {}),
         default_tax_rates: [taxRateId],
         metadata: {
-          subscription_id: subscriptionId,
-          membership_id: membershipId,
+          ...baseMetadata,
           ...(config.intervalCount ? { cancel_after_months: String(config.intervalCount) } : {}),
         },
+      }
+
+      // Aktionsrabatt als repeating Coupon anhängen — gilt automatisch nur für die ersten
+      // `aktionsMonate` Abrechnungen und wird von Stripe danach selbst entfernt.
+      if (actionCouponId) {
+        sessionParams.discounts = [{ coupon: actionCouponId }]
       }
     } else {
       // Payment mode for one-time purchases (10er Karte)
@@ -93,17 +136,11 @@ export async function POST(request: NextRequest) {
         enabled: true,
         invoice_data: {
           description: '10er Karte – 6 Monate gültig',
-          metadata: {
-            subscription_id: subscriptionId,
-            membership_id: membershipId,
-          },
+          metadata: baseMetadata,
         },
       }
       sessionParams.payment_intent_data = {
-        metadata: {
-          subscription_id: subscriptionId,
-          membership_id: membershipId,
-        },
+        metadata: baseMetadata,
       }
     }
 

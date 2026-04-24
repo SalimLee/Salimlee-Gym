@@ -66,6 +66,17 @@ const MEMBERSHIP_DETAILS: Record<string, { price: number; months: number | null;
   '10er_karte': { price: 160, months: 6, type: 'punch_card', units: 10 },
 }
 
+// Für das „Individuelles Angebot"-Formular zur Auswahl: nur wiederkehrende Abos
+// (10er Karte ist Einmalzahlung und nicht couponfähig im recurring-Sinn).
+const CUSTOM_ACTION_BASIS_OPTIONS = [
+  { id: 'erwachsene_6', label: 'Erwachsene & Jugendliche – 6 Monate (90 €/Monat)', preis: 90 },
+  { id: 'erwachsene_12', label: 'Erwachsene & Jugendliche – 12 Monate (80 €/Monat)', preis: 80 },
+  { id: 'kinder_12', label: 'Kinder (3–14 Jahre) – 12 Monate (50 €/Monat)', preis: 50 },
+  { id: 'monatlich', label: 'Monatlich kündbar (120 €/Monat)', preis: 120 },
+  { id: 'schueler_6', label: 'Schüler / Azubi / Student – 6 Monate (65 €/Monat)', preis: 65 },
+  { id: 'schueler_12', label: 'Schüler / Azubi / Student – 12 Monate (55 €/Monat)', preis: 55 },
+]
+
 export function ContractsTab({ members, supabase, onRefresh }: ContractsTabProps) {
   const [step, setStep] = useState<Step>('form')
   const [formData, setFormData] = useState<ContractData>(INITIAL_FORM)
@@ -117,22 +128,65 @@ export function ContractsTab({ members, supabase, onRefresh }: ContractsTabProps
   }, [selectedMember, members])
 
   const updateField = useCallback((field: keyof ContractData, value: string | boolean) => {
-    setFormData((prev) => ({ ...prev, [field]: value }))
+    setFormData((prev) => {
+      // Wenn Mitgliedschaft weg von 'individuell' wechselt, die Aktion wieder resetten,
+      // damit keine inkonsistenten Daten ins PDF/Checkout gelangen.
+      if (field === 'mitgliedschaft' && value !== 'individuell') {
+        return { ...prev, [field]: value as string, customAction: undefined }
+      }
+      return { ...prev, [field]: value }
+    })
   }, [])
+
+  const updateCustomActionField = useCallback(
+    (field: 'basisId' | 'bezeichnung' | 'aktionsPreis' | 'aktionsMonate', value: string) => {
+      setFormData((prev) => {
+        const current = prev.customAction ?? {
+          basisId: '',
+          bezeichnung: '',
+          aktionsPreis: 0,
+          aktionsMonate: 0,
+          basisPreis: 0,
+        }
+        let next = { ...current, [field]: field === 'aktionsPreis' || field === 'aktionsMonate' ? Number(value) || 0 : value }
+        if (field === 'basisId') {
+          const basis = CUSTOM_ACTION_BASIS_OPTIONS.find((b) => b.id === value)
+          next = { ...next, basisId: value, basisPreis: basis?.preis ?? 0 }
+        }
+        return { ...prev, customAction: next }
+      })
+    },
+    []
+  )
 
   const isDraftValid = useMemo(() => {
     return formData.vorname.trim() !== '' && formData.nachname.trim() !== '' && formData.email.trim() !== ''
   }, [formData])
 
-  const isFormValid = useMemo(() => {
+  const isCustomActionValid = useMemo(() => {
+    const ca = formData.customAction
+    if (!ca) return false
     return (
+      ca.basisId !== '' &&
+      ca.bezeichnung.trim() !== '' &&
+      ca.aktionsMonate >= 1 &&
+      ca.aktionsPreis > 0 &&
+      ca.basisPreis > 0 &&
+      ca.aktionsPreis < ca.basisPreis
+    )
+  }, [formData])
+
+  const isFormValid = useMemo(() => {
+    const base =
       formData.vorname.trim() !== '' &&
       formData.nachname.trim() !== '' &&
       formData.email.trim() !== '' &&
       formData.mitgliedschaft !== '' &&
       formData.zahlungsweise !== ''
-    )
-  }, [formData])
+    if (!base) return false
+    if (formData.mitgliedschaft === 'individuell') return isCustomActionValid
+    return true
+  }, [formData, isCustomActionValid])
 
   const handlePreview = useCallback(async () => {
     try {
@@ -293,8 +347,18 @@ export function ContractsTab({ members, supabase, onRefresh }: ContractsTabProps
       }
 
       // 2. Create subscription with status 'pending'
-      const details = MEMBERSHIP_DETAILS[formData.mitgliedschaft]
-      const membershipLabel = MEMBERSHIP_OPTIONS.find((m) => m.id === formData.mitgliedschaft)?.label || formData.mitgliedschaft
+      // Bei individuellen Aktionen läuft die Subscription auf dem Basis-Tarif — alle Laufzeit-,
+      // Preis- und Typ-Infos stammen von dort. Die Aktionsdaten (Bezeichnung, Aktionspreis, Dauer)
+      // werden im Namen festgehalten und über die Stripe-Metadaten an Checkout/Webhook weitergegeben.
+      const isCustomAction = formData.mitgliedschaft === 'individuell'
+      const basisId = isCustomAction && formData.customAction ? formData.customAction.basisId : formData.mitgliedschaft
+      const details = MEMBERSHIP_DETAILS[basisId]
+      const baseLabel =
+        MEMBERSHIP_OPTIONS.find((m) => m.id === basisId)?.label ||
+        basisId
+      const membershipLabel = isCustomAction && formData.customAction
+        ? `Aktion: ${formData.customAction.bezeichnung} – ${baseLabel} (${formData.customAction.aktionsPreis}€ für ${formData.customAction.aktionsMonate} Monate, danach ${formData.customAction.basisPreis}€)`
+        : baseLabel
 
       let endDate: string | null = null
       if (details?.months) {
@@ -338,6 +402,16 @@ export function ContractsTab({ members, supabase, onRefresh }: ContractsTabProps
             memberName: fullName,
             membershipId: formData.mitgliedschaft,
             billingAnchorDay: parseInt(formData.abrechnungstag),
+            ...(isCustomAction && formData.customAction
+              ? {
+                  customAction: {
+                    basisId: formData.customAction.basisId,
+                    bezeichnung: formData.customAction.bezeichnung,
+                    aktionsPreis: formData.customAction.aktionsPreis,
+                    aktionsMonate: formData.customAction.aktionsMonate,
+                  },
+                }
+              : {}),
           }),
         })
         const checkoutResult = await checkoutRes.json()
@@ -564,6 +638,88 @@ export function ContractsTab({ members, supabase, onRefresh }: ContractsTabProps
                   Gilt ab 14 Jahren. Bitte vor Vertragsabschluss einen gültigen Nachweis einsehen:
                   Schülerausweis, Immatrikulationsbescheinigung oder Ausbildungs-/Arbeitsvertrag.
                 </p>
+              </div>
+            )}
+            {formData.mitgliedschaft === 'individuell' && (
+              <div className="mt-4 p-4 rounded-lg bg-brand-500/5 border border-brand-500/30 space-y-3">
+                <div>
+                  <p className="font-bold text-sm text-brand-300 mb-1">Individuelles Angebot konfigurieren</p>
+                  <p className="text-xs text-dark-400">
+                    Das Abo läuft technisch auf dem gewählten Basis-Tarif. Für die ersten N Monate wird der Aktionspreis per Stripe-Coupon angewendet, danach gilt automatisch der reguläre Tarifpreis.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-dark-300 mb-1">Bezeichnung der Aktion *</label>
+                  <input
+                    type="text"
+                    placeholder="z. B. Frauen-Aktion 2026"
+                    value={formData.customAction?.bezeichnung ?? ''}
+                    onChange={(e) => updateCustomActionField('bezeichnung', e.target.value)}
+                    className="w-full px-3 py-2 bg-dark-800 border border-dark-700 rounded-lg text-dark-100 focus:border-brand-500 focus:outline-none text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-dark-300 mb-1">Basis-Tarif *</label>
+                  <select
+                    value={formData.customAction?.basisId ?? ''}
+                    onChange={(e) => updateCustomActionField('basisId', e.target.value)}
+                    className="w-full px-3 py-2 bg-dark-800 border border-dark-700 rounded-lg text-dark-100 focus:border-brand-500 focus:outline-none text-sm"
+                  >
+                    <option value="">– Basis-Tarif wählen –</option>
+                    {CUSTOM_ACTION_BASIS_OPTIONS.map((opt) => (
+                      <option key={opt.id} value={opt.id}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-dark-300 mb-1">Aktionspreis (€/Monat) *</label>
+                    <input
+                      type="number"
+                      min={1}
+                      step={1}
+                      placeholder="z. B. 65"
+                      value={formData.customAction?.aktionsPreis || ''}
+                      onChange={(e) => updateCustomActionField('aktionsPreis', e.target.value)}
+                      className="w-full px-3 py-2 bg-dark-800 border border-dark-700 rounded-lg text-dark-100 focus:border-brand-500 focus:outline-none text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-dark-300 mb-1">Aktionsdauer (Monate) *</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={24}
+                      step={1}
+                      placeholder="z. B. 3"
+                      value={formData.customAction?.aktionsMonate || ''}
+                      onChange={(e) => updateCustomActionField('aktionsMonate', e.target.value)}
+                      className="w-full px-3 py-2 bg-dark-800 border border-dark-700 rounded-lg text-dark-100 focus:border-brand-500 focus:outline-none text-sm"
+                    />
+                  </div>
+                </div>
+
+                {formData.customAction && formData.customAction.basisPreis > 0 && (
+                  <div className="text-xs text-dark-300 bg-dark-900/60 rounded-lg p-3 border border-dark-700">
+                    <p className="font-semibold text-brand-300 mb-1">Vorschau</p>
+                    {formData.customAction.aktionsPreis > 0 && formData.customAction.aktionsMonate > 0 && formData.customAction.aktionsPreis < formData.customAction.basisPreis ? (
+                      <p>
+                        Erste <strong>{formData.customAction.aktionsMonate} {formData.customAction.aktionsMonate === 1 ? 'Monat' : 'Monate'}</strong>:
+                        <strong> {formData.customAction.aktionsPreis} €/Monat</strong>
+                        <span className="text-dark-400"> (Rabatt: {formData.customAction.basisPreis - formData.customAction.aktionsPreis} € / Monat)</span>
+                        <br />
+                        Danach regulär: <strong>{formData.customAction.basisPreis} €/Monat</strong>
+                      </p>
+                    ) : (
+                      <p className="text-yellow-300">
+                        Aktionspreis muss kleiner sein als der Basis-Tarif ({formData.customAction.basisPreis} €).
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>

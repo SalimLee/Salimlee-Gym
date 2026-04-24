@@ -10,6 +10,14 @@ import {
 } from '@react-pdf/renderer'
 
 // Types
+export interface CustomAction {
+  basisId: string          // e.g. 'erwachsene_12' — tarif auf dem das Abo läuft
+  bezeichnung: string      // z.B. "Frauen-Aktion 2026"
+  aktionsPreis: number     // in €, z.B. 65
+  aktionsMonate: number    // z.B. 3
+  basisPreis: number       // in €, regulärer Preis nach Aktion (z.B. 80)
+}
+
 export interface ContractData {
   // Mitgliedsdaten
   vorname: string
@@ -23,6 +31,7 @@ export interface ContractData {
 
   // Mitgliedschaft
   mitgliedschaft: string
+  customAction?: CustomAction
 
   // Zahlungsweise
   zahlungsweise: string
@@ -56,6 +65,7 @@ export const MEMBERSHIP_OPTIONS = [
   { id: 'schueler_6', label: 'Schüler / Azubi / Student – 6 Monate (Nachweis erforderlich)', price: '65 Euro/Monat' },
   { id: 'schueler_12', label: 'Schüler / Azubi / Student – 12 Monate (Nachweis erforderlich)', price: '55 Euro/Monat' },
   { id: '10er_karte', label: '10er Karte – 6 Monate gültig', price: '160 Euro Einmalzahlung' },
+  { id: 'individuell', label: 'Individuelles Angebot (Aktion)', price: 'siehe unten' },
 ]
 
 /**
@@ -473,15 +483,38 @@ function Page1({ data }: { data: ContractData }) {
       {/* Mitgliedschaft wählen */}
       <SectionHeader title="Mitgliedschaft wählen" />
       <View style={{ border: '1px solid #eeeeee' }}>
-        {MEMBERSHIP_OPTIONS.map((opt) => (
-          <CheckboxItem
-            key={opt.id}
-            label={opt.label}
-            price={opt.price}
-            checked={data.mitgliedschaft === opt.id}
-          />
-        ))}
+        {MEMBERSHIP_OPTIONS.map((opt) => {
+          const isIndividuell = opt.id === 'individuell'
+          const ca = data.customAction
+          const dynamicLabel =
+            isIndividuell && ca
+              ? `${opt.label} – ${ca.bezeichnung}`
+              : opt.label
+          const dynamicPrice =
+            isIndividuell && ca
+              ? `${ca.aktionsPreis} Euro/Monat (erste ${ca.aktionsMonate} Monate), danach ${ca.basisPreis} Euro/Monat`
+              : opt.price
+          return (
+            <CheckboxItem
+              key={opt.id}
+              label={dynamicLabel}
+              price={dynamicPrice}
+              checked={data.mitgliedschaft === opt.id}
+            />
+          )
+        })}
       </View>
+      {data.mitgliedschaft === 'individuell' && data.customAction && (
+        <View style={{ marginTop: 8, padding: 8, backgroundColor: LIGHT_GRAY, border: '1px solid #cccccc' }}>
+          <Text style={{ fontSize: 9, fontFamily: 'Helvetica-Bold', color: BRAND_RED, marginBottom: 4 }}>
+            Aktionsdetails – {data.customAction.bezeichnung}
+          </Text>
+          <Text style={{ fontSize: 9, color: '#1a1a1a', lineHeight: 1.4 }}>
+            Aktionspreis: {data.customAction.aktionsPreis} Euro/Monat für die ersten {data.customAction.aktionsMonate} {data.customAction.aktionsMonate === 1 ? 'Monat' : 'Monate'}.
+            Danach gilt der reguläre Tarifpreis von {data.customAction.basisPreis} Euro/Monat für die restliche Vertragslaufzeit.
+          </Text>
+        </View>
+      )}
       <Text style={styles.hint}>
         Hinweis: Zusätzlich wird eine Servicepauschale von 30 Euro alle 6 Monate automatisch eingezogen.
       </Text>

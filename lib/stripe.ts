@@ -181,6 +181,73 @@ export async function getOrCreateStripePrice(membershipId: string): Promise<stri
 }
 
 /**
+ * Finds or creates a Stripe Coupon for a custom action (e.g. "first 3 months 65€ on erwachsene_12").
+ * The coupon applies a fixed `amount_off` for `duration_in_months`. After that Stripe stops applying it
+ * automatically and the subscription bills at the regular price — no cron, no price switch needed.
+ *
+ * Coupons are de-duplicated via metadata, so the same action (basis + discount + months) reuses the
+ * same coupon across contracts.
+ */
+export async function getOrCreateActionCoupon(
+  basisId: string,
+  aktionsPreis: number,     // in €
+  aktionsMonate: number
+): Promise<string> {
+  const config = MEMBERSHIP_STRIPE_MAP[basisId]
+  if (!config) {
+    throw new Error(`Unknown basis membership ID: ${basisId}`)
+  }
+  if (!config.recurring) {
+    throw new Error(`Action coupons only supported for recurring memberships (not ${basisId})`)
+  }
+
+  const basisPreis = config.unitAmount / 100
+  const amountOffEuro = basisPreis - aktionsPreis
+  if (amountOffEuro <= 0) {
+    throw new Error(
+      `Aktionspreis (${aktionsPreis}€) muss kleiner sein als der reguläre Tarifpreis (${basisPreis}€)`
+    )
+  }
+  if (aktionsMonate < 1) {
+    throw new Error(`aktionsMonate muss mindestens 1 sein (erhalten: ${aktionsMonate})`)
+  }
+  const amountOffCents = Math.round(amountOffEuro * 100)
+
+  // Look up existing coupons by metadata — no stripe.coupons.search; we list and filter.
+  const existing = await stripe.coupons.list({ limit: 100 })
+  const match = existing.data.find(
+    c =>
+      c.valid &&
+      c.metadata?.type === 'custom_action' &&
+      c.metadata?.basis_id === basisId &&
+      c.metadata?.amount_off_cents === String(amountOffCents) &&
+      c.metadata?.duration_in_months === String(aktionsMonate) &&
+      c.amount_off === amountOffCents &&
+      c.currency === 'eur' &&
+      c.duration === 'repeating' &&
+      c.duration_in_months === aktionsMonate
+  )
+  if (match) return match.id
+
+  const coupon = await stripe.coupons.create({
+    amount_off: amountOffCents,
+    currency: 'eur',
+    duration: 'repeating',
+    duration_in_months: aktionsMonate,
+    name: `Aktion: ${aktionsPreis}€ statt ${basisPreis}€ (${aktionsMonate} Monate) – ${config.name}`,
+    metadata: {
+      type: 'custom_action',
+      basis_id: basisId,
+      amount_off_cents: String(amountOffCents),
+      duration_in_months: String(aktionsMonate),
+      aktions_preis_euro: String(aktionsPreis),
+      basis_preis_euro: String(basisPreis),
+    },
+  })
+  return coupon.id
+}
+
+/**
  * Finds or creates a Stripe Customer by email.
  */
 export async function getOrCreateStripeCustomer(
