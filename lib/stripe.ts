@@ -38,11 +38,10 @@ export const MEMBERSHIP_STRIPE_MAP: Record<string, MembershipConfig> = {
     unitAmount: 12000,
     recurring: true,
   },
-  // LEGACY – nur für bestehende Verträge, nicht mehr in UI-Dropdowns.
   schueler_6: {
     name: 'Schüler / Azubi / Student – 6 Monate',
-    description: '55 €/Monat, 6 Monate Laufzeit (nur mit Nachweis ab 14 Jahren)',
-    unitAmount: 5500,
+    description: '65 €/Monat, 6 Monate Laufzeit (nur mit Nachweis ab 14 Jahren)',
+    unitAmount: 6500,
     recurring: true,
     intervalCount: 6,
   },
@@ -138,16 +137,24 @@ export async function getOrCreateStripePrice(membershipId: string): Promise<stri
   if (existingProducts.data.length > 0) {
     productId = existingProducts.data[0].id
 
-    // Check if there's already an active price
+    // Suche nach aktivem Price mit dem aktuellen unitAmount.
+    // Wenn der Preis geändert wurde, bleibt der alte Price aktiv (für bestehende Subs)
+    // und wir legen zusätzlich einen neuen Price mit dem aktuellen Betrag an.
     const prices = await stripe.prices.list({
       product: productId,
       active: true,
-      limit: 1,
+      limit: 100,
     })
 
-    if (prices.data.length > 0) {
-      return prices.data[0].id
+    const matching = prices.data.find(
+      p => p.unit_amount === config.unitAmount &&
+           p.currency === 'eur' &&
+           (!config.recurring || p.recurring?.interval === 'month')
+    )
+    if (matching) {
+      return matching.id
     }
+    // kein passender Price vorhanden → unten neu anlegen
   } else {
     // Create new product
     const product = await stripe.products.create({

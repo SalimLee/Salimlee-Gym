@@ -30,6 +30,7 @@ const MEMBERSHIP_OPTIONS: Record<string, { value: string; label: string }[]> = {
     { value: '12 Monate (80€/mtl.)', label: '12 Monate (80€/mtl.)' },
     { value: 'Monatlich kündbar (120€/mtl.)', label: 'Monatlich kündbar (120€/mtl.)' },
     { value: '10er Karte (160€)', label: '10er Karte – 6 Monate gültig (160€)' },
+    { value: 'Schüler/Azubi/Student – 6 Monate (65€/mtl.)', label: 'Schüler/Azubi/Student – 6 Monate (65€/mtl.) · Nachweis erforderlich' },
     { value: 'Schüler/Azubi/Student – 12 Monate (55€/mtl.)', label: 'Schüler/Azubi/Student – 12 Monate (55€/mtl.) · Nachweis erforderlich' },
     { value: 'Schüler/Azubi/Student – Monatlich (80€/mtl.)', label: 'Schüler/Azubi/Student – Monatlich kündbar (80€/mtl.) · Nachweis erforderlich' },
   ],

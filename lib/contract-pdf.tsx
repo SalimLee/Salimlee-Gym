@@ -53,6 +53,7 @@ export const MEMBERSHIP_OPTIONS = [
   { id: 'erwachsene_12', label: 'Erwachsene & Jugendliche – 12 Monate', price: '80 Euro/Monat' },
   { id: 'kinder_12', label: 'Kinder (3–14 Jahre) – 12 Monate', price: '50 Euro/Monat' },
   { id: 'monatlich', label: 'Monatlich kündbar', price: '120 Euro/Monat' },
+  { id: 'schueler_6', label: 'Schüler / Azubi / Student – 6 Monate (Nachweis erforderlich)', price: '65 Euro/Monat' },
   { id: 'schueler_12', label: 'Schüler / Azubi / Student – 12 Monate (Nachweis erforderlich)', price: '55 Euro/Monat' },
   { id: 'schueler_monatlich', label: 'Schüler / Azubi / Student – Monatlich kündbar (Nachweis erforderlich)', price: '80 Euro/Monat' },
   { id: '10er_karte', label: '10er Karte – 6 Monate gültig', price: '160 Euro Einmalzahlung' },

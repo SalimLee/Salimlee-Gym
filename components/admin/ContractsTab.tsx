@@ -60,7 +60,7 @@ const MEMBERSHIP_DETAILS: Record<string, { price: number; months: number | null;
   erwachsene_12: { price: 80, months: 12, type: 'monthly' },
   kinder_12: { price: 50, months: 12, type: 'monthly' },
   monatlich: { price: 120, months: null, type: 'monthly' },
-  schueler_6: { price: 55, months: 6, type: 'monthly' }, // Legacy
+  schueler_6: { price: 65, months: 6, type: 'monthly' },
   schueler_12: { price: 55, months: 12, type: 'monthly' },
   schueler_monatlich: { price: 80, months: null, type: 'monthly' },
   '10er_karte': { price: 160, months: 6, type: 'punch_card', units: 10 },

@@ -9,6 +9,7 @@ const PLAN_OPTIONS: { id: string; label: string; price: number }[] = [
   { id: 'erwachsene_12', label: 'Erwachsene & Jugendliche – 12 Monate', price: 80 },
   { id: 'kinder_12', label: 'Kinder (3–14 Jahre) – 12 Monate', price: 50 },
   { id: 'monatlich', label: 'Monatlich kündbar', price: 120 },
+  { id: 'schueler_6', label: 'Schüler/Azubi/Student – 6 Monate', price: 65 },
   { id: 'schueler_12', label: 'Schüler/Azubi/Student – 12 Monate', price: 55 },
   { id: 'schueler_monatlich', label: 'Schüler/Azubi/Student – Monatlich', price: 80 },
 ]
