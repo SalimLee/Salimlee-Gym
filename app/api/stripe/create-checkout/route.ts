@@ -85,6 +85,25 @@ export async function POST(request: NextRequest) {
       // Payment mode for one-time purchases (10er Karte)
       sessionParams.mode = 'payment'
       sessionParams.line_items = [{ price: priceId, quantity: 1, tax_rates: [taxRateId] }]
+      // Stripe erstellt von sich aus keine Invoice bei Einmalzahlungen.
+      // Mit invoice_creation.enabled = true bekommen wir automatisch ein Invoice-Dokument
+      // inkl. PDF und zugehöriges invoice.paid / invoice.finalized Event.
+      sessionParams.invoice_creation = {
+        enabled: true,
+        invoice_data: {
+          description: '10er Karte – 6 Monate gültig',
+          metadata: {
+            subscription_id: subscriptionId,
+            membership_id: membershipId,
+          },
+        },
+      }
+      sessionParams.payment_intent_data = {
+        metadata: {
+          subscription_id: subscriptionId,
+          membership_id: membershipId,
+        },
+      }
     }
 
     const session = await stripe.checkout.sessions.create(sessionParams)

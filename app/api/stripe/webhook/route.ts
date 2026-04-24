@@ -6,7 +6,8 @@ import type Stripe from 'stripe'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  { auth: { autoRefreshToken: false, persistSession: false } }
 )
 
 export async function POST(request: NextRequest) {
@@ -37,46 +38,73 @@ export async function POST(request: NextRequest) {
     }
 
     switch (event.type) {
-      case 'checkout.session.completed': {
+      case 'checkout.session.completed':
+      case 'checkout.session.async_payment_succeeded':
+      case 'checkout.session.async_payment_failed': {
         const session = event.data.object as Stripe.Checkout.Session
         const subscriptionId = session.metadata?.subscription_id
 
         if (!subscriptionId) {
-          console.warn('checkout.session.completed ohne subscription_id metadata')
+          console.warn(`${event.type} ohne subscription_id metadata`)
           break
         }
 
-        const updateData: Record<string, string> = {
-          status: 'active',
-          payment_status: 'paid',
+        // session.payment_status: 'paid' | 'unpaid' | 'no_payment_required'
+        // Bei SEPA ist es initial 'unpaid' und wird erst mit async_payment_succeeded 'paid'.
+        const isPaid = session.payment_status === 'paid' || session.payment_status === 'no_payment_required'
+        const isFailed = event.type === 'checkout.session.async_payment_failed'
+
+        const updateData: Record<string, string> = {}
+
+        if (isFailed) {
+          updateData.payment_status = 'failed'
+        } else if (isPaid) {
+          updateData.status = 'active'
+          updateData.payment_status = 'paid'
+        } else {
+          // SEPA in Bearbeitung — Session erfolgreich abgeschlossen, Zahlung aber noch nicht bestätigt
+          updateData.payment_status = 'processing'
         }
 
-        // Store Stripe subscription ID for recurring subscriptions
+        // Stripe Subscription ID speichern (auch bei pending SEPA schon verfügbar)
         const stripeSubId = (session as unknown as Record<string, unknown>).subscription as string | null
         if (stripeSubId) {
           updateData.stripe_subscription_id = stripeSubId
 
-          // Set cancel_at and billing_cycle_anchor for subscriptions
-          try {
-            const stripeSub = await stripe.subscriptions.retrieve(stripeSubId)
-            const cancelAfterMonths = stripeSub.metadata?.cancel_after_months
-
-            if (cancelAfterMonths) {
-              await stripe.subscriptions.update(stripeSubId, {
-                cancel_at: Math.floor(Date.now() / 1000) + parseInt(cancelAfterMonths) * 30 * 24 * 60 * 60,
-              } as Stripe.SubscriptionUpdateParams)
+          if (isPaid) {
+            try {
+              const stripeSub = await stripe.subscriptions.retrieve(stripeSubId)
+              const cancelAfterMonths = stripeSub.metadata?.cancel_after_months
+              if (cancelAfterMonths) {
+                await stripe.subscriptions.update(stripeSubId, {
+                  cancel_at: Math.floor(Date.now() / 1000) + parseInt(cancelAfterMonths) * 30 * 24 * 60 * 60,
+                } as Stripe.SubscriptionUpdateParams)
+              }
+            } catch (e) {
+              console.warn('Konnte Subscription-Parameter nicht setzen:', e)
             }
-          } catch (e) {
-            console.warn('Konnte Subscription-Parameter nicht setzen:', e)
           }
         }
 
-        await supabaseAdmin
+        // Stripe Customer ID speichern (wichtig für Invoice-Sync bei 10er-Karte)
+        const stripeCustomerId = typeof session.customer === 'string' ? session.customer : session.customer?.id
+        if (stripeCustomerId) {
+          updateData.stripe_customer_id = stripeCustomerId
+        }
+
+        const { error: updErr } = await supabaseAdmin
           .from('subscriptions')
           .update(updateData)
           .eq('id', subscriptionId)
 
-        console.log(`Subscription ${subscriptionId} aktiviert (Zahlung erfolgreich)`)
+        if (updErr) {
+          console.error(`Subscription-Update nach ${event.type} fehlgeschlagen:`, updErr)
+        } else {
+          console.log(`Subscription ${subscriptionId}: ${event.type} → ${JSON.stringify(updateData)}`)
+        }
+
+        // Bei 10er-Karte (payment mode) gibt es keine automatische Invoice.
+        // Invoice wird stattdessen über payment_intent.succeeded / invoice.paid gesynct (siehe unten).
         break
       }
 
@@ -134,8 +162,109 @@ export async function POST(request: NextRequest) {
         try {
           await upsertStripeInvoice(syncInvoice.id)
           console.log(`Stripe Invoice ${syncInvoice.id} synchronisiert (${event.type})`)
+
+          // Bei bezahlter Invoice auch Subscription auf 'active' + 'paid' setzen
+          // (wichtig für SEPA-Subscriptions, bei denen async_payment_succeeded nicht immer feuert)
+          if (event.type === 'invoice.paid') {
+            const invSubId = (syncInvoice as unknown as Record<string, unknown>).subscription as string | null
+            if (invSubId) {
+              const { error: sErr } = await supabaseAdmin
+                .from('subscriptions')
+                .update({ status: 'active', payment_status: 'paid' })
+                .eq('stripe_subscription_id', invSubId)
+              if (sErr) console.warn('Subscription-Update nach invoice.paid fehlgeschlagen:', sErr)
+            }
+          }
         } catch (e) {
           console.warn('Invoice Sync fehlgeschlagen:', e)
+        }
+        break
+      }
+
+      case 'payment_intent.succeeded': {
+        // Für 10er-Karte (payment mode): keine Invoice wird automatisch erstellt.
+        // Wir erstellen einen invoices-Eintrag manuell, damit im Rechnungen-Tab auftaucht.
+        const pi = event.data.object as Stripe.PaymentIntent
+        const subscriptionId = pi.metadata?.subscription_id
+
+        try {
+          // Subscription in Supabase auf active+paid setzen (falls Metadata vorhanden)
+          if (subscriptionId) {
+            const { error: sErr } = await supabaseAdmin
+              .from('subscriptions')
+              .update({ status: 'active', payment_status: 'paid' })
+              .eq('id', subscriptionId)
+            if (sErr) console.warn('Subscription-Update nach payment_intent.succeeded fehlgeschlagen:', sErr)
+          }
+
+          // Wenn PaymentIntent zu einer Invoice gehört, überlassen wir das dem invoice.paid Handler.
+          const piInvoice = (pi as unknown as Record<string, unknown>).invoice as string | null
+          if (piInvoice) {
+            console.log(`payment_intent.succeeded → Invoice ${piInvoice}, wird via invoice.paid gesynct`)
+            break
+          }
+
+          // Nur für one-time Zahlungen (10er-Karte) ohne Invoice: Eintrag manuell erstellen
+          const customerId = typeof pi.customer === 'string' ? pi.customer : pi.customer?.id
+          if (!customerId) {
+            console.warn('payment_intent.succeeded ohne customer — skip')
+            break
+          }
+
+          // Member finden via stripe_customer_id
+          const { data: memberSub } = await supabaseAdmin
+            .from('subscriptions')
+            .select('member_id, name')
+            .eq('stripe_customer_id', customerId)
+            .limit(1)
+            .maybeSingle()
+
+          if (!memberSub?.member_id) {
+            console.warn(`payment_intent.succeeded: kein Member für customer ${customerId} gefunden`)
+            break
+          }
+
+          // Dedup via notes (wir haben keine dedizierte payment_intent_id Spalte)
+          const notesMarker = `stripe_pi:${pi.id}`
+          const { data: existing } = await supabaseAdmin
+            .from('invoices')
+            .select('id')
+            .like('notes', `%${notesMarker}%`)
+            .maybeSingle()
+
+          if (existing) {
+            console.log(`PaymentIntent ${pi.id} bereits als Invoice erfasst`)
+            break
+          }
+
+          // Rechnungsnummer generieren
+          const now = new Date()
+          const prefix = `RE-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}-`
+          const { count } = await supabaseAdmin
+            .from('invoices')
+            .select('*', { count: 'exact', head: true })
+            .like('invoice_number', `${prefix}%`)
+          const invoiceNumber = `${prefix}${String((count || 0) + 1).padStart(3, '0')}`
+
+          const { error: insErr } = await supabaseAdmin.from('invoices').insert({
+            member_id: memberSub.member_id,
+            invoice_number: invoiceNumber,
+            description: memberSub.name || 'Stripe-Einmalzahlung',
+            amount: pi.amount_received / 100,
+            status: 'paid',
+            due_date: now.toISOString().split('T')[0],
+            paid_date: now.toISOString().split('T')[0],
+            source: 'stripe',
+            notes: notesMarker,
+          })
+
+          if (insErr) {
+            console.error('Invoice-Insert für 10er-Karte fehlgeschlagen:', insErr)
+          } else {
+            console.log(`Invoice ${invoiceNumber} für PaymentIntent ${pi.id} erstellt (${pi.amount_received / 100} €)`)
+          }
+        } catch (e) {
+          console.warn('payment_intent.succeeded Handler fehlgeschlagen:', e)
         }
         break
       }

@@ -91,6 +91,9 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
   const [sendingRemindAll, setSendingRemindAll] = useState(false)
   const [remindAllProgress, setRemindAllProgress] = useState({ sent: 0, failed: 0, total: 0 })
 
+  // Stripe Re-Sync
+  const [resyncing, setResyncing] = useState(false)
+
   // Tarifwechsel
   const [showChangePlanModal, setShowChangePlanModal] = useState(false)
   const [changePlanSub, setChangePlanSub] = useState<Subscription | null>(null)
@@ -411,6 +414,30 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
           <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
           <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Abo suchen (Mitglied, Name)..." className="w-full pl-10 pr-4 py-3 bg-dark-900/50 border border-dark-800 rounded-xl text-dark-100 placeholder:text-dark-500 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 text-sm" />
         </div>
+        <button
+          onClick={async () => {
+            setResyncing(true)
+            try {
+              const res = await fetch('/api/admin/resync-stripe', { method: 'POST' })
+              const data = await res.json()
+              if (!res.ok || data.error) {
+                showSnackbar(data.error || 'Re-Sync fehlgeschlagen', 'error')
+              } else {
+                showSnackbar(`Re-Sync: ${data.subscriptions.updated}/${data.subscriptions.checked} Abos aktualisiert, ${data.invoices.synced} neue Rechnungen`)
+                onRefresh()
+              }
+            } catch {
+              showSnackbar('Re-Sync fehlgeschlagen', 'error')
+            } finally {
+              setResyncing(false)
+            }
+          }}
+          disabled={resyncing}
+          className="px-5 py-3 bg-blue-500/10 text-blue-400 border border-blue-500/30 hover:bg-blue-500/20 font-bold rounded-xl transition-colors text-sm whitespace-nowrap disabled:opacity-50"
+          title="Status aller Stripe-Abos und Rechnungen neu synchronisieren"
+        >
+          {resyncing ? 'Synchronisiert…' : '↻ Stripe sync'}
+        </button>
         <button onClick={() => { resetForm(); setShowForm(true) }} className="px-5 py-3 bg-brand-500 text-dark-950 font-bold rounded-xl hover:bg-brand-400 transition-colors text-sm whitespace-nowrap">
           + Neues Abo
         </button>

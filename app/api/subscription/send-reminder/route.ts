@@ -83,6 +83,22 @@ export async function POST(request: NextRequest) {
     } else {
       sessionParams.mode = 'payment'
       sessionParams.line_items = [{ price: priceId, quantity: 1 }]
+      sessionParams.invoice_creation = {
+        enabled: true,
+        invoice_data: {
+          description: '10er Karte – 6 Monate gültig',
+          metadata: {
+            subscription_id: subscriptionId,
+            membership_id: membershipId,
+          },
+        },
+      }
+      sessionParams.payment_intent_data = {
+        metadata: {
+          subscription_id: subscriptionId,
+          membership_id: membershipId,
+        },
+      }
     }
 
     const session = await stripe.checkout.sessions.create(sessionParams)
