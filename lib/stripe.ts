@@ -38,12 +38,20 @@ export const MEMBERSHIP_STRIPE_MAP: Record<string, MembershipConfig> = {
     unitAmount: 12000,
     recurring: true,
   },
+  // LEGACY – nur für bestehende Verträge, nicht mehr in UI-Dropdowns.
   schueler_6: {
     name: 'Schüler / Azubi / Student – 6 Monate',
     description: '55 €/Monat, 6 Monate Laufzeit (nur mit Nachweis ab 14 Jahren)',
     unitAmount: 5500,
     recurring: true,
     intervalCount: 6,
+  },
+  schueler_12: {
+    name: 'Schüler / Azubi / Student – 12 Monate',
+    description: '55 €/Monat, 12 Monate Laufzeit (nur mit Nachweis ab 14 Jahren)',
+    unitAmount: 5500,
+    recurring: true,
+    intervalCount: 12,
   },
   schueler_monatlich: {
     name: 'Schüler / Azubi / Student – Monatlich kündbar',
