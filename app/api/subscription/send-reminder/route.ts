@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { stripe, getOrCreateStripePrice, getOrCreateStripeCustomer, MEMBERSHIP_STRIPE_MAP } from '@/lib/stripe'
+import { buildSubscriptionBillingParams } from '@/lib/stripe-billing'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseAdmin = createClient(
@@ -68,13 +69,8 @@ export async function POST(request: NextRequest) {
       sessionParams.mode = 'subscription'
       sessionParams.line_items = [{ price: priceId, quantity: 1 }]
 
-      const now = new Date()
-      const isFirstOfMonth = now.getDate() === 1
-      const firstOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
-      const trialEnd = isFirstOfMonth ? undefined : Math.floor(firstOfNextMonth.getTime() / 1000)
-
       sessionParams.subscription_data = {
-        ...(trialEnd ? { trial_end: trialEnd } : {}),
+        ...buildSubscriptionBillingParams(),
         metadata: {
           subscription_id: subscriptionId,
           membership_id: membershipId,
