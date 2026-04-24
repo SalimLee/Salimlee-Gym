@@ -21,22 +21,32 @@ export async function POST() {
     // 1. Invoices syncen (90 Tage zurück)
     const invoiceResult = await syncStripeInvoices(90)
 
-    // 2. Alle Subscriptions mit Stripe abgleichen, die noch pending sind oder eine Stripe-ID haben
+    // 2. Alle Abos laden — wir prüfen sowohl verknüpfte als auch unverknüpfte
+    //    (manche wurden mit Anon-Key erstellt, wo RLS die Stripe-ID-Writes silently verwarf)
     const { data: subs } = await supabaseAdmin
       .from('subscriptions')
-      .select('id, status, payment_status, stripe_subscription_id, stripe_checkout_session_id, stripe_customer_id')
-      .or('stripe_subscription_id.not.is.null,stripe_checkout_session_id.not.is.null')
+      .select(`
+        id, status, payment_status, name, member_id,
+        stripe_subscription_id, stripe_checkout_session_id, stripe_customer_id,
+        members:member_id ( email, name )
+      `)
 
     const subResult = { checked: 0, updated: 0, errors: [] as string[] }
 
-    for (const sub of subs || []) {
+    for (const sub of (subs || []) as Array<Record<string, unknown> & { members?: { email?: string; name?: string } | { email?: string; name?: string }[] }>) {
       subResult.checked++
       try {
         const updateData: Record<string, string> = {}
+        // Supabase kann members als Array zurückgeben — beides abdecken
+        const member = Array.isArray(sub.members) ? sub.members[0] : sub.members
+        const memberEmail = member?.email
+
+        const stripeSubscriptionId = sub.stripe_subscription_id as string | null
+        const stripeCheckoutSessionId = sub.stripe_checkout_session_id as string | null
 
         // A) Falls Stripe-Subscription existiert → echten Status holen
-        if (sub.stripe_subscription_id) {
-          const stripeSub = await stripe.subscriptions.retrieve(sub.stripe_subscription_id)
+        if (stripeSubscriptionId) {
+          const stripeSub = await stripe.subscriptions.retrieve(stripeSubscriptionId)
           if (stripeSub.status === 'active' || stripeSub.status === 'trialing') {
             if (sub.status !== 'active') updateData.status = 'active'
             if (sub.payment_status !== 'paid') updateData.payment_status = 'paid'
@@ -47,8 +57,8 @@ export async function POST() {
           }
         }
         // B) Nur Checkout-Session → Session-Status prüfen
-        else if (sub.stripe_checkout_session_id) {
-          const session = await stripe.checkout.sessions.retrieve(sub.stripe_checkout_session_id)
+        else if (stripeCheckoutSessionId) {
+          const session = await stripe.checkout.sessions.retrieve(stripeCheckoutSessionId)
 
           // PaymentIntent-Status prüfen (auch für SEPA async)
           let piStatus: string | null = null
@@ -69,6 +79,34 @@ export async function POST() {
           if (session.subscription) {
             const subId = typeof session.subscription === 'string' ? session.subscription : session.subscription.id
             updateData.stripe_subscription_id = subId
+          }
+        }
+        // C) Kein Stripe-Link in DB → via Customer-Email in Stripe suchen
+        //    (nötig für Abos, wo RLS die ID-Writes verwarf)
+        else if (memberEmail) {
+          const customers = await stripe.customers.list({ email: memberEmail, limit: 5 })
+          for (const customer of customers.data) {
+            // Alle Checkout-Sessions dieses Customers durchsuchen
+            const sessions = await stripe.checkout.sessions.list({ customer: customer.id, limit: 20 })
+            const paidSession = sessions.data.find(s => s.payment_status === 'paid')
+            const unpaidSession = sessions.data.find(s => s.payment_status === 'unpaid' && s.status === 'complete')
+
+            if (paidSession) {
+              updateData.stripe_customer_id = customer.id
+              updateData.stripe_checkout_session_id = paidSession.id
+              updateData.status = 'active'
+              updateData.payment_status = 'paid'
+              if (paidSession.subscription) {
+                const subId = typeof paidSession.subscription === 'string' ? paidSession.subscription : paidSession.subscription.id
+                updateData.stripe_subscription_id = subId
+              }
+              break
+            } else if (unpaidSession) {
+              updateData.stripe_customer_id = customer.id
+              updateData.stripe_checkout_session_id = unpaidSession.id
+              updateData.payment_status = 'processing'
+              break
+            }
           }
         }
 
