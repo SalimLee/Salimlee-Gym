@@ -9,12 +9,26 @@ const supabaseAdmin = createClient(
   { auth: { autoRefreshToken: false, persistSession: false } }
 )
 
-// Reverse-lookup: find membershipId by subscription display name
+// Reverse-lookup: find membershipId by subscription display name.
+// Use substring matching with longest-name preference, damit:
+//   - Schüler-Subs mit Suffix "(Nachweis erforderlich)" matchen
+//   - Custom-Action-Subs mit Prefix "Aktion: …" und Suffix "(Xeur für Y Monate)" matchen
+//   - Label-Drift in MEMBERSHIP_OPTIONS nicht den Reminder bricht
 function findMembershipId(subscriptionName: string): string | null {
+  // Exact-match zuerst (Standard-Tarife) — schnellster Pfad
   for (const [id, config] of Object.entries(MEMBERSHIP_STRIPE_MAP)) {
     if (config.name === subscriptionName) return id
   }
-  return null
+  // Fallback: längste enthaltene Map-Name gewinnt (vermeidet "6 Monate" matcht "12 Monate"-Inhalte)
+  let bestId: string | null = null
+  let bestLen = 0
+  for (const [id, config] of Object.entries(MEMBERSHIP_STRIPE_MAP)) {
+    if (subscriptionName.includes(config.name) && config.name.length > bestLen) {
+      bestId = id
+      bestLen = config.name.length
+    }
+  }
+  return bestId
 }
 
 export async function POST(request: NextRequest) {
