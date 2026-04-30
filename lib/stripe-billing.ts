@@ -1,9 +1,13 @@
 /**
  * Shared Billing-Logik für Subscription-Checkouts.
  *
- * Ab BILLING_START_DATE (Default 2026-05-01) wird die alte Trial-Logik
+ * Ab BILLING_START_DATE (Default 2026-04-30) wird die alte Trial-Logik
  * (trial_end = 1. des nächsten Monats) ersetzt durch Stripe-native Proration
  * via billing_cycle_anchor + proration_behavior: 'create_prorations'.
+ *
+ * Default ist auf 2026-04-30 gezogen, damit der letzte Tag vor dem geplanten
+ * Switch nicht mehr in die Stripe-48h-Trial-Falle läuft (Stripe lehnt
+ * trial_end ab, das weniger als 48h von now entfernt liegt → 400 Bad Request).
  *
  * Vorher: Signup am 20.04 → kostenlos bis 01.05, dann voller Monat
  * Nachher: Signup am 20.05 → anteilig zahlen (~11/31 × Monatspreis), dann 01.06 voller Monat
@@ -12,7 +16,7 @@
  * wird automatisch auf die prorated line item angewendet).
  */
 
-const DEFAULT_BILLING_START = '2026-05-01'
+const DEFAULT_BILLING_START = '2026-04-30'
 
 export function getBillingStartDate(): Date {
   const raw = process.env.BILLING_START_DATE || DEFAULT_BILLING_START
