@@ -118,6 +118,20 @@ export async function getOrCreateTaxRate(): Promise<string> {
 }
 
 /**
+ * Reverse-lookup: finds the membershipId key from a human-readable label.
+ * Handles partial matches (e.g. label may include "(Nachweis erforderlich)").
+ */
+export function findMembershipId(label: string): string | null {
+  for (const [id, config] of Object.entries(MEMBERSHIP_STRIPE_MAP)) {
+    if (config.name === label) return id
+  }
+  for (const [id, config] of Object.entries(MEMBERSHIP_STRIPE_MAP)) {
+    if (label.includes(config.name)) return id
+  }
+  return null
+}
+
+/**
  * Finds or creates a Stripe Product + Price for a given membership ID.
  * Uses metadata to identify existing products.
  */

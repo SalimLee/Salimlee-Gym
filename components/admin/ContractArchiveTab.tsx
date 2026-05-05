@@ -56,6 +56,13 @@ export default function ContractArchiveTab({ members, supabase }: ContractArchiv
   const [loadError, setLoadError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
 
+  // Resend-State
+  const [resendId, setResendId] = useState<string | null>(null)
+  const [resendEmail, setResendEmail] = useState('')
+  const [resendUpdateMember, setResendUpdateMember] = useState(true)
+  const [isResending, setIsResending] = useState(false)
+  const [resendResult, setResendResult] = useState<{ success: boolean; message: string } | null>(null)
+
   // Upload-State
   const [uploadFile, setUploadFile] = useState<File | null>(null)
   const [uploadMemberId, setUploadMemberId] = useState<string>('')
@@ -218,6 +225,61 @@ export default function ContractArchiveTab({ members, supabase }: ContractArchiv
       alert(e instanceof Error ? e.message : 'Netzwerkfehler beim Löschen')
     }
   }, [getAccessToken])
+
+  const openResend = useCallback((contract: ArchivedContract) => {
+    setResendId(contract.id)
+    setResendEmail(contract.member_email || '')
+    setResendUpdateMember(true)
+    setResendResult(null)
+  }, [])
+
+  const closeResend = useCallback(() => {
+    setResendId(null)
+    setResendEmail('')
+    setResendResult(null)
+  }, [])
+
+  const handleResend = useCallback(async () => {
+    if (!resendId || !resendEmail.trim()) return
+    setIsResending(true)
+    setResendResult(null)
+    try {
+      const token = await getAccessToken()
+      if (!token) {
+        setResendResult({ success: false, message: 'Keine gültige Session.' })
+        setIsResending(false)
+        return
+      }
+      const res = await fetch('/api/admin/contracts/resend', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          archive_id: resendId,
+          new_email: resendEmail.trim(),
+          update_member_email: resendUpdateMember,
+        }),
+      })
+      const result = await res.json()
+      if (!res.ok) {
+        setResendResult({ success: false, message: result.error || 'Versand fehlgeschlagen.' })
+      } else {
+        const extra = result.has_checkout_url
+          ? ' Stripe-Zahlungslink wurde mitgesendet.'
+          : ' Kein Stripe-Link erstellt (kein passendes Abo gefunden).'
+        setResendResult({ success: true, message: `Vertrag an ${resendEmail.trim()} gesendet.${extra}` })
+        if (resendUpdateMember) {
+          loadContracts()
+        }
+      }
+    } catch (e) {
+      setResendResult({ success: false, message: e instanceof Error ? e.message : 'Netzwerkfehler' })
+    } finally {
+      setIsResending(false)
+    }
+  }, [resendId, resendEmail, resendUpdateMember, getAccessToken, loadContracts])
 
   const filtered = useMemo(() => {
     if (!search.trim()) return contracts
@@ -507,6 +569,16 @@ export default function ContractArchiveTab({ members, supabase }: ContractArchiv
                       </a>
                     )}
                     <button
+                      onClick={() => openResend(c)}
+                      className="px-3 py-1.5 bg-dark-800 hover:bg-dark-700 text-dark-200 text-xs font-bold rounded-lg transition-colors inline-flex items-center gap-1.5"
+                      title="An andere E-Mail erneut senden"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                      </svg>
+                      Erneut senden
+                    </button>
+                    <button
                       onClick={() => handleDelete(c.id, c.member_name)}
                       className="p-1.5 text-dark-500 hover:text-red-400 transition-colors"
                       title="Vertrag löschen"
@@ -517,6 +589,58 @@ export default function ContractArchiveTab({ members, supabase }: ContractArchiv
                     </button>
                   </div>
                 </div>
+
+                {/* Resend Inline-Form */}
+                {resendId === c.id && (
+                  <div className="mt-3 p-4 bg-dark-800/50 border border-dark-700 rounded-xl space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-bold text-dark-200">Vertrag erneut senden</p>
+                      <button onClick={closeResend} className="text-dark-500 hover:text-dark-300 text-xs">Abbrechen</button>
+                    </div>
+
+                    <div className="grid sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-dark-400 mb-1">Neue E-Mail-Adresse *</label>
+                        <input
+                          type="email"
+                          value={resendEmail}
+                          onChange={(e) => setResendEmail(e.target.value)}
+                          placeholder="neue@email.de"
+                          className="w-full px-3 py-2 bg-dark-900 border border-dark-700 rounded-lg text-sm text-dark-100 focus:border-brand-500 focus:outline-none"
+                        />
+                      </div>
+                      <div className="flex items-end">
+                        <label className="flex items-center gap-2 text-xs text-dark-300 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={resendUpdateMember}
+                            onChange={(e) => setResendUpdateMember(e.target.checked)}
+                            className="rounded border-dark-600 bg-dark-800 text-brand-500 focus:ring-brand-500"
+                          />
+                          E-Mail auch beim Mitglied aktualisieren
+                        </label>
+                      </div>
+                    </div>
+
+                    {resendResult && (
+                      <div className={`p-3 rounded-lg text-xs ${
+                        resendResult.success
+                          ? 'bg-green-500/10 border border-green-500/30 text-green-400'
+                          : 'bg-red-500/10 border border-red-500/30 text-red-400'
+                      }`}>
+                        {resendResult.message}
+                      </div>
+                    )}
+
+                    <button
+                      onClick={handleResend}
+                      disabled={isResending || !resendEmail.trim()}
+                      className="px-4 py-2 bg-brand-500 hover:bg-brand-600 disabled:bg-dark-700 disabled:text-dark-500 text-white text-xs font-bold rounded-lg transition-colors"
+                    >
+                      {isResending ? 'Wird gesendet…' : 'Vertrag senden'}
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
