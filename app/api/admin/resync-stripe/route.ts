@@ -51,8 +51,19 @@ export async function POST() {
             if (sub.status !== 'active') updateData.status = 'active'
             if (sub.payment_status !== 'paid') updateData.payment_status = 'paid'
           } else if (stripeSub.status === 'canceled') {
-            if (sub.status !== 'cancelled') updateData.status = 'cancelled'
+            // WICHTIG: nur als 'cancelled' markieren, wenn die Sub vorher mal aktiv war.
+            // Lokal 'pending' bedeutet "Coach hat angelegt, Zahlung noch offen" — auch wenn die
+            // Stripe-Sub durch eine fehlgeschlagene Initialzahlung 'canceled' wird, soll der
+            // Coach die Sub im Dashboard sehen und manuell entscheiden (z.B. Reminder erneut senden).
+            if (sub.status === 'active' || sub.status === 'paused') {
+              updateData.status = 'cancelled'
+            }
+            // pending oder schon cancelled → nicht überschreiben
           } else if (stripeSub.status === 'past_due' || stripeSub.status === 'unpaid') {
+            updateData.payment_status = 'failed'
+          } else if (stripeSub.status === 'incomplete' || stripeSub.status === 'incomplete_expired') {
+            // Initialzahlung wurde nie erfolgreich → lokal als pending halten
+            if (sub.status !== 'pending') updateData.status = 'pending'
             updateData.payment_status = 'failed'
           }
         }

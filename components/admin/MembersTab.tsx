@@ -297,18 +297,21 @@ export default function MembersTab({ members, setMembers, subscriptions, invoice
                       {getMemberSubs(selectedMember.id).map(sub => {
                         const statusColors: Record<string, string> = {
                           active: 'text-green-400 bg-green-400/10 border-green-400/30',
+                          pending: 'text-orange-400 bg-orange-400/10 border-orange-400/30',
                           expired: 'text-red-400 bg-red-400/10 border-red-400/30',
                           cancelled: 'text-dark-500 bg-dark-700/50 border-dark-600',
                           paused: 'text-yellow-400 bg-yellow-400/10 border-yellow-400/30',
                         }
                         const statusLabels: Record<string, string> = {
-                          active: 'Aktiv', expired: 'Abgelaufen', cancelled: 'Gekündigt', paused: 'Pausiert',
+                          active: 'Aktiv', pending: 'Zahlung ausstehend', expired: 'Abgelaufen', cancelled: 'Gekündigt', paused: 'Pausiert',
                         }
+                        const badgeColor = statusColors[sub.status] || 'text-dark-500 bg-dark-700/50 border-dark-600'
+                        const badgeLabel = statusLabels[sub.status] || sub.status
                         return (
                           <div key={sub.id} className="bg-dark-800/50 rounded-lg p-3">
                             <div className="flex items-center justify-between mb-1">
                               <p className="text-sm font-bold text-dark-100">{sub.name}</p>
-                              <span className={`px-2 py-0.5 rounded-full text-xs border ${statusColors[sub.status]}`}>{statusLabels[sub.status]}</span>
+                              <span className={`px-2 py-0.5 rounded-full text-xs border ${badgeColor}`}>{badgeLabel}</span>
                             </div>
                             <p className="text-xs text-dark-400">
                               {sub.type === 'punch_card' && sub.remaining_units !== null && sub.total_units !== null

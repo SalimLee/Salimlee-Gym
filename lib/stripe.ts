@@ -74,6 +74,32 @@ export const SERVICE_FEE = {
   intervalMonths: 6,
 }
 
+// Mahngebühr: €4 wird nach dem 2. fehlgeschlagenen Abbuchungsversuch
+// als pending Invoice Item für die nächste Rechnung hinzugefügt.
+export const DUNNING_FEE = {
+  name: 'Mahngebühr',
+  description: 'Mahngebühr für fehlgeschlagene Abbuchung',
+  unitAmount: 400, // 4€ in Cent
+  triggerAttempt: 2, // ab dem 2. fehlgeschlagenen Versuch
+}
+
+/**
+ * Finds or creates the Mahngebühr product in Stripe.
+ */
+export async function getOrCreateDunningFeeProduct(): Promise<string> {
+  const existing = await stripe.products.search({
+    query: `metadata['type']:'dunning_fee'`,
+  })
+  if (existing.data.length > 0) return existing.data[0].id
+
+  const product = await stripe.products.create({
+    name: DUNNING_FEE.name,
+    description: DUNNING_FEE.description,
+    metadata: { type: 'dunning_fee' },
+  })
+  return product.id
+}
+
 /**
  * Finds or creates the Servicepauschale product in Stripe.
  * Returns the product ID (not a price — we use invoice items).

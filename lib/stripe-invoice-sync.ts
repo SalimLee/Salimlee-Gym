@@ -21,25 +21,58 @@ function mapStripeStatus(stripeStatus: string): 'open' | 'paid' | 'overdue' | 'c
 }
 
 // Generate invoice number: RE-YYYYMM-###
+// Schaut nach der höchsten vorhandenen Nummer (statt count) — count zählt evtl. weniger als das Max,
+// wenn Rechnungen gelöscht wurden, was zu Duplikat-Inserts und Race-Conditions führt.
 async function generateInvoiceNumber(date: Date): Promise<string> {
   const prefix = `RE-${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}-`
-  const { count } = await supabaseAdmin
+  const { data } = await supabaseAdmin
     .from('invoices')
-    .select('*', { count: 'exact', head: true })
+    .select('invoice_number')
     .like('invoice_number', `${prefix}%`)
-  const num = (count || 0) + 1
-  return `${prefix}${String(num).padStart(3, '0')}`
+    .order('invoice_number', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  const lastNum = data?.invoice_number ? parseInt(String(data.invoice_number).split('-').pop() || '0', 10) : 0
+  return `${prefix}${String(lastNum + 1).padStart(3, '0')}`
 }
 
-// Find member_id by Stripe customer ID
+// Find member_id by Stripe customer ID — with email fallback
 async function findMemberByStripeCustomer(stripeCustomerId: string): Promise<string | null> {
-  const { data } = await supabaseAdmin
+  // 1. Direkt via stripe_customer_id auf einer beliebigen Subscription
+  const { data: subMatch } = await supabaseAdmin
     .from('subscriptions')
     .select('member_id')
     .eq('stripe_customer_id', stripeCustomerId)
     .limit(1)
-    .single()
-  return data?.member_id || null
+    .maybeSingle()
+  if (subMatch?.member_id) return subMatch.member_id
+
+  // 2. Fallback: Customer aus Stripe holen, Email lesen, Member via Email finden.
+  //    Nötig wenn ein Sync läuft bevor checkout.session.completed die stripe_customer_id auf der Sub gesetzt hat.
+  try {
+    const customer = await stripe.customers.retrieve(stripeCustomerId)
+    if (!customer.deleted && customer.email) {
+      const { data: memberMatch } = await supabaseAdmin
+        .from('members')
+        .select('id')
+        .ilike('email', customer.email)
+        .limit(1)
+        .maybeSingle()
+      if (memberMatch?.id) {
+        // Backfill: stripe_customer_id auf allen Subs des Members setzen, die noch keine haben
+        await supabaseAdmin
+          .from('subscriptions')
+          .update({ stripe_customer_id: stripeCustomerId })
+          .eq('member_id', memberMatch.id)
+          .is('stripe_customer_id', null)
+        return memberMatch.id
+      }
+    }
+  } catch (e) {
+    console.warn(`Customer ${stripeCustomerId} konnte nicht via Email gematcht werden:`, e)
+  }
+
+  return null
 }
 
 interface SyncResult {

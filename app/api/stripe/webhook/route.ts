@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { stripe, SERVICE_FEE, getOrCreateServiceFeeProduct, getOrCreateTaxRate } from '@/lib/stripe'
+import { stripe, SERVICE_FEE, DUNNING_FEE, getOrCreateServiceFeeProduct, getOrCreateDunningFeeProduct, getOrCreateTaxRate } from '@/lib/stripe'
 import { upsertStripeInvoice } from '@/lib/stripe-invoice-sync'
 import { createClient } from '@supabase/supabase-js'
 import type Stripe from 'stripe'
@@ -279,7 +279,50 @@ export async function POST(request: NextRequest) {
             .update({ payment_status: 'failed' })
             .eq('stripe_subscription_id', stripeSubId)
 
-          console.log(`Zahlung fehlgeschlagen für Stripe Subscription ${stripeSubId}`)
+          console.log(`Zahlung fehlgeschlagen für Stripe Subscription ${stripeSubId} (attempt ${invoice.attempt_count})`)
+        }
+
+        // Mahngebühr 4€ ab dem 2. fehlgeschlagenen Versuch — einmalig pro Invoice anhängen,
+        // wird dann von Stripe automatisch beim nächsten Abrechnungslauf (Smart Retries oder
+        // nächster regulärer Sub-Zyklus) an die Customer-Rechnung gepackt.
+        const attemptCount = invoice.attempt_count || 0
+        const customerId = typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id
+        if (attemptCount >= DUNNING_FEE.triggerAttempt && customerId && stripeSubId) {
+          try {
+            // Dedup: pro failed Invoice nur einmal Mahngebühr anlegen.
+            // Wir markieren via Stripe-Metadata auf dem Invoice-Item.
+            const dedupKey = `inv:${invoice.id}`
+            const existingItems = await stripe.invoiceItems.list({ customer: customerId, limit: 100, pending: true })
+            const alreadyCharged = existingItems.data.some(
+              it => it.metadata?.type === 'dunning_fee' && it.metadata?.failed_invoice_id === invoice.id
+            )
+            if (alreadyCharged) {
+              console.log(`Mahngebühr für ${invoice.id} bereits vorhanden — übersprungen`)
+            } else {
+              const [productId, taxRateId] = await Promise.all([
+                getOrCreateDunningFeeProduct(),
+                getOrCreateTaxRate(),
+              ])
+              await stripe.invoiceItems.create({
+                customer: customerId,
+                subscription: stripeSubId,
+                amount: DUNNING_FEE.unitAmount,
+                currency: 'eur',
+                description: `${DUNNING_FEE.name} (Rechnung ${invoice.number || invoice.id})`,
+                tax_rates: [taxRateId],
+                metadata: {
+                  type: 'dunning_fee',
+                  product_id: productId,
+                  failed_invoice_id: invoice.id as string,
+                  dedup_key: dedupKey,
+                  attempt_count: String(attemptCount),
+                },
+              })
+              console.log(`Mahngebühr ${DUNNING_FEE.unitAmount / 100}€ für Sub ${stripeSubId} angelegt (failed invoice ${invoice.id}, attempt ${attemptCount})`)
+            }
+          } catch (e) {
+            console.warn('Mahngebühr konnte nicht angelegt werden:', e)
+          }
         }
         break
       }
@@ -289,12 +332,24 @@ export async function POST(request: NextRequest) {
         const subId = subscription.metadata?.subscription_id
 
         if (subId) {
-          await supabaseAdmin
+          // Aktuellen Status prüfen — pending Subs (Initialzahlung nie erfolgreich) sollen NICHT
+          // automatisch auf 'cancelled' gesetzt werden, sonst stehen sie für den Coach fälschlich
+          // im Dashboard als "Gekündigt" obwohl der Kunde nur die Zahlung nicht abgeschlossen hat.
+          const { data: existing } = await supabaseAdmin
             .from('subscriptions')
-            .update({ status: 'cancelled', payment_status: 'cancelled' })
+            .select('status')
             .eq('id', subId)
+            .maybeSingle()
 
-          console.log(`Subscription ${subId} gekündigt`)
+          if (existing?.status === 'pending') {
+            console.log(`Subscription ${subId}: Stripe-Sub gelöscht, lokal pending — bleibt pending`)
+          } else {
+            await supabaseAdmin
+              .from('subscriptions')
+              .update({ status: 'cancelled', payment_status: 'cancelled' })
+              .eq('id', subId)
+            console.log(`Subscription ${subId} gekündigt`)
+          }
         }
         break
       }
