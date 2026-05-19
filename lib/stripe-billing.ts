@@ -15,6 +15,7 @@
  */
 
 export interface SubscriptionBillingParams {
+  trial_end?: number
   billing_cycle_anchor?: number
   proration_behavior?: 'none' | 'create_prorations'
 }
@@ -77,12 +78,37 @@ export function computeProratedFirstMonth(
 
   const proratedCents = Math.round((monthlyCents * daysRemaining) / daysInMonth)
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // Stripe-Verhalten: KEY-INSIGHT
+  //
+  // Mit `billing_cycle_anchor: future` + `proration_behavior: 'none'` packt
+  // Stripe die `add_invoice_items` auf die ERSTE Zyklus-Invoice am Anchor — NICHT
+  // auf eine sofortige Initial-Invoice. Heißt: Kunde sieht "Heute 0 €, alles am 1."
+  //
+  // Mit `trial_end: future` + `add_invoice_items` hingegen erstellt Stripe SOFORT
+  // beim Checkout eine Initial-Invoice mit dem Item drauf und chargt sie SOFORT.
+  // Die Sub geht in Trial bis zum Anchor, dann startet der reguläre Zyklus.
+  // → Genau was wir wollen: anteilig heute + voller Monat ab 1.
+  //
+  // Edge-Case: `trial_end` braucht ≥ 48h Vorlauf bei Stripe. An den letzten 1-2
+  // Tagen eines Monats (29./30./31.) ist das nicht erfüllt — dort fallen wir auf
+  // `billing_cycle_anchor` zurück. Der anteilige Betrag wäre dann eh nur ein paar
+  // Euro — der Kunde "trainiert" diese ~24h gratis und startet am 1. voll.
+  // ─────────────────────────────────────────────────────────────────────────
+  const MIN_TRIAL_HOURS = 48
+  const hoursUntilAnchor = (anchorDate.getTime() - now.getTime()) / (1000 * 60 * 60)
+  const useTrialEnd = hoursUntilAnchor >= MIN_TRIAL_HOURS && proratedCents > 0
+
+  const billing: SubscriptionBillingParams = useTrialEnd
+    ? { trial_end: anchorUnix }
+    : { billing_cycle_anchor: anchorUnix, proration_behavior: 'none' }
+
   return {
-    billing: {
-      billing_cycle_anchor: anchorUnix,
-      proration_behavior: 'none',
-    },
-    proratedCents,
+    billing,
+    // Wenn wir auf billing_cycle_anchor zurückfallen, NICHT noch ein
+    // add_invoice_item anhängen — sonst landet es am Anchor und der Kunde zahlt
+    // im Folgemonat anteilig + voller Monat (verwirrend und zu viel).
+    proratedCents: useTrialEnd ? proratedCents : 0,
     referenceDate,
     anchorDate,
     daysRemaining,
@@ -148,6 +174,66 @@ export async function upsertFirstMonthInvoiceItem(opts: {
       days_in_month: String(plan.daysInMonth),
     },
   })
+}
+
+/**
+ * Baut das `add_invoice_items` Payload für `subscription_data` in einer Stripe
+ * Checkout Session. Vorteil gegenüber `stripe.invoiceItems.create({ customer })`:
+ *
+ *  - Stripe Checkout UI zeigt den Betrag SOFORT in der Vorschau („Heute fällig").
+ *  - Garantiert auf der initial Subscription Invoice, kein Timing-Risiko.
+ *  - Tax Rate wird direkt mit dem Item assoziiert — saubere MwSt-Aufschlüsselung.
+ *
+ * Wird seit Mai 2026 statt `upsertFirstMonthInvoiceItem()` genutzt. Gibt `null`
+ * zurück wenn kein anteiliger Betrag fällig ist (z.B. Signup am 1. = voller Monat).
+ */
+export function buildFirstMonthAddInvoiceItem(opts: {
+  plan: ProratedFirstMonthPlan
+  taxRateId: string
+  membershipId: string
+  subscriptionId: string
+  extraMetadata?: Record<string, string>
+}): {
+  price_data: {
+    currency: string
+    product_data: { name: string; metadata?: Record<string, string> }
+    unit_amount: number
+    tax_behavior: 'inclusive'
+  }
+  quantity: number
+  tax_rates: string[]
+} | null {
+  const { plan, taxRateId, membershipId, subscriptionId, extraMetadata } = opts
+  if (plan.proratedCents <= 0) return null
+
+  const isFullMonth = plan.daysRemaining >= plan.daysInMonth
+  const dayBefore = new Date(plan.anchorDate.getTime() - 24 * 60 * 60 * 1000)
+  const description = isFullMonth
+    ? `Erster Monat ${formatDateDE(plan.referenceDate)} – ${formatDateDE(dayBefore)}`
+    : `Anteilig erster Monat (${formatDateDE(plan.referenceDate)} – ${formatDateDE(dayBefore)}, ${plan.daysRemaining}/${plan.daysInMonth} Tage)`
+
+  return {
+    price_data: {
+      currency: 'eur',
+      product_data: {
+        name: description,
+        metadata: {
+          ...(extraMetadata || {}),
+          subscription_id: subscriptionId,
+          membership_id: membershipId,
+          type: 'first_month_prorated',
+          signup_date: formatDateDE(plan.referenceDate),
+          anchor_date: formatDateDE(plan.anchorDate),
+          days_remaining: String(plan.daysRemaining),
+          days_in_month: String(plan.daysInMonth),
+        },
+      },
+      unit_amount: plan.proratedCents,
+      tax_behavior: 'inclusive',
+    },
+    quantity: 1,
+    tax_rates: [taxRateId],
+  }
 }
 
 /**

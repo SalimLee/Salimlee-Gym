@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { stripe, getOrCreateStripePrice, getOrCreateStripeCustomer, getOrCreateTaxRate, MEMBERSHIP_STRIPE_MAP } from '@/lib/stripe'
-import { computeProratedFirstMonth, upsertFirstMonthInvoiceItem } from '@/lib/stripe-billing'
+import { computeProratedFirstMonth, buildFirstMonthAddInvoiceItem } from '@/lib/stripe-billing'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseAdmin = createClient(
@@ -97,13 +97,18 @@ export async function POST(request: NextRequest) {
       // eine paid Rechnung hatte. Sonst fallback auf anteilige Berechnung.
       let isReactivation = dbSub?.payment_status === 'reactivation_pending'
       if (isReactivation && dbSub?.member_id) {
-        const { count: paidCount } = await supabaseAdmin
+        // Echte Reaktivierung nur wenn ein paid Betrag > 0 € existiert. 0 €-Invoices
+        // (z.B. aus fehlerhaft 0 €-Initial-Checkouts) zählen NICHT. Sonst würde der
+        // Coach mit "Erinnern" wieder einen 0 €-Link rausschicken statt anteilig.
+        const { data: realPaidInvs } = await supabaseAdmin
           .from('invoices')
-          .select('*', { count: 'exact', head: true })
+          .select('id')
           .eq('member_id', dbSub.member_id)
           .eq('status', 'paid')
-        if (!paidCount || paidCount === 0) {
-          console.warn(`Sub ${subscriptionId}: reactivation_pending aber keine paid Rechnungen — normale Anmeldung`)
+          .gt('amount', 0)
+          .limit(1)
+        if (!realPaidInvs || realPaidInvs.length === 0) {
+          console.warn(`Sub ${subscriptionId}: reactivation_pending aber keine paid Invoice mit Betrag > 0 — normale anteilige Anmeldung`)
           isReactivation = false
         }
       }
@@ -134,11 +139,36 @@ export async function POST(request: NextRequest) {
         }
         // Bewusst KEIN upsertFirstMonthInvoiceItem — keine anteilige Berechnung.
       } else {
+        // Anteilige Erstmonats-Berechnung — über `subscription_data.add_invoice_items`,
+        // damit der Betrag im Stripe Checkout UI sofort als "Heute fällig" erscheint.
         const plan = computeProratedFirstMonth(signupDate, config.unitAmount)
+
+        // KRITISCH: VOR Session-Erstellung ALLE pending first_month_prorated Items des
+        // Customers entfernen — sonst werden mehrere parallele Anteils-Posten an die
+        // initial Invoice gepackt (Doppel-Charge). Wir bauen das Item gleich frisch.
+        try {
+          const existing = await stripe.invoiceItems.list({ customer: customerId, limit: 100, pending: true })
+          for (const item of existing.data) {
+            if (item.metadata?.type === 'first_month_prorated') {
+              await stripe.invoiceItems.del(item.id)
+              console.log(`[send-reminder] Pending first_month_prorated Item ${item.id} gelöscht (Customer ${customerId})`)
+            }
+          }
+        } catch (e) {
+          console.warn('Konnte alte first_month_prorated Items nicht aufräumen:', e)
+        }
+
+        const firstMonthItem = buildFirstMonthAddInvoiceItem({
+          plan,
+          taxRateId,
+          membershipId,
+          subscriptionId,
+        })
 
         sessionParams.subscription_data = {
           ...plan.billing,
           default_tax_rates: [taxRateId],
+          ...(firstMonthItem ? { add_invoice_items: [firstMonthItem] } : {}),
           metadata: {
             subscription_id: subscriptionId,
             membership_id: membershipId,
@@ -147,15 +177,6 @@ export async function POST(request: NextRequest) {
             ...(config.intervalCount ? { cancel_after_months: String(config.intervalCount) } : {}),
           },
         }
-
-        await upsertFirstMonthInvoiceItem({
-          stripe,
-          customerId,
-          subscriptionId,
-          membershipId,
-          taxRateId,
-          plan,
-        })
       }
     } else {
       sessionParams.mode = 'payment'

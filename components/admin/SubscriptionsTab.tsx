@@ -54,7 +54,11 @@ const STATUS_META: Record<SubStatus, { label: string; tone: BadgeTone; descripti
  */
 function isAwaitingReminder(sub: Subscription): boolean {
   if (sub.status !== 'pending') return false
-  return sub.payment_status !== 'processing'
+  if (sub.payment_status === 'processing') return false
+  // 10er-Karte ist Einmalzahlung — keine wiederkehrenden Reminder sinnvoll.
+  // Falls trotzdem 'pending' → wahrscheinlich Sync-Bug. Coach nutzt 'Als bezahlt'.
+  if (sub.type === 'punch_card') return false
+  return true
 }
 function isSepaInProgress(sub: Subscription): boolean {
   return sub.payment_status === 'processing'
@@ -220,11 +224,25 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
     const member = getMember(sub.member_id)
     if (!member) { setReactivating(null); return }
 
-    // WICHTIG: Vor dem Reminder markieren wir die Sub als 'reactivation_pending'.
-    // Damit erkennt der Checkout-API-Endpunkt, dass KEINE anteilige Erstmonats-Rechnung
-    // gestellt werden darf — der Kunde hat schon einmal gezahlt, der Zyklus war nur
-    // unterbrochen. Stattdessen: Karte hinterlegen, erste Abbuchung am 1. nächsten
-    // Monats für vollen Monat.
+    // 1) Falls eine alte Stripe-Sub noch läuft (z.B. 0 €-Initial-Checkout), CANCELN.
+    //    Sonst hätten wir nach der Reaktivierung zwei parallele Stripe-Subs und
+    //    der Kunde würde doppelt belastet ab dem nächsten Abrechnungszyklus.
+    if (sub.stripe_subscription_id) {
+      try {
+        await fetch('/api/subscription/stripe-action', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'cancel', stripeSubscriptionId: sub.stripe_subscription_id }),
+        })
+      } catch (e) {
+        console.warn('Alte Stripe-Sub konnte nicht gecancelt werden — Reminder läuft trotzdem:', e)
+      }
+    }
+
+    // 2) Marker setzen. WICHTIG: Bei 0 €-Initial-Checkout (kein echter Paid > 0 €)
+    //    erkennt der Sicherheits-Check im Checkout-API das und fällt automatisch
+    //    auf die NORMALE anteilige Erstmonats-Berechnung zurück. Bei echten
+    //    Reaktivierungen (Kunde hatte vorher echte Zahlungen) wird hingegen die
+    //    Reaktivierungs-Logik genutzt (keine anteilige Berechnung).
     await supabase.from('subscriptions').update({
       status: 'pending',
       payment_status: 'reactivation_pending',
@@ -234,6 +252,7 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
       ? { ...s, status: 'pending', payment_status: 'reactivation_pending', stripe_subscription_id: null }
       : s))
 
+    // 3) Reminder mit neuem Checkout-Link senden.
     try {
       const res = await fetch('/api/subscription/send-reminder', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -617,6 +636,20 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
                           {isAwaitingReminder(sub) && (
                             <Button size="sm" variant="outline" onClick={() => sendReminder(sub)} disabled={sendingReminder === sub.id}>
                               {sendingReminder === sub.id ? 'Sendet…' : 'Erinnern'}
+                            </Button>
+                          )}
+                          {/* 10er-Karte ist Einmalzahlung — wenn pending UND Coach weiß
+                              dass bezahlt wurde, manuell als aktiv markieren. */}
+                          {sub.status === 'pending' && sub.type === 'punch_card' && (
+                            <Button size="sm" variant="success"
+                              onClick={async () => {
+                                await supabase.from('subscriptions').update({ status: 'active', payment_status: 'paid' }).eq('id', sub.id)
+                                setSubscriptions(prev => prev.map(s => s.id === sub.id ? { ...s, status: 'active', payment_status: 'paid' } : s))
+                                showSnackbar(`${getMember(sub.member_id)?.name || 'Mitglied'}: 10er-Karte als bezahlt markiert`)
+                              }}
+                              title="Einmalzahlung als bezahlt markieren"
+                            >
+                              Als bezahlt
                             </Button>
                           )}
                           {sub.status === 'active' && (
