@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { stripe, getOrCreateStripePrice, getOrCreateStripeCustomer, MEMBERSHIP_STRIPE_MAP } from '@/lib/stripe'
-import { buildSubscriptionBillingParams } from '@/lib/stripe-billing'
+import { stripe, getOrCreateStripePrice, getOrCreateStripeCustomer, getOrCreateTaxRate, MEMBERSHIP_STRIPE_MAP } from '@/lib/stripe'
+import { computeProratedFirstMonth, upsertFirstMonthInvoiceItem } from '@/lib/stripe-billing'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseAdmin = createClient(
@@ -54,9 +54,10 @@ export async function POST(request: NextRequest) {
     const config = MEMBERSHIP_STRIPE_MAP[membershipId]
 
     // Create new Stripe checkout session
-    const [priceId, customerId] = await Promise.all([
+    const [priceId, customerId, taxRateId] = await Promise.all([
       getOrCreateStripePrice(membershipId),
       getOrCreateStripeCustomer(memberEmail, memberName),
+      getOrCreateTaxRate(),
     ])
 
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
@@ -81,16 +82,43 @@ export async function POST(request: NextRequest) {
 
     if (config.recurring) {
       sessionParams.mode = 'subscription'
-      sessionParams.line_items = [{ price: priceId, quantity: 1 }]
+      sessionParams.line_items = [{ price: priceId, quantity: 1, tax_rates: [taxRateId] }]
+
+      // Faire Erste-Monat-Proration ab Vertragsabschluss (sub.start_date),
+      // NICHT ab Klickdatum dieses Reminders — sonst zahlt jemand der nach 1 Woche zahlt
+      // weniger als jemand der sofort zahlt. Siehe Detail-Doku in lib/stripe-billing.ts.
+      const { data: dbSub } = await supabaseAdmin
+        .from('subscriptions')
+        .select('start_date, created_at')
+        .eq('id', subscriptionId)
+        .maybeSingle()
+
+      const signupDate = dbSub?.start_date
+        ? new Date(`${dbSub.start_date}T00:00:00Z`)
+        : (dbSub?.created_at ? new Date(dbSub.created_at) : new Date())
+
+      const plan = computeProratedFirstMonth(signupDate, config.unitAmount)
 
       sessionParams.subscription_data = {
-        ...buildSubscriptionBillingParams(),
+        ...plan.billing,
+        default_tax_rates: [taxRateId],
         metadata: {
           subscription_id: subscriptionId,
           membership_id: membershipId,
+          signup_date: dbSub?.start_date || new Date().toISOString().split('T')[0],
+          first_month_prorated_cents: String(plan.proratedCents),
           ...(config.intervalCount ? { cancel_after_months: String(config.intervalCount) } : {}),
         },
       }
+
+      await upsertFirstMonthInvoiceItem({
+        stripe,
+        customerId,
+        subscriptionId,
+        membershipId,
+        taxRateId,
+        plan,
+      })
     } else {
       sessionParams.mode = 'payment'
       sessionParams.line_items = [{ price: priceId, quantity: 1 }]
