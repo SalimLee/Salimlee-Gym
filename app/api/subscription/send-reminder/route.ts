@@ -84,41 +84,79 @@ export async function POST(request: NextRequest) {
       sessionParams.mode = 'subscription'
       sessionParams.line_items = [{ price: priceId, quantity: 1, tax_rates: [taxRateId] }]
 
-      // Faire Erste-Monat-Proration ab Vertragsabschluss (sub.start_date),
-      // NICHT ab Klickdatum dieses Reminders — sonst zahlt jemand der nach 1 Woche zahlt
-      // weniger als jemand der sofort zahlt. Siehe Detail-Doku in lib/stripe-billing.ts.
+      // Faire Erste-Monat-Proration ab Vertragsabschluss — bzw. Reaktivierungs-Modus,
+      // wenn der Coach das Abo wiederbelebt hat (siehe Detail-Doku in
+      // lib/stripe-billing.ts und app/api/stripe/create-checkout/route.ts).
       const { data: dbSub } = await supabaseAdmin
         .from('subscriptions')
-        .select('start_date, created_at')
+        .select('start_date, created_at, payment_status, member_id')
         .eq('id', subscriptionId)
         .maybeSingle()
+
+      // Reaktivierungs-Flow nur wenn Marker gesetzt UND Member tatsächlich schon mal
+      // eine paid Rechnung hatte. Sonst fallback auf anteilige Berechnung.
+      let isReactivation = dbSub?.payment_status === 'reactivation_pending'
+      if (isReactivation && dbSub?.member_id) {
+        const { count: paidCount } = await supabaseAdmin
+          .from('invoices')
+          .select('*', { count: 'exact', head: true })
+          .eq('member_id', dbSub.member_id)
+          .eq('status', 'paid')
+        if (!paidCount || paidCount === 0) {
+          console.warn(`Sub ${subscriptionId}: reactivation_pending aber keine paid Rechnungen — normale Anmeldung`)
+          isReactivation = false
+        }
+      }
 
       const signupDate = dbSub?.start_date
         ? new Date(`${dbSub.start_date}T00:00:00Z`)
         : (dbSub?.created_at ? new Date(dbSub.created_at) : new Date())
 
-      const plan = computeProratedFirstMonth(signupDate, config.unitAmount)
+      if (isReactivation) {
+        // Karte hinterlegen, erste Abbuchung am 1. nächsten Monats voller Monat.
+        // Keine anteilige Erstmonats-Rechnung — der Kunde hat schon einmal gezahlt.
+        const now = new Date()
+        const anchorDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1))
+        const anchorUnix = Math.floor(anchorDate.getTime() / 1000)
 
-      sessionParams.subscription_data = {
-        ...plan.billing,
-        default_tax_rates: [taxRateId],
-        metadata: {
-          subscription_id: subscriptionId,
-          membership_id: membershipId,
-          signup_date: dbSub?.start_date || new Date().toISOString().split('T')[0],
-          first_month_prorated_cents: String(plan.proratedCents),
-          ...(config.intervalCount ? { cancel_after_months: String(config.intervalCount) } : {}),
-        },
+        sessionParams.subscription_data = {
+          billing_cycle_anchor: anchorUnix,
+          proration_behavior: 'none',
+          default_tax_rates: [taxRateId],
+          metadata: {
+            subscription_id: subscriptionId,
+            membership_id: membershipId,
+            is_reactivation: 'true',
+            reactivated_at: now.toISOString().split('T')[0],
+            anchor_date: anchorDate.toISOString().split('T')[0],
+            ...(config.intervalCount ? { cancel_after_months: String(config.intervalCount) } : {}),
+          },
+        }
+        // Bewusst KEIN upsertFirstMonthInvoiceItem — keine anteilige Berechnung.
+      } else {
+        const plan = computeProratedFirstMonth(signupDate, config.unitAmount)
+
+        sessionParams.subscription_data = {
+          ...plan.billing,
+          default_tax_rates: [taxRateId],
+          metadata: {
+            subscription_id: subscriptionId,
+            membership_id: membershipId,
+            signup_date: dbSub?.start_date || new Date().toISOString().split('T')[0],
+            first_month_prorated_cents: String(plan.proratedCents),
+            ...(config.intervalCount ? { cancel_after_months: String(config.intervalCount) } : {}),
+          },
+        }
+
+        await upsertFirstMonthInvoiceItem({
+          stripe,
+          customerId,
+          subscriptionId,
+          membershipId,
+          taxRateId,
+          plan,
+        })
       }
-
-      await upsertFirstMonthInvoiceItem({
-        stripe,
-        customerId,
-        subscriptionId,
-        membershipId,
-        taxRateId,
-        plan,
-      })
     } else {
       sessionParams.mode = 'payment'
       sessionParams.line_items = [{ price: priceId, quantity: 1 }]

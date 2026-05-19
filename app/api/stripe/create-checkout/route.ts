@@ -120,13 +120,40 @@ export async function POST(request: NextRequest) {
       // ─────────────────────────────────────────────────────────────────────
       const { data: dbSub } = await supabaseAdmin
         .from('subscriptions')
-        .select('start_date, created_at, price')
+        .select('start_date, created_at, price, payment_status, member_id')
         .eq('id', subscriptionId)
         .maybeSingle()
 
       const signupDate = dbSub?.start_date
         ? new Date(`${dbSub.start_date}T00:00:00Z`)
         : (dbSub?.created_at ? new Date(dbSub.created_at) : new Date())
+
+      // ─────────────────────────────────────────────────────────────────────
+      // REAKTIVIERUNG: Coach hat ein beendetes Abo wiederbelebt. Bei erneutem
+      // Checkout darf KEINE anteilige Erstmonats-Rechnung anfallen — Kunde hat
+      // schon einmal gezahlt, der Zyklus war nur unterbrochen.
+      //
+      // Marker: subscriptions.payment_status === 'reactivation_pending' (gesetzt
+      // von der `reactivate()`-Aktion im SubscriptionsTab).
+      //
+      // SICHERUNG: Reaktivierungs-Flow nur greifen lassen, wenn der Member
+      // tatsächlich schon mal eine Stripe-Rechnung bezahlt hat. Sonst — z.B.
+      // wenn der Coach versehentlich bei einer noch nie bezahlten Sub auf
+      // "Reaktivieren" klickt — fallen wir auf die normale anteilige Berechnung
+      // zurück (sonst würde der Kunde gratis den ersten Teilmonat trainieren).
+      // ─────────────────────────────────────────────────────────────────────
+      let isReactivation = dbSub?.payment_status === 'reactivation_pending'
+      if (isReactivation && dbSub?.member_id) {
+        const { count: paidCount } = await supabaseAdmin
+          .from('invoices')
+          .select('*', { count: 'exact', head: true })
+          .eq('member_id', dbSub.member_id)
+          .eq('status', 'paid')
+        if (!paidCount || paidCount === 0) {
+          console.warn(`Sub ${subscriptionId}: reactivation_pending Marker gesetzt, aber Member ${dbSub.member_id} hat noch keine paid Rechnungen — fallback auf normale Anmeldung mit anteiliger Berechnung`)
+          isReactivation = false
+        }
+      }
 
       // Für individuelle Aktionen ist `config.unitAmount` der Basis-Preis und der Aktionsrabatt
       // läuft als Stripe-Coupon. Damit die Proration auf den ECHTEN Aktionsbetrag rechnet,
@@ -135,33 +162,54 @@ export async function POST(request: NextRequest) {
         ? Math.round(customAction.aktionsPreis * 100)
         : config.unitAmount
 
-      const plan = computeProratedFirstMonth(signupDate, effectiveMonthlyCents)
+      if (isReactivation) {
+        // Anchor = 1. nächsten Monats relativ zu HEUTE. proration_behavior 'none' +
+        // KEIN pending Invoice Item → Stripe nimmt die Karte entgegen, initial Invoice
+        // ist 0 € (bzw. "no_payment_required"), erste echte Abbuchung am Anchor.
+        const now = new Date()
+        const anchorDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1))
+        const anchorUnix = Math.floor(anchorDate.getTime() / 1000)
 
-      sessionParams.subscription_data = {
-        ...plan.billing,
-        default_tax_rates: [taxRateId],
-        metadata: {
-          ...baseMetadata,
-          signup_date: dbSub?.start_date || new Date().toISOString().split('T')[0],
-          first_month_prorated_cents: String(plan.proratedCents),
-          ...(config.intervalCount ? { cancel_after_months: String(config.intervalCount) } : {}),
-        },
+        sessionParams.subscription_data = {
+          billing_cycle_anchor: anchorUnix,
+          proration_behavior: 'none',
+          default_tax_rates: [taxRateId],
+          metadata: {
+            ...baseMetadata,
+            is_reactivation: 'true',
+            reactivated_at: now.toISOString().split('T')[0],
+            anchor_date: anchorDate.toISOString().split('T')[0],
+            ...(config.intervalCount ? { cancel_after_months: String(config.intervalCount) } : {}),
+          },
+        }
+        // Bewusst KEIN upsertFirstMonthInvoiceItem — keine anteilige Berechnung bei Reaktivierung.
+      } else {
+        // Normale Erst-Anmeldung: anteilig vom Vertragsabschluss bis zum 1. nächsten Monats.
+        const plan = computeProratedFirstMonth(signupDate, effectiveMonthlyCents)
+
+        sessionParams.subscription_data = {
+          ...plan.billing,
+          default_tax_rates: [taxRateId],
+          metadata: {
+            ...baseMetadata,
+            signup_date: dbSub?.start_date || new Date().toISOString().split('T')[0],
+            first_month_prorated_cents: String(plan.proratedCents),
+            ...(config.intervalCount ? { cancel_after_months: String(config.intervalCount) } : {}),
+          },
+        }
+
+        await upsertFirstMonthInvoiceItem({
+          stripe,
+          customerId,
+          subscriptionId,
+          membershipId: effectiveMembershipId,
+          taxRateId,
+          plan,
+          extraMetadata: isCustomAction
+            ? { is_custom_action: 'true', custom_action_basis_id: String(customAction.basisId) }
+            : undefined,
+        })
       }
-
-      // Pending Invoice Item für den anteiligen Erstmonat-Betrag. Idempotent —
-      // alte pending Items derselben Subscription werden vorher entfernt, damit
-      // mehrfaches Generieren des Checkout-Links keine Duplikate erzeugt.
-      await upsertFirstMonthInvoiceItem({
-        stripe,
-        customerId,
-        subscriptionId,
-        membershipId: effectiveMembershipId,
-        taxRateId,
-        plan,
-        extraMetadata: isCustomAction
-          ? { is_custom_action: 'true', custom_action_basis_id: String(customAction.basisId) }
-          : undefined,
-      })
 
       // Aktionsrabatt als repeating Coupon anhängen — gilt automatisch nur für die ersten
       // `aktionsMonate` Abrechnungen und wird von Stripe danach selbst entfernt.

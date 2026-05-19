@@ -1,10 +1,15 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { adminDelete } from '@/lib/admin-delete'
+import {
+  Card, CardHeader, Button, IconButton, Badge, Input, Select, SearchInput, Checkbox,
+  Snackbar, EmptyState, SortHeader, useSort, type BadgeTone,
+} from './ui'
+import { MemberPhotoUpload } from './MemberPhotoUpload'
 
-interface Member { id: string; created_at: string; updated_at: string; name: string; email: string; phone: string | null; notes: string | null; active: boolean }
+interface Member { id: string; created_at: string; updated_at: string; name: string; email: string; phone: string | null; notes: string | null; active: boolean; photo_url?: string | null }
 interface Subscription { id: string; created_at: string; updated_at: string; member_id: string; name: string; type: string; start_date: string; end_date: string | null; total_units: number | null; remaining_units: number | null; price: number; status: 'active' | 'expired' | 'cancelled' | 'paused' | 'pending'; notes: string | null }
 interface Invoice { id: string; created_at: string; updated_at: string; member_id: string; invoice_number: string; description: string; amount: number; status: 'open' | 'paid' | 'overdue' | 'cancelled'; due_date: string; paid_date: string | null; notes: string | null }
 interface Booking { id: string; created_at: string; updated_at: string; name: string; email: string; phone: string | null; service: string; preferred_date: string | null; message: string | null; status: 'pending' | 'confirmed' | 'cancelled'; admin_notes: string | null }
@@ -20,8 +25,22 @@ interface MembersTabProps {
   initialSearch?: string
 }
 
-export default function MembersTab({ members, setMembers, subscriptions, invoices, bookings, supabase, onRefresh, initialSearch = '' }: MembersTabProps) {
+const SUB_STATUS_META: Record<string, { label: string; tone: BadgeTone }> = {
+  active:    { label: 'Aktiv',              tone: 'success' },
+  pending:   { label: 'Zahlung ausstehend', tone: 'warning' },
+  paused:    { label: 'Pausiert',           tone: 'info' },
+  expired:   { label: 'Abgelaufen',         tone: 'danger' },
+  cancelled: { label: 'Gekündigt',          tone: 'neutral' },
+}
+
+function formatDateDE(d: string): string {
+  return new Date(d).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
+
+export default function MembersTab({ members, setMembers, subscriptions, invoices, bookings, supabase, onRefresh: _onRefresh, initialSearch = '' }: MembersTabProps) {
+  void _onRefresh
   const [search, setSearch] = useState(initialSearch)
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'has_active_sub' | 'has_open_invoice'>('all')
   const [selectedMember, setSelectedMember] = useState<Member | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -29,22 +48,77 @@ export default function MembersTab({ members, setMembers, subscriptions, invoice
   const [editingId, setEditingId] = useState<string | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
-  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [snackbar, setSnackbar] = useState<{ message: string; tone: 'success' | 'danger' | 'info' } | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
-  const filteredMembers = members.filter(m =>
-    search === '' ||
-    m.name.toLowerCase().includes(search.toLowerCase()) ||
-    m.email.toLowerCase().includes(search.toLowerCase()) ||
-    (m.phone && m.phone.includes(search))
-  )
+  const showSnackbar = useCallback((message: string, tone: 'success' | 'danger' | 'info' = 'success') => setSnackbar({ message, tone }), [])
+  useEffect(() => {
+    if (!snackbar) return
+    const t = setTimeout(() => setSnackbar(null), 4000)
+    return () => clearTimeout(t)
+  }, [snackbar])
 
-  const getMemberSubs = (memberId: string) => subscriptions.filter(s => s.member_id === memberId)
-  const getMemberInvoices = (memberId: string) => invoices.filter(i => i.member_id === memberId)
-  const getMemberBookings = (email: string) => bookings.filter(b => b.email.toLowerCase() === email.toLowerCase())
+  // Lookup-Helpers ────────────────────────────────────────────────────────────
+  const subsByMember = useMemo(() => {
+    const m = new Map<string, Subscription[]>()
+    subscriptions.forEach(s => {
+      const arr = m.get(s.member_id) || []
+      arr.push(s)
+      m.set(s.member_id, arr)
+    })
+    return m
+  }, [subscriptions])
 
-  const getActiveSub = (memberId: string) => subscriptions.find(s => s.member_id === memberId && s.status === 'active')
-  const getOpenInvoiceCount = (memberId: string) => invoices.filter(i => i.member_id === memberId && (i.status === 'open' || i.status === 'overdue')).length
+  const invoicesByMember = useMemo(() => {
+    const m = new Map<string, Invoice[]>()
+    invoices.forEach(i => {
+      const arr = m.get(i.member_id) || []
+      arr.push(i)
+      m.set(i.member_id, arr)
+    })
+    return m
+  }, [invoices])
 
+  const bookingsByEmail = useMemo(() => {
+    const m = new Map<string, Booking[]>()
+    bookings.forEach(b => {
+      const k = b.email.toLowerCase()
+      const arr = m.get(k) || []
+      arr.push(b)
+      m.set(k, arr)
+    })
+    return m
+  }, [bookings])
+
+  const memberDerived = (m: Member) => {
+    const subs = subsByMember.get(m.id) || []
+    const activeSub = subs.find(s => s.status === 'active')
+    const pendingSub = subs.find(s => s.status === 'pending')
+    const pausedSub = subs.find(s => s.status === 'paused')
+    const invs = invoicesByMember.get(m.id) || []
+    const openCount = invs.filter(i => i.status === 'open' || i.status === 'overdue').length
+    return { subs, activeSub, pendingSub, pausedSub, openCount, totalSubs: subs.length }
+  }
+
+  // Filter ───────────────────────────────────────────────────────────────────
+  const filtered = useMemo(() => {
+    return members.filter(m => {
+      if (search) {
+        const q = search.toLowerCase()
+        if (!m.name.toLowerCase().includes(q) && !m.email.toLowerCase().includes(q) && !(m.phone || '').includes(search)) return false
+      }
+      if (statusFilter === 'active' && !m.active) return false
+      if (statusFilter === 'inactive' && m.active) return false
+      if (statusFilter === 'has_active_sub' && !memberDerived(m).activeSub) return false
+      if (statusFilter === 'has_open_invoice' && memberDerived(m).openCount === 0) return false
+      return true
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [members, search, statusFilter, subsByMember, invoicesByMember])
+
+  const { sorted, isActive, dirOf, setSort } = useSort<Member>(filtered, 'name', 'asc')
+
+  // Aktionen ─────────────────────────────────────────────────────────────────
   const resetForm = () => {
     setFormData({ name: '', email: '', phone: '', notes: '' })
     setEditingId(null)
@@ -54,281 +128,330 @@ export default function MembersTab({ members, setMembers, subscriptions, invoice
   const saveMember = async () => {
     if (!formData.name || !formData.email) return
     setSaving(true)
-
     if (editingId) {
-      const { data, error } = await supabase
-        .from('members')
-        .update({ name: formData.name, email: formData.email, phone: formData.phone || null, notes: formData.notes || null })
-        .eq('id', editingId)
-        .select()
-        .single()
+      const { data, error } = await supabase.from('members').update({ name: formData.name, email: formData.email, phone: formData.phone || null, notes: formData.notes || null }).eq('id', editingId).select().single()
       if (!error && data) {
         setMembers(prev => prev.map(m => m.id === editingId ? data : m))
         if (selectedMember?.id === editingId) setSelectedMember(data)
-      }
+        showSnackbar('Mitglied aktualisiert')
+      } else if (error) showSnackbar('Aktualisierung fehlgeschlagen', 'danger')
     } else {
-      const { data, error } = await supabase
-        .from('members')
-        .insert({ name: formData.name, email: formData.email, phone: formData.phone || null, notes: formData.notes || null })
-        .select()
-        .single()
-      if (!error && data) {
-        setMembers(prev => [data, ...prev])
-      }
+      const { data, error } = await supabase.from('members').insert({ name: formData.name, email: formData.email, phone: formData.phone || null, notes: formData.notes || null }).select().single()
+      if (!error && data) { setMembers(prev => [data, ...prev]); showSnackbar('Mitglied angelegt') }
+      else if (error) showSnackbar('Anlegen fehlgeschlagen', 'danger')
     }
     setSaving(false)
     resetForm()
   }
 
-  const toggleActive = async (member: Member) => {
-    const { error } = await supabase
-      .from('members')
-      .update({ active: !member.active })
-      .eq('id', member.id)
+  const toggleActive = async (m: Member) => {
+    const { error } = await supabase.from('members').update({ active: !m.active }).eq('id', m.id)
     if (!error) {
-      setMembers(prev => prev.map(m => m.id === member.id ? { ...m, active: !m.active } : m))
-      if (selectedMember?.id === member.id) setSelectedMember({ ...member, active: !member.active })
+      setMembers(prev => prev.map(x => x.id === m.id ? { ...x, active: !x.active } : x))
+      if (selectedMember?.id === m.id) setSelectedMember({ ...m, active: !m.active })
+      showSnackbar(m.active ? 'Mitglied deaktiviert' : 'Mitglied reaktiviert')
     }
   }
 
-  const deleteMember = async (member: Member) => {
+  const deleteMember = async (m: Member) => {
     setDeleting(true)
-    setDeleteError(null)
-    // Abhängige Einträge zuerst löschen
-    const subsRes = await adminDelete(supabase, 'subscriptions', member.id, 'member_id')
-    if (subsRes.error) {
-      setDeleteError(subsRes.error)
-      setDeleting(false)
-      return
-    }
-    const invRes = await adminDelete(supabase, 'invoices', member.id, 'member_id')
-    if (invRes.error) {
-      setDeleteError(invRes.error)
-      setDeleting(false)
-      return
-    }
-    const { error } = await adminDelete(supabase, 'members', member.id)
+    const subsRes = await adminDelete(supabase, 'subscriptions', m.id, 'member_id')
+    if (subsRes.error) { showSnackbar(subsRes.error, 'danger'); setDeleting(false); return }
+    const invRes = await adminDelete(supabase, 'invoices', m.id, 'member_id')
+    if (invRes.error) { showSnackbar(invRes.error, 'danger'); setDeleting(false); return }
+    const { error } = await adminDelete(supabase, 'members', m.id)
     if (!error) {
-      setMembers(prev => prev.filter(m => m.id !== member.id))
-      if (selectedMember?.id === member.id) setSelectedMember(null)
+      setMembers(prev => prev.filter(x => x.id !== m.id))
+      if (selectedMember?.id === m.id) setSelectedMember(null)
       setDeleteConfirm(null)
-    } else {
-      setDeleteError(error)
-    }
+      showSnackbar('Mitglied gelöscht')
+    } else showSnackbar(error, 'danger')
     setDeleting(false)
   }
 
-  const startEdit = (member: Member) => {
-    setFormData({ name: member.name, email: member.email, phone: member.phone || '', notes: member.notes || '' })
-    setEditingId(member.id)
+  const startEdit = (m: Member) => {
+    setFormData({ name: m.name, email: m.email, phone: m.phone || '', notes: m.notes || '' })
+    setEditingId(m.id)
     setShowForm(true)
   }
 
-  const formatDate = (date: string) => new Date(date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
-
-  const daysUntil = (date: string) => {
-    const diff = new Date(date).getTime() - new Date().getTime()
-    return Math.ceil(diff / (1000 * 60 * 60 * 24))
+  // Bulk
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+  const toggleSelectAll = () => {
+    if (selectedIds.size === sorted.length) setSelectedIds(new Set())
+    else setSelectedIds(new Set(sorted.map(m => m.id)))
   }
 
+  const bulkSetActive = async (active: boolean) => {
+    const ids = Array.from(selectedIds)
+    if (ids.length === 0) return
+    await supabase.from('members').update({ active }).in('id', ids)
+    setMembers(prev => prev.map(m => ids.includes(m.id) ? { ...m, active } : m))
+    setSelectedIds(new Set())
+    showSnackbar(`${ids.length} Mitglied${ids.length !== 1 ? 'er' : ''} ${active ? 'reaktiviert' : 'deaktiviert'}`)
+  }
+
+  // Stats
+  const stats = useMemo(() => {
+    const active = members.filter(m => m.active).length
+    const withSub = members.filter(m => memberDerived(m).activeSub).length
+    const withOpen = members.filter(m => memberDerived(m).openCount > 0).length
+    const newThisMonth = members.filter(m => {
+      const d = new Date(m.created_at)
+      const now = new Date()
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
+    }).length
+    return { active, withSub, withOpen, newThisMonth, total: members.length }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [members, subscriptions, invoices])
+
   return (
-    <div className="space-y-6">
-      {/* Header mit Suche und Hinzufügen */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Mitglied suchen (Name, Email, Telefon)..."
-            className="w-full pl-10 pr-4 py-3 bg-dark-900/50 border border-dark-800 rounded-xl text-dark-100 placeholder:text-dark-500 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 text-sm"
-          />
+    <div className="space-y-5 animate-fade-in-fast">
+      {/* Headline */}
+      <div className="flex items-end justify-between gap-4 flex-wrap">
+        <div>
+          <p className="admin-eyebrow">Mitglieder</p>
+          <h1 className="admin-h1 mt-1">Mitgliederverwaltung</h1>
+          <p className="admin-body mt-1">Alle Personen die im Gym trainieren — mit Abo-Status, offenen Rechnungen und letzten Buchungen.</p>
         </div>
-        <button
-          onClick={() => { resetForm(); setShowForm(true) }}
-          className="px-5 py-3 bg-brand-500 text-dark-950 font-bold rounded-xl hover:bg-brand-400 transition-colors text-sm whitespace-nowrap"
+        <Button variant="primary" onClick={() => { resetForm(); setShowForm(true) }}
+          icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>}
         >
-          + Mitglied hinzufügen
-        </button>
+          Neues Mitglied
+        </Button>
       </div>
 
-      {/* Formular */}
+      {/* Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Card padded className="!p-4">
+          <p className="admin-eyebrow">Gesamt</p>
+          <p className="text-[26px] leading-[32px] font-semibold tracking-[-0.4px] text-admin-ink-strong mt-1">{stats.total}</p>
+          <p className="admin-caption">Mitglieder insgesamt</p>
+        </Card>
+        <Card padded className="!p-4">
+          <p className="admin-eyebrow">Aktiv</p>
+          <p className="text-[26px] leading-[32px] font-semibold tracking-[-0.4px] text-status-success mt-1">{stats.active}</p>
+          <p className="admin-caption">{stats.withSub} davon mit aktivem Abo</p>
+        </Card>
+        <Card padded className="!p-4">
+          <p className="admin-eyebrow">Offene Rechnungen</p>
+          <p className={`text-[26px] leading-[32px] font-semibold tracking-[-0.4px] mt-1 ${stats.withOpen > 0 ? 'text-status-warning' : 'text-admin-ink-strong'}`}>{stats.withOpen}</p>
+          <p className="admin-caption">Mitglieder mit Zahlungsbedarf</p>
+        </Card>
+        <Card padded className="!p-4">
+          <p className="admin-eyebrow">Neu diesen Monat</p>
+          <p className="text-[26px] leading-[32px] font-semibold tracking-[-0.4px] text-status-info mt-1">{stats.newThisMonth}</p>
+          <p className="admin-caption">Neu-Anmeldungen</p>
+        </Card>
+      </div>
+
+      {/* Form */}
       {showForm && (
-        <div className="bg-dark-900/50 rounded-xl border border-brand-500/30 p-5">
-          <h3 className="font-bold text-dark-100 mb-4">{editingId ? 'Mitglied bearbeiten' : 'Neues Mitglied'}</h3>
-          <div className="grid sm:grid-cols-2 gap-4">
-            <input type="text" value={formData.name} onChange={e => setFormData(p => ({ ...p, name: e.target.value }))} placeholder="Name *" className="input-field text-sm" />
-            <input type="email" value={formData.email} onChange={e => setFormData(p => ({ ...p, email: e.target.value }))} placeholder="E-Mail *" className="input-field text-sm" />
-            <input type="tel" value={formData.phone} onChange={e => setFormData(p => ({ ...p, phone: e.target.value }))} placeholder="Telefon" className="input-field text-sm" />
-            <input type="text" value={formData.notes} onChange={e => setFormData(p => ({ ...p, notes: e.target.value }))} placeholder="Notizen" className="input-field text-sm" />
+        <Card>
+          <CardHeader
+            eyebrow={editingId ? 'Bearbeiten' : 'Neu anlegen'}
+            title={editingId ? 'Mitglied bearbeiten' : 'Neues Mitglied'}
+            actions={<Button variant="ghost" size="sm" onClick={resetForm}
+              icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>}
+            />}
+          />
+          <div className="grid sm:grid-cols-2 gap-3">
+            <label className="block">
+              <span className="admin-caption block mb-1">Name *</span>
+              <Input type="text" value={formData.name} onChange={e => setFormData(p => ({ ...p, name: e.target.value }))} />
+            </label>
+            <label className="block">
+              <span className="admin-caption block mb-1">E-Mail *</span>
+              <Input type="email" value={formData.email} onChange={e => setFormData(p => ({ ...p, email: e.target.value }))} />
+            </label>
+            <label className="block">
+              <span className="admin-caption block mb-1">Telefon</span>
+              <Input type="tel" value={formData.phone} onChange={e => setFormData(p => ({ ...p, phone: e.target.value }))} />
+            </label>
+            <label className="block">
+              <span className="admin-caption block mb-1">Notizen</span>
+              <Input type="text" value={formData.notes} onChange={e => setFormData(p => ({ ...p, notes: e.target.value }))} />
+            </label>
           </div>
-          <div className="flex gap-3 mt-4">
-            <button onClick={saveMember} disabled={saving || !formData.name || !formData.email} className="px-5 py-2 bg-brand-500 text-dark-950 font-bold rounded-lg hover:bg-brand-400 transition-colors text-sm disabled:opacity-50">
-              {saving ? 'Speichert...' : editingId ? 'Speichern' : 'Hinzufügen'}
-            </button>
-            <button onClick={resetForm} className="px-5 py-2 text-dark-400 border border-dark-700 rounded-lg hover:border-dark-600 transition-colors text-sm">Abbrechen</button>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="ghost" onClick={resetForm}>Abbrechen</Button>
+            <Button variant="primary" onClick={saveMember} disabled={saving || !formData.name || !formData.email}>
+              {saving ? 'Speichert…' : editingId ? 'Speichern' : 'Anlegen'}
+            </Button>
           </div>
-        </div>
+        </Card>
       )}
 
-      {/* Mitgliederliste und Detail */}
-      <div className="grid lg:grid-cols-3 gap-6">
+      {/* Mitglieder + Detail */}
+      <div className="grid lg:grid-cols-3 gap-4">
+        {/* Liste */}
         <div className="lg:col-span-2">
-          <div className="bg-dark-900/50 rounded-xl border border-dark-800 overflow-hidden">
-            <div className="p-4 border-b border-dark-800 flex items-center justify-between">
-              <h2 className="font-bold text-dark-100">
-                Mitglieder
-                <span className="text-dark-500 font-normal ml-2 text-sm">{filteredMembers.length} Ergebnisse</span>
-              </h2>
-              <button onClick={onRefresh} className="text-sm text-dark-400 hover:text-brand-500 transition-colors">Aktualisieren</button>
+          <Card padded={false}>
+            {/* Filter */}
+            <div className="p-4 flex items-center gap-2 flex-wrap border-b border-admin-hairline-soft">
+              <div className="flex-1 min-w-[200px]">
+                <SearchInput value={search} onChange={setSearch} placeholder="Name, E-Mail, Telefon..." />
+              </div>
+              <Select value={statusFilter} onChange={e => setStatusFilter(e.target.value as typeof statusFilter)} className="min-w-[200px]">
+                <option value="all">Alle Mitglieder</option>
+                <option value="active">Nur Aktiv</option>
+                <option value="inactive">Nur Inaktiv</option>
+                <option value="has_active_sub">Mit aktivem Abo</option>
+                <option value="has_open_invoice">Mit offener Rechnung</option>
+              </Select>
             </div>
 
-            {filteredMembers.length === 0 ? (
-              <div className="p-12 text-center">
-                <p className="text-dark-500">{search ? 'Kein Mitglied gefunden' : 'Noch keine Mitglieder angelegt'}</p>
-              </div>
-            ) : (
-              <div className="divide-y divide-dark-800">
-                {filteredMembers.map(member => {
-                  const activeSub = getActiveSub(member.id)
-                  const openInvCount = getOpenInvoiceCount(member.id)
-                  return (
-                    <button
-                      key={member.id}
-                      onClick={() => setSelectedMember(member)}
-                      className={`w-full p-4 text-left hover:bg-dark-800/50 transition-colors ${
-                        selectedMember?.id === member.id ? 'bg-dark-800/50 border-l-2 border-l-brand-500' : ''
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-4">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${member.active ? 'bg-brand-500/20 text-brand-500' : 'bg-dark-700 text-dark-500'}`}>
-                              {member.name.charAt(0).toUpperCase()}
-                            </div>
-                            <div>
-                              <p className={`font-bold truncate ${member.active ? 'text-dark-100' : 'text-dark-500'}`}>{member.name}</p>
-                              <p className="text-xs text-dark-500">{member.email}</p>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          {activeSub && (
-                            <span className="px-2 py-0.5 rounded-full text-xs bg-blue-400/10 text-blue-400 border border-blue-400/30">
-                              Abo aktiv
-                            </span>
-                          )}
-                          {openInvCount > 0 && (
-                            <span className="px-2 py-0.5 rounded-full text-xs bg-red-400/10 text-red-400 border border-red-400/30">
-                              {openInvCount} offen
-                            </span>
-                          )}
-                          {!member.active && (
-                            <span className="px-2 py-0.5 rounded-full text-xs bg-dark-700 text-dark-500 border border-dark-600">
-                              Inaktiv
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </button>
-                  )
-                })}
+            {/* Bulk-Bar */}
+            {selectedIds.size > 0 && (
+              <div className="px-4 py-2.5 bg-admin-surface-soft border-b border-brand-500/30 flex items-center gap-3 flex-wrap">
+                <p className="text-[13px] font-semibold text-brand-500">{selectedIds.size} ausgewählt</p>
+                <Button size="sm" variant="outline" onClick={() => bulkSetActive(true)}>Reaktivieren</Button>
+                <Button size="sm" variant="outline" onClick={() => bulkSetActive(false)}>Deaktivieren</Button>
+                <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>Auswahl aufheben</Button>
               </div>
             )}
-          </div>
+
+            {sorted.length === 0 ? (
+              <EmptyState
+                icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>}
+                title="Keine Mitglieder gefunden"
+                description={search || statusFilter !== 'all' ? 'Filter zurücksetzen, um alle zu sehen.' : 'Lege das erste Mitglied an.'}
+              />
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th className="w-10">
+                        <Checkbox
+                          checked={selectedIds.size === sorted.length && sorted.length > 0}
+                          indeterminate={selectedIds.size > 0 && selectedIds.size < sorted.length}
+                          onChange={toggleSelectAll}
+                          ariaLabel="Alle"
+                        />
+                      </th>
+                      <th><SortHeader label="Name" active={isActive('name')} direction={dirOf('name')} onClick={() => setSort('name')} /></th>
+                      <th>Abo-Status</th>
+                      <th className="text-right">Offen</th>
+                      <th><SortHeader label="Mitglied seit" active={isActive('created_at')} direction={dirOf('created_at')} onClick={() => setSort('created_at')} /></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sorted.map(m => {
+                      const d = memberDerived(m)
+                      // Eindeutige Sub-Status-Zusammenfassung
+                      const subBadge = d.activeSub ? SUB_STATUS_META.active
+                        : d.pausedSub ? SUB_STATUS_META.paused
+                        : d.pendingSub ? SUB_STATUS_META.pending
+                        : d.totalSubs > 0 ? { label: 'Kein aktives Abo', tone: 'neutral' as BadgeTone }
+                        : { label: '— kein Abo —', tone: 'neutral' as BadgeTone }
+                      return (
+                        <tr key={m.id} className={selectedMember?.id === m.id ? 'bg-admin-surface-soft' : ''}>
+                          <td><Checkbox checked={selectedIds.has(m.id)} onChange={() => toggleSelect(m.id)} ariaLabel="Auswählen" /></td>
+                          <td>
+                            <button onClick={() => setSelectedMember(m)} className="flex items-center gap-2.5 w-full text-left group">
+                              <div className={`w-7 h-7 rounded-full overflow-hidden flex items-center justify-center text-[11px] font-bold shrink-0 ${m.photo_url ? 'bg-admin-surface-soft' : m.active ? 'bg-admin-surface-soft text-brand-500 border border-brand-500/30' : 'bg-admin-surface-soft text-admin-mute'}`}>
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                {m.photo_url ? <img src={m.photo_url} alt={m.name} className="w-full h-full object-cover" /> : m.name.charAt(0).toUpperCase()}
+                              </div>
+                              <div className="min-w-0">
+                                <p className={`text-[13px] font-semibold truncate group-hover:text-brand-600 ${m.active ? 'text-admin-ink' : 'text-admin-mute'}`}>{m.name}</p>
+                                <p className="admin-caption truncate">{m.email}</p>
+                              </div>
+                            </button>
+                          </td>
+                          <td>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <Badge tone={subBadge.tone} dot>{subBadge.label}</Badge>
+                              {!m.active && <Badge tone="neutral">Inaktiv</Badge>}
+                            </div>
+                          </td>
+                          <td className="text-right">
+                            {d.openCount > 0 ? <Badge tone="danger">{d.openCount}</Badge> : <span className="text-admin-mute text-[12px]">—</span>}
+                          </td>
+                          <td>
+                            <p className="admin-caption">{formatDateDE(m.created_at)}</p>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
         </div>
 
-        {/* Detail-Panel */}
+        {/* Detail */}
         <div className="lg:col-span-1">
           {selectedMember ? (
-            <div className="bg-dark-900/50 rounded-xl border border-dark-800 sticky top-24">
-              <div className="p-4 border-b border-dark-800 flex items-center justify-between">
-                <h3 className="font-bold text-dark-100">Mitglied-Details</h3>
-                <div className="flex gap-2">
-                  <button onClick={() => startEdit(selectedMember)} className="text-xs text-brand-500 hover:underline">Bearbeiten</button>
-                  <button onClick={() => toggleActive(selectedMember)} className="text-xs text-dark-400 hover:text-dark-200">
-                    {selectedMember.active ? 'Deaktivieren' : 'Aktivieren'}
-                  </button>
-                  {deleteConfirm === selectedMember.id ? (
-                    <>
-                      <button onClick={() => deleteMember(selectedMember)} disabled={deleting} className="text-xs text-red-400 font-bold hover:underline disabled:opacity-50">
-                        {deleting ? '...' : 'Bestätigen'}
-                      </button>
-                      <button onClick={() => { setDeleteConfirm(null); setDeleteError(null) }} className="text-xs text-dark-500 hover:underline">Abbruch</button>
-                    </>
-                  ) : (
-                    <button onClick={() => { setDeleteConfirm(selectedMember.id); setDeleteError(null) }} className="text-xs text-red-400/60 hover:text-red-400 hover:underline">Löschen</button>
-                  )}
+            <Card padded={false} className="lg:sticky lg:top-20">
+              <div className="p-4 border-b border-admin-hairline flex items-center justify-between">
+                <p className="admin-eyebrow">Details</p>
+                <div className="flex gap-1">
+                  <IconButton onClick={() => startEdit(selectedMember)} title="Bearbeiten">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                  </IconButton>
+                  <IconButton onClick={() => toggleActive(selectedMember)} title={selectedMember.active ? 'Deaktivieren' : 'Aktivieren'}>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d={selectedMember.active ? "M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" : "M5 13l4 4L19 7"} /></svg>
+                  </IconButton>
                 </div>
               </div>
-              {deleteError && (
-                <div className="mx-4 mt-3 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
-                  <p className="text-xs text-red-400 font-medium">Löschen fehlgeschlagen: {deleteError}</p>
-                </div>
-              )}
               <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
-                {/* Kontaktdaten */}
                 <div>
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="w-12 h-12 rounded-full bg-brand-500/20 flex items-center justify-center text-lg font-bold text-brand-500">
-                      {selectedMember.name.charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                      <p className="text-dark-100 font-bold text-lg">{selectedMember.name}</p>
-                      <p className={`text-xs ${selectedMember.active ? 'text-green-400' : 'text-dark-500'}`}>
-                        {selectedMember.active ? 'Aktives Mitglied' : 'Inaktiv'}
-                      </p>
-                    </div>
+                  <div className="mb-3">
+                    <p className="text-[15px] font-semibold text-admin-ink-strong">{selectedMember.name}</p>
+                    <Badge tone={selectedMember.active ? 'success' : 'neutral'} dot>
+                      {selectedMember.active ? 'Aktives Mitglied' : 'Deaktiviert'}
+                    </Badge>
                   </div>
-                  <a href={`mailto:${selectedMember.email}`} className="text-sm text-brand-500 hover:underline block">{selectedMember.email}</a>
-                  {selectedMember.phone && <a href={`tel:${selectedMember.phone}`} className="text-sm text-brand-500 hover:underline block">{selectedMember.phone}</a>}
-                  {selectedMember.notes && <p className="text-xs text-dark-400 mt-2 bg-dark-800/50 rounded-lg p-2">{selectedMember.notes}</p>}
-                  <p className="text-xs text-dark-500 mt-2">Mitglied seit {formatDate(selectedMember.created_at)}</p>
+                  <div className="bg-admin-surface-soft rounded-btn p-3 border border-admin-hairline-soft mb-3">
+                    <p className="admin-eyebrow mb-2">Mitgliederfoto</p>
+                    <MemberPhotoUpload
+                      memberId={selectedMember.id}
+                      memberName={selectedMember.name}
+                      currentPhotoUrl={selectedMember.photo_url || null}
+                      supabase={supabase}
+                      size="md"
+                      onPhotoChange={(newUrl) => {
+                        setMembers(prev => prev.map(m => m.id === selectedMember.id ? { ...m, photo_url: newUrl } : m))
+                        setSelectedMember({ ...selectedMember, photo_url: newUrl })
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <a href={`mailto:${selectedMember.email}`} className="block text-[13px] text-brand-600 hover:underline">{selectedMember.email}</a>
+                    {selectedMember.phone && <a href={`tel:${selectedMember.phone}`} className="block text-[13px] text-brand-600 hover:underline">{selectedMember.phone}</a>}
+                    {selectedMember.notes && <p className="admin-caption mt-2 bg-admin-surface-soft rounded-btn p-2">{selectedMember.notes}</p>}
+                    <p className="admin-caption">Mitglied seit {formatDateDE(selectedMember.created_at)}</p>
+                  </div>
                 </div>
 
-                {/* Abos */}
                 <div>
-                  <p className="text-xs text-dark-500 uppercase tracking-wider mb-2">Abonnements</p>
-                  {getMemberSubs(selectedMember.id).length === 0 ? (
-                    <p className="text-xs text-dark-600">Keine Abos</p>
+                  <p className="admin-eyebrow mb-2">Abonnements</p>
+                  {(subsByMember.get(selectedMember.id) || []).length === 0 ? (
+                    <p className="admin-caption">Keine Abos</p>
                   ) : (
                     <div className="space-y-2">
-                      {getMemberSubs(selectedMember.id).map(sub => {
-                        const statusColors: Record<string, string> = {
-                          active: 'text-green-400 bg-green-400/10 border-green-400/30',
-                          pending: 'text-orange-400 bg-orange-400/10 border-orange-400/30',
-                          expired: 'text-red-400 bg-red-400/10 border-red-400/30',
-                          cancelled: 'text-dark-500 bg-dark-700/50 border-dark-600',
-                          paused: 'text-yellow-400 bg-yellow-400/10 border-yellow-400/30',
-                        }
-                        const statusLabels: Record<string, string> = {
-                          active: 'Aktiv', pending: 'Zahlung ausstehend', expired: 'Abgelaufen', cancelled: 'Gekündigt', paused: 'Pausiert',
-                        }
-                        const badgeColor = statusColors[sub.status] || 'text-dark-500 bg-dark-700/50 border-dark-600'
-                        const badgeLabel = statusLabels[sub.status] || sub.status
+                      {(subsByMember.get(selectedMember.id) || []).map(sub => {
+                        const meta = SUB_STATUS_META[sub.status] || { label: sub.status, tone: 'neutral' as BadgeTone }
                         return (
-                          <div key={sub.id} className="bg-dark-800/50 rounded-lg p-3">
-                            <div className="flex items-center justify-between mb-1">
-                              <p className="text-sm font-bold text-dark-100">{sub.name}</p>
-                              <span className={`px-2 py-0.5 rounded-full text-xs border ${badgeColor}`}>{badgeLabel}</span>
+                          <div key={sub.id} className="bg-admin-surface-soft rounded-btn p-3 border border-admin-hairline-soft">
+                            <div className="flex items-center justify-between mb-1 gap-2">
+                              <p className="text-[13px] font-semibold text-admin-ink truncate">{sub.name}</p>
+                              <Badge tone={meta.tone} dot>{meta.label}</Badge>
                             </div>
-                            <p className="text-xs text-dark-400">
+                            <p className="admin-caption">
                               {sub.type === 'punch_card' && sub.remaining_units !== null && sub.total_units !== null
                                 ? `${sub.remaining_units}/${sub.total_units} Einheiten übrig`
-                                : sub.end_date
-                                  ? `${daysUntil(sub.end_date) > 0 ? `Noch ${daysUntil(sub.end_date)} Tage` : 'Abgelaufen'} (bis ${formatDate(sub.end_date)})`
-                                  : `Seit ${formatDate(sub.start_date)}`
-                              }
+                                : sub.end_date ? `Bis ${formatDateDE(sub.end_date)}` : `Seit ${formatDateDE(sub.start_date)}`}
                             </p>
-                            {sub.status === 'active' && sub.end_date && (
-                              <div className="mt-2 h-1.5 bg-dark-700 rounded-full overflow-hidden">
-                                <div
-                                  className={`h-full rounded-full ${daysUntil(sub.end_date) <= 7 ? 'bg-red-500' : daysUntil(sub.end_date) <= 30 ? 'bg-yellow-500' : 'bg-green-500'}`}
-                                  style={{ width: `${Math.max(0, Math.min(100, (daysUntil(sub.end_date) / Math.max(1, Math.ceil((new Date(sub.end_date).getTime() - new Date(sub.start_date).getTime()) / (1000 * 60 * 60 * 24)))) * 100))}%` }}
-                                />
-                              </div>
-                            )}
                           </div>
                         )
                       })}
@@ -336,24 +459,24 @@ export default function MembersTab({ members, setMembers, subscriptions, invoice
                   )}
                 </div>
 
-                {/* Rechnungen */}
                 <div>
-                  <p className="text-xs text-dark-500 uppercase tracking-wider mb-2">Rechnungen</p>
-                  {getMemberInvoices(selectedMember.id).length === 0 ? (
-                    <p className="text-xs text-dark-600">Keine Rechnungen</p>
+                  <p className="admin-eyebrow mb-2">Rechnungen</p>
+                  {(invoicesByMember.get(selectedMember.id) || []).length === 0 ? (
+                    <p className="admin-caption">Keine Rechnungen</p>
                   ) : (
-                    <div className="space-y-2">
-                      {getMemberInvoices(selectedMember.id).slice(0, 5).map(inv => {
-                        const statusColors: Record<string, string> = {
-                          open: 'text-yellow-400', paid: 'text-green-400', overdue: 'text-red-400', cancelled: 'text-dark-500',
-                        }
+                    <div className="space-y-1.5">
+                      {(invoicesByMember.get(selectedMember.id) || []).slice(0, 5).map(inv => {
+                        const tone: BadgeTone = inv.status === 'paid' ? 'success' : inv.status === 'overdue' ? 'danger' : inv.status === 'cancelled' ? 'neutral' : 'warning'
                         return (
-                          <div key={inv.id} className="flex items-center justify-between bg-dark-800/50 rounded-lg p-2">
-                            <div>
-                              <p className="text-xs font-medium text-dark-200">{inv.description}</p>
-                              <p className="text-xs text-dark-500">{inv.invoice_number}</p>
+                          <div key={inv.id} className="flex items-center justify-between bg-admin-surface-soft rounded-btn p-2">
+                            <div className="min-w-0">
+                              <p className="text-[12px] font-medium text-admin-ink truncate">{inv.description}</p>
+                              <p className="admin-caption">{inv.invoice_number}</p>
                             </div>
-                            <p className={`text-sm font-bold ${statusColors[inv.status]}`}>{Number(inv.amount).toFixed(0)}€</p>
+                            <div className="text-right shrink-0">
+                              <p className="text-[13px] font-semibold text-admin-ink">{Number(inv.amount).toFixed(0)} €</p>
+                              <Badge tone={tone}>{inv.status === 'paid' ? 'Bezahlt' : inv.status === 'overdue' ? 'Überfällig' : inv.status === 'cancelled' ? 'Storniert' : 'Offen'}</Badge>
+                            </div>
                           </div>
                         )
                       })}
@@ -361,37 +484,57 @@ export default function MembersTab({ members, setMembers, subscriptions, invoice
                   )}
                 </div>
 
-                {/* Buchungen (über Email verknüpft) */}
                 <div>
-                  <p className="text-xs text-dark-500 uppercase tracking-wider mb-2">Buchungen</p>
-                  {getMemberBookings(selectedMember.email).length === 0 ? (
-                    <p className="text-xs text-dark-600">Keine Buchungen</p>
+                  <p className="admin-eyebrow mb-2">Buchungen</p>
+                  {(bookingsByEmail.get(selectedMember.email.toLowerCase()) || []).length === 0 ? (
+                    <p className="admin-caption">Keine Buchungen</p>
                   ) : (
-                    <div className="space-y-2">
-                      {getMemberBookings(selectedMember.email).slice(0, 5).map(b => (
-                        <div key={b.id} className="flex items-center justify-between bg-dark-800/50 rounded-lg p-2">
-                          <div>
-                            <p className="text-xs font-medium text-dark-200">{b.service}</p>
-                            <p className="text-xs text-dark-500">{formatDate(b.created_at)}</p>
+                    <div className="space-y-1.5">
+                      {(bookingsByEmail.get(selectedMember.email.toLowerCase()) || []).slice(0, 5).map(b => {
+                        const tone: BadgeTone = b.status === 'confirmed' ? 'success' : b.status === 'cancelled' ? 'neutral' : 'warning'
+                        return (
+                          <div key={b.id} className="flex items-center justify-between bg-admin-surface-soft rounded-btn p-2">
+                            <div className="min-w-0">
+                              <p className="text-[12px] font-medium text-admin-ink truncate">{b.service}</p>
+                              <p className="admin-caption">{formatDateDE(b.created_at)}</p>
+                            </div>
+                            <Badge tone={tone}>{b.status === 'confirmed' ? 'Bestätigt' : b.status === 'cancelled' ? 'Storniert' : 'Offen'}</Badge>
                           </div>
-                          <span className={`text-xs ${b.status === 'confirmed' ? 'text-green-400' : b.status === 'pending' ? 'text-yellow-400' : 'text-red-400'}`}>
-                            {b.status === 'confirmed' ? 'Bestätigt' : b.status === 'pending' ? 'Offen' : 'Storniert'}
-                          </span>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
+                  )}
+                </div>
+
+                <div className="pt-3 border-t border-admin-hairline-soft">
+                  {deleteConfirm === selectedMember.id ? (
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="danger" onClick={() => deleteMember(selectedMember)} disabled={deleting} className="flex-1">
+                        {deleting ? 'Löscht…' : 'Endgültig löschen'}
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setDeleteConfirm(null)}>Abbruch</Button>
+                    </div>
+                  ) : (
+                    <Button size="sm" variant="ghost" onClick={() => setDeleteConfirm(selectedMember.id)} className="text-status-danger w-full">
+                      Mitglied löschen
+                    </Button>
                   )}
                 </div>
               </div>
-            </div>
+            </Card>
           ) : (
-            <div className="bg-dark-900/50 rounded-xl border border-dark-800 p-8 text-center">
-              <svg className="w-12 h-12 text-dark-700 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-              <p className="text-dark-500 text-sm">Klicke auf ein Mitglied, um Details zu sehen</p>
-            </div>
+            <Card padded>
+              <EmptyState
+                icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>}
+                title="Wähle ein Mitglied"
+                description="Klicke links auf einen Namen, um Abos, Rechnungen und Buchungen zu sehen."
+              />
+            </Card>
           )}
         </div>
       </div>
+
+      {snackbar && <Snackbar message={snackbar.message} tone={snackbar.tone} />}
     </div>
   )
 }

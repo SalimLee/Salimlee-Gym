@@ -87,31 +87,29 @@ export default function TaxExportModal({ supabase, onClose }: TaxExportModalProp
   }
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => !exporting && onClose()}>
-      <div className="bg-dark-900 border border-dark-700 rounded-2xl w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
-        {/* Header */}
-        <div className="p-5 border-b border-dark-800 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-indigo-500/20 flex items-center justify-center text-lg">
-            <svg className="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in-fast" onClick={() => !exporting && onClose()}>
+      <div className="admin-card bg-admin-surface w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="p-5 border-b border-admin-hairline flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-admin-surface-soft text-brand-500 border border-brand-500/30 flex items-center justify-center">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
           </div>
           <div>
-            <h3 className="font-bold text-dark-100 text-lg">Steuer-Export</h3>
-            <p className="text-dark-500 text-sm">Alle Rechnungen als ZIP mit PDFs + CSV</p>
+            <h3 className="admin-h2">Steuer-Export</h3>
+            <p className="admin-caption">ZIP mit PDFs + CSV-Übersicht</p>
           </div>
         </div>
 
         <div className="p-5 space-y-4">
-          {/* Mode Toggle */}
-          <div className="flex rounded-xl overflow-hidden border border-dark-700">
+          <div className="flex rounded-btn overflow-hidden border border-admin-hairline p-0.5 bg-admin-surface-soft">
             <button
               onClick={() => setMode('quarter')}
-              className={`flex-1 px-4 py-2.5 text-sm font-bold transition-all ${mode === 'quarter' ? 'bg-indigo-500/20 text-indigo-400' : 'bg-dark-800/50 text-dark-400 hover:text-dark-300'}`}
+              className={`flex-1 px-3 py-1.5 text-[13px] font-semibold rounded-[5px] transition-all ${mode === 'quarter' ? 'bg-admin-surface text-admin-ink-strong border border-admin-hairline' : 'text-admin-body hover:text-admin-ink'}`}
             >
               Quartal
             </button>
             <button
               onClick={() => setMode('range')}
-              className={`flex-1 px-4 py-2.5 text-sm font-bold transition-all ${mode === 'range' ? 'bg-indigo-500/20 text-indigo-400' : 'bg-dark-800/50 text-dark-400 hover:text-dark-300'}`}
+              className={`flex-1 px-3 py-1.5 text-[13px] font-semibold rounded-[5px] transition-all ${mode === 'range' ? 'bg-admin-surface text-admin-ink-strong border border-admin-hairline' : 'text-admin-body hover:text-admin-ink'}`}
             >
               Zeitraum
             </button>
@@ -119,83 +117,49 @@ export default function TaxExportModal({ supabase, onClose }: TaxExportModalProp
 
           {mode === 'quarter' ? (
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs text-dark-500 block mb-1">Quartal</label>
-                <select
-                  value={quarter}
-                  onChange={e => setQuarter(Number(e.target.value))}
-                  className="w-full px-4 py-3 bg-dark-800/50 border border-dark-700 rounded-xl text-dark-100 focus:border-indigo-500 focus:outline-none text-sm"
-                >
-                  {QUARTERS.map(q => (
-                    <option key={q.value} value={q.value}>{q.label}</option>
-                  ))}
+              <label className="block">
+                <span className="admin-caption block mb-1">Quartal</span>
+                <select value={quarter} onChange={e => setQuarter(Number(e.target.value))} className="admin-select">
+                  {QUARTERS.map(q => <option key={q.value} value={q.value}>{q.label}</option>)}
                 </select>
-              </div>
-              <div>
-                <label className="text-xs text-dark-500 block mb-1">Jahr</label>
-                <select
-                  value={year}
-                  onChange={e => setYear(Number(e.target.value))}
-                  className="w-full px-4 py-3 bg-dark-800/50 border border-dark-700 rounded-xl text-dark-100 focus:border-indigo-500 focus:outline-none text-sm"
-                >
-                  {[currentYear - 1, currentYear, currentYear + 1].map(y => (
-                    <option key={y} value={y}>{y}</option>
-                  ))}
+              </label>
+              <label className="block">
+                <span className="admin-caption block mb-1">Jahr</span>
+                <select value={year} onChange={e => setYear(Number(e.target.value))} className="admin-select">
+                  {[currentYear - 1, currentYear, currentYear + 1].map(y => <option key={y} value={y}>{y}</option>)}
                 </select>
-              </div>
+              </label>
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs text-dark-500 block mb-1">Von</label>
-                <input
-                  type="date"
-                  value={dateFrom}
-                  onChange={e => setDateFrom(e.target.value)}
-                  className="w-full px-4 py-3 bg-dark-800/50 border border-dark-700 rounded-xl text-dark-100 focus:border-indigo-500 focus:outline-none text-sm"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-dark-500 block mb-1">Bis</label>
-                <input
-                  type="date"
-                  value={dateTo}
-                  onChange={e => setDateTo(e.target.value)}
-                  className="w-full px-4 py-3 bg-dark-800/50 border border-dark-700 rounded-xl text-dark-100 focus:border-indigo-500 focus:outline-none text-sm"
-                />
-              </div>
+              <label className="block">
+                <span className="admin-caption block mb-1">Von</span>
+                <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="admin-input" />
+              </label>
+              <label className="block">
+                <span className="admin-caption block mb-1">Bis</span>
+                <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="admin-input" />
+              </label>
             </div>
           )}
 
-          {/* Info Box */}
-          <div className="p-3 bg-dark-800/50 rounded-lg">
-            <p className="text-xs text-dark-400">
-              Der Export enthält alle Stripe- und manuellen Rechnungen im gewählten Zeitraum als einzelne PDFs plus eine Zusammenfassung als CSV-Datei.
+          <div className="p-3 bg-admin-surface-soft rounded-btn border border-admin-hairline-soft">
+            <p className="admin-caption">
+              Der Export enthält alle Stripe- und manuellen Rechnungen im gewählten Zeitraum als einzelne PDFs plus eine CSV-Zusammenfassung — direkt an den Steuerberater weitergebbar.
             </p>
           </div>
 
           {error && (
-            <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
-              <p className="text-xs text-red-400">{error}</p>
+            <div className="p-3 bg-status-danger-soft border border-status-danger-border rounded-btn">
+              <p className="text-[12px] text-status-danger font-medium">{error}</p>
             </div>
           )}
         </div>
 
-        {/* Footer */}
-        <div className="p-5 border-t border-dark-800 flex gap-3">
-          <button
-            onClick={onClose}
-            disabled={exporting}
-            className="flex-1 px-4 py-3 text-sm font-bold rounded-xl bg-dark-800 text-dark-300 border border-dark-700 hover:border-dark-600 transition-all disabled:opacity-50"
-          >
-            Abbrechen
-          </button>
-          <button
-            onClick={handleExport}
-            disabled={exporting || (mode === 'range' && (!dateFrom || !dateTo))}
-            className="flex-1 px-4 py-3 text-sm font-bold rounded-xl bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 hover:bg-indigo-500/30 transition-all disabled:opacity-50"
-          >
-            {exporting ? 'Exportiert...' : 'Export starten'}
+        <div className="p-5 border-t border-admin-hairline flex gap-2 justify-end">
+          <button onClick={onClose} disabled={exporting} className="admin-btn-ghost admin-btn">Abbrechen</button>
+          <button onClick={handleExport} disabled={exporting || (mode === 'range' && (!dateFrom || !dateTo))} className="admin-btn-primary admin-btn">
+            {exporting ? 'Exportiert…' : 'Export starten'}
           </button>
         </div>
       </div>

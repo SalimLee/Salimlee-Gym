@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -95,3 +96,319 @@
     text-wrap: balance;
   }
 }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   ADMIN-LAYER — Voltagent-Designsprache (Dark) mit Salim-Lee-Rot als Akzent.
+   Tokens 1:1 nach DESIGN.md. Greift NUR innerhalb von .admin-shell. Landing
+   Page bleibt unverändert.
+   ────────────────────────────────────────────────────────────────────────── */
+.admin-shell {
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-feature-settings: 'calt', 'rlig';
+  color: #f2f2f2;
+  background-color: #101010;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.admin-shell ::-webkit-scrollbar-track {
+  background: #101010;
+}
+.admin-shell ::-webkit-scrollbar-thumb {
+  background: #3d3a39;
+  border-radius: 9999px;
+}
+.admin-shell ::-webkit-scrollbar-thumb:hover {
+  background: #5c5855;
+}
+
+.admin-shell input[type='date']::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  opacity: 0.45;
+  cursor: pointer;
+}
+.admin-shell input[type='date']::-webkit-calendar-picker-indicator:hover {
+  opacity: 0.8;
+}
+
+@layer components {
+  /* ── Surfaces ─────────────────────────────────────────────────────────── */
+  .admin-card {
+    @apply bg-admin-surface border border-admin-hairline rounded-card;
+  }
+  .admin-card-soft {
+    @apply bg-admin-surface-soft border border-admin-hairline rounded-card;
+  }
+  .admin-card-emphasized {
+    @apply bg-admin-surface border-[2px] border-admin-hairline rounded-card;
+  }
+
+  /* ── Typography ───────────────────────────────────────────────────────── */
+  .admin-h1 {
+    @apply text-[28px] leading-[34px] font-semibold tracking-[-0.4px] text-admin-ink-strong;
+  }
+  .admin-h2 {
+    @apply text-[20px] leading-[28px] font-semibold tracking-[-0.2px] text-admin-ink-strong;
+  }
+  .admin-h3 {
+    @apply text-[16px] leading-[24px] font-semibold text-admin-ink;
+  }
+  .admin-eyebrow {
+    @apply text-[11px] font-semibold uppercase tracking-[1.8px] text-admin-mute;
+  }
+  .admin-body {
+    @apply text-[14px] leading-[20px] text-admin-body;
+  }
+  .admin-body-sm {
+    @apply text-[13px] leading-[18px] text-admin-body;
+  }
+  .admin-caption {
+    @apply text-[12px] leading-[16px] text-admin-mute;
+  }
+  .admin-mono {
+    @apply font-mono text-[13px] leading-[18px];
+  }
+
+  /* ── Buttons ──────────────────────────────────────────────────────────── */
+  .admin-btn {
+    @apply inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-btn
+           text-[14px] font-semibold leading-tight transition-all
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/25
+           disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap;
+  }
+  .admin-btn-primary {
+    @apply admin-btn bg-brand-500 text-white hover:bg-brand-600 active:bg-brand-700;
+  }
+  .admin-btn-outline {
+    @apply admin-btn bg-admin-surface text-admin-ink border border-admin-hairline
+           hover:border-admin-mute hover:bg-admin-surface-soft;
+  }
+  .admin-btn-ghost {
+    @apply admin-btn text-admin-body hover:text-admin-ink hover:bg-admin-surface-soft;
+  }
+  .admin-btn-danger {
+    @apply admin-btn bg-status-danger-soft text-status-danger border border-status-danger-border
+           hover:bg-status-danger hover:text-white;
+  }
+  .admin-btn-success {
+    @apply admin-btn bg-status-success-soft text-status-success border border-status-success-border
+           hover:bg-status-success hover:text-white;
+  }
+  .admin-btn-sm {
+    @apply px-2.5 py-1.5 text-[12px] gap-1.5;
+  }
+  .admin-btn-icon {
+    @apply inline-flex items-center justify-center w-8 h-8 rounded-btn
+           text-admin-body hover:text-admin-ink hover:bg-admin-surface-soft
+           border border-transparent hover:border-admin-hairline transition-all
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/25;
+  }
+
+  /* ── Inputs ───────────────────────────────────────────────────────────── */
+  .admin-input {
+    @apply w-full px-3 py-2 bg-admin-surface border border-admin-hairline rounded-btn
+           text-[14px] text-admin-ink placeholder:text-admin-mute
+           focus:outline-none focus:border-brand-500/40 focus:ring-2 focus:ring-brand-500/15
+           transition-all;
+  }
+  .admin-input-sm {
+    @apply admin-input py-1.5 text-[13px];
+  }
+  .admin-select {
+    @apply admin-input pr-8 appearance-none bg-no-repeat bg-[length:14px_14px] bg-[right_10px_center]
+           bg-[url("data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2020%2020'%20fill='%2371717a'%3E%3Cpath%20fill-rule='evenodd'%20d='M5.23%207.21a.75.75%200%20011.06.02L10%2011.06l3.71-3.83a.75.75%200%20111.08%201.04l-4.25%204.39a.75.75%200%2001-1.08%200L5.21%208.27a.75.75%200%2001.02-1.06z'%20clip-rule='evenodd'/%3E%3C/svg%3E")];
+  }
+  .admin-checkbox {
+    @apply w-4 h-4 rounded-[4px] border border-admin-hairline text-brand-500
+           focus:ring-2 focus:ring-brand-500/25 focus:ring-offset-0
+           cursor-pointer transition-all;
+  }
+
+  /* ── Badges / Status pills ────────────────────────────────────────────── */
+  .admin-badge {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-pill border
+           text-[11px] font-semibold leading-tight whitespace-nowrap;
+  }
+  .admin-badge-success {
+    @apply admin-badge bg-status-success-soft text-status-success border-status-success-border;
+  }
+  .admin-badge-warning {
+    @apply admin-badge bg-status-warning-soft text-status-warning border-status-warning-border;
+  }
+  .admin-badge-danger {
+    @apply admin-badge bg-status-danger-soft text-status-danger border-status-danger-border;
+  }
+  .admin-badge-info {
+    @apply admin-badge bg-status-info-soft text-status-info border-status-info-border;
+  }
+  .admin-badge-neutral {
+    @apply admin-badge bg-status-neutral-soft text-status-neutral border-status-neutral-border;
+  }
+  .admin-badge-brand {
+    @apply admin-badge;
+    background-color: rgba(176, 0, 0, 0.14);
+    color: #ff6b6b;
+    border-color: rgba(176, 0, 0, 0.4);
+  }
+
+  /* ── Table ────────────────────────────────────────────────────────────── */
+  .admin-table {
+    @apply w-full text-left;
+  }
+  .admin-table thead th {
+    @apply px-4 py-2.5 admin-eyebrow text-admin-mute bg-admin-surface-soft
+           border-b border-admin-hairline whitespace-nowrap;
+  }
+  .admin-table tbody td {
+    @apply px-4 py-3 admin-body-sm text-admin-ink border-b border-admin-hairline-soft;
+  }
+  .admin-table tbody tr:hover {
+    @apply bg-admin-surface-soft/60;
+  }
+  .admin-table tbody tr:last-child td {
+    @apply border-b-0;
+  }
+
+  /* ── Sidebar item ─────────────────────────────────────────────────────── */
+  .admin-sidebar-item {
+    @apply flex items-center gap-3 px-3 py-2 rounded-btn text-[14px] font-medium
+           text-admin-body hover:text-admin-ink hover:bg-admin-surface-soft
+           transition-all cursor-pointer;
+  }
+  .admin-sidebar-item-active {
+    @apply bg-admin-surface-soft text-admin-ink-strong hover:text-admin-ink-strong hover:bg-admin-surface-soft
+           border-l-2 border-brand-500 pl-[10px];
+  }
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   ADMIN COMPAT-LAYER (Dark)
+   Mapped alle alten `text-yellow-400`, `bg-blue-500/10` etc. Klassen in
+   den verbleibenden Tabs auf die Voltagent-Dark-Status-Sprache. Die
+   `dark-*` Tonwerte bleiben unangetastet (sind ja bereits dark), aber wir
+   alignen sie sanft an die Voltagent-Tokens, damit der Look einheitlich ist.
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* Surfaces — alte dark-Werte auf Voltagent-Tokens drehen ────────────────── */
+.admin-shell .bg-dark-950 { background-color: #101010 !important; }
+.admin-shell .bg-dark-900,
+.admin-shell .bg-dark-900\/50,
+.admin-shell .bg-dark-900\/80,
+.admin-shell .bg-dark-900\/40 { background-color: #101010 !important; }
+.admin-shell .bg-dark-800,
+.admin-shell .bg-dark-800\/50,
+.admin-shell .bg-dark-800\/30,
+.admin-shell .bg-dark-800\/40,
+.admin-shell .bg-dark-800\/60 { background-color: #1a1a1a !important; }
+.admin-shell .bg-dark-700,
+.admin-shell .bg-dark-700\/50 { background-color: #1a1a1a !important; }
+
+/* Text ───────────────────────────────────────────────────────────────────── */
+.admin-shell .text-dark-50,
+.admin-shell .text-dark-100,
+.admin-shell .text-dark-200 { color: #f2f2f2 !important; }
+.admin-shell .text-dark-300,
+.admin-shell .text-dark-400 { color: #bdbdbd !important; }
+.admin-shell .text-dark-500,
+.admin-shell .text-dark-600,
+.admin-shell .text-dark-700 { color: #8b949e !important; }
+
+/* Placeholder ────────────────────────────────────────────────────────────── */
+.admin-shell .placeholder\:text-dark-500::placeholder,
+.admin-shell .placeholder\:text-dark-400::placeholder { color: #5c5855 !important; }
+
+/* Borders — alle dark-* Borders auf hairline ────────────────────────────── */
+.admin-shell .border-dark-600,
+.admin-shell .border-dark-700,
+.admin-shell .border-dark-800 { border-color: #3d3a39 !important; }
+.admin-shell .divide-dark-800 > * + *,
+.admin-shell .divide-dark-700 > * + * { border-color: #3d3a39 !important; }
+.admin-shell .hover\:border-dark-600:hover,
+.admin-shell .hover\:border-dark-700:hover { border-color: #5c5855 !important; }
+
+/* Hover backgrounds ──────────────────────────────────────────────────────── */
+.admin-shell .hover\:bg-dark-800:hover,
+.admin-shell .hover\:bg-dark-800\/50:hover { background-color: #1a1a1a !important; }
+
+/* Brand-Tints (rot) — bleiben sichtbar auf dunklem Canvas ────────────────── */
+.admin-shell .bg-brand-500\/10 {
+  background-color: rgba(176, 0, 0, 0.14) !important;
+  color: #ff6b6b !important;
+}
+.admin-shell .text-brand-500 { color: #ff6b6b !important; }
+.admin-shell .border-brand-500\/30,
+.admin-shell .border-brand-500\/50,
+.admin-shell .border-brand-600\/20 { border-color: rgba(176, 0, 0, 0.4) !important; }
+.admin-shell .hover\:bg-brand-500\/20:hover { background-color: rgba(176, 0, 0, 0.22) !important; }
+.admin-shell .hover\:border-brand-500\/30:hover { border-color: rgba(176, 0, 0, 0.55) !important; }
+
+/* Status-Tints (Dark) — soft-bg + heller Text + zarter Border ────────────── */
+.admin-shell .bg-green-400\/10,
+.admin-shell .bg-green-500\/10 { background-color: rgba(74, 222, 128, 0.12) !important; }
+.admin-shell .text-green-400 { color: #4ade80 !important; }
+.admin-shell .border-green-400\/30,
+.admin-shell .border-green-500\/30,
+.admin-shell .border-green-500\/50 { border-color: rgba(74, 222, 128, 0.35) !important; }
+
+.admin-shell .bg-yellow-400\/10,
+.admin-shell .bg-yellow-500\/10 { background-color: rgba(251, 191, 36, 0.12) !important; }
+.admin-shell .text-yellow-400 { color: #fbbf24 !important; }
+.admin-shell .border-yellow-400\/30,
+.admin-shell .border-yellow-500\/30,
+.admin-shell .border-yellow-500\/50 { border-color: rgba(251, 191, 36, 0.35) !important; }
+
+.admin-shell .bg-red-400\/10,
+.admin-shell .bg-red-500\/10 { background-color: rgba(248, 113, 113, 0.12) !important; }
+.admin-shell .text-red-400 { color: #f87171 !important; }
+.admin-shell .border-red-400\/30,
+.admin-shell .border-red-500\/30,
+.admin-shell .border-red-500\/50 { border-color: rgba(248, 113, 113, 0.35) !important; }
+
+.admin-shell .bg-orange-400\/10,
+.admin-shell .bg-orange-500\/10 { background-color: rgba(251, 191, 36, 0.12) !important; }
+.admin-shell .text-orange-400 { color: #fbbf24 !important; }
+.admin-shell .border-orange-400\/30,
+.admin-shell .border-orange-500\/30,
+.admin-shell .border-orange-500\/50 { border-color: rgba(251, 191, 36, 0.35) !important; }
+
+.admin-shell .bg-blue-400\/10,
+.admin-shell .bg-blue-500\/10 { background-color: rgba(96, 165, 250, 0.12) !important; }
+.admin-shell .text-blue-400 { color: #60a5fa !important; }
+.admin-shell .border-blue-400\/30,
+.admin-shell .border-blue-500\/30,
+.admin-shell .border-blue-500\/50 { border-color: rgba(96, 165, 250, 0.35) !important; }
+.admin-shell .hover\:bg-blue-500\/20:hover { background-color: rgba(96, 165, 250, 0.22) !important; }
+
+.admin-shell .bg-purple-400\/10,
+.admin-shell .bg-purple-500\/10 { background-color: rgba(167, 139, 250, 0.12) !important; }
+.admin-shell .text-purple-400 { color: #a78bfa !important; }
+.admin-shell .border-purple-400\/30,
+.admin-shell .border-purple-500\/30 { border-color: rgba(167, 139, 250, 0.35) !important; }
+
+/* Input-Field (alte Klasse) — auf Voltagent-Inputs ───────────────────────── */
+.admin-shell .input-field {
+  background-color: #1a1a1a !important;
+  border-color: #3d3a39 !important;
+  color: #f2f2f2 !important;
+}
+.admin-shell .input-field::placeholder { color: #5c5855 !important; }
+.admin-shell .input-field:focus {
+  border-color: rgba(176, 0, 0, 0.5) !important;
+  box-shadow: 0 0 0 2px rgba(176, 0, 0, 0.2) !important;
+}
+
+/* Gradient-Buttons (z.B. ContractsTab) — feste Brand-Farbe statt Gradient */
+.admin-shell .bg-gradient-to-r.from-brand-500.to-brand-600,
+.admin-shell .bg-brand-gradient { background: #b00000 !important; }
+
+/* Logo-Text auf Landing-Page wird gradient — im Admin als feste Markenfarbe */
+.admin-shell .gradient-text {
+  background: none !important;
+  -webkit-text-fill-color: #b00000 !important;
+  color: #b00000 !important;
+}
+
+/* Card-Hover dunkel statt hell */
+.admin-shell .hover\:bg-dark-800\/50:hover { background-color: #1a1a1a !important; }
+
+

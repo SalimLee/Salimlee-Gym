@@ -17,6 +17,11 @@ const SignaturePad = dynamic(
   { ssr: false }
 )
 
+const MemberPhotoUpload = dynamic(
+  () => import('./MemberPhotoUpload').then((mod) => ({ default: mod.MemberPhotoUpload })),
+  { ssr: false }
+)
+
 interface Member {
   id: string
   name: string
@@ -86,6 +91,10 @@ export function ContractsTab({ members, supabase, onRefresh }: ContractsTabProps
   const [sendResult, setSendResult] = useState<{ success: boolean; message: string } | null>(null)
   const [pdfUrl, setPdfUrl] = useState<string | null>(null)
   const [mobileAppRegistrieren, setMobileAppRegistrieren] = useState(false)
+
+  // Mitgliederfoto (optional). Wird nach Member-Insert hochgeladen.
+  const [photoFile, setPhotoFile] = useState<File | null>(null)
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null)
 
   // Refs to read signature data on-demand (no event listeners needed)
   const getMemberSig = useRef<(() => string | null) | null>(null)
@@ -346,6 +355,27 @@ export function ContractsTab({ members, supabase, onRefresh }: ContractsTabProps
         return
       }
 
+      // 1.5 Optional: Mitgliederfoto hochladen
+      if (photoFile) {
+        try {
+          const ext = photoFile.name.split('.').pop()?.toLowerCase() || 'jpg'
+          const path = `${memberId}/${Date.now()}.${ext}`
+          const { error: upErr } = await supabase.storage
+            .from('member-photos')
+            .upload(path, photoFile, { upsert: true, contentType: photoFile.type })
+          if (!upErr) {
+            const { data: { publicUrl } } = supabase.storage
+              .from('member-photos')
+              .getPublicUrl(path)
+            await supabase.from('members').update({ photo_url: `${publicUrl}?t=${Date.now()}` }).eq('id', memberId)
+          } else {
+            console.warn('Foto-Upload fehlgeschlagen (Vertrag läuft trotzdem weiter):', upErr)
+          }
+        } catch (e) {
+          console.warn('Foto-Upload Exception:', e)
+        }
+      }
+
       // 2. Create subscription with status 'pending'
       // Bei individuellen Aktionen läuft die Subscription auf dem Basis-Tarif — alle Laufzeit-,
       // Preis- und Typ-Infos stammen von dort. Die Aktionsdaten (Bezeichnung, Aktionspreis, Dauer)
@@ -401,7 +431,8 @@ export function ContractsTab({ members, supabase, onRefresh }: ContractsTabProps
             memberEmail: formData.email,
             memberName: fullName,
             membershipId: formData.mitgliedschaft,
-            billingAnchorDay: parseInt(formData.abrechnungstag),
+            // billingAnchorDay wird vom Server nicht konsumiert — Stripe-Anchor ist
+            // grundsätzlich der 1. des Monats. Param-Übergabe entfernt.
             ...(isCustomAction && formData.customAction
               ? {
                   customAction: {
@@ -744,37 +775,41 @@ export function ContractsTab({ members, supabase, onRefresh }: ContractsTabProps
               Nach Vertragsabschluss erhält das Mitglied einen Zahlungslink per E-Mail.
             </p>
 
-            {/* Abrechnungstag - nur bei monatlichen Abos */}
+            {/* Abrechnungstag - nur bei monatlichen Abos. Seit Mai 2026 ausschließlich
+                der 1. des Monats. Bestehende Verträge mit 15.-Abrechnung bleiben
+                unverändert — Stripe bucht ohnehin am 1., der 15. existierte nur
+                kosmetisch im alten Vertrags-PDF. */}
             {formData.mitgliedschaft && formData.mitgliedschaft !== '10er_karte' && (
               <div className="mt-4 pt-4 border-t border-dark-700">
                 <label className="block text-sm font-semibold text-dark-300 mb-2">Monatlicher Abrechnungstag</label>
-                <div className="flex gap-3">
-                  {[
-                    { value: '1', label: '1. des Monats' },
-                    { value: '15', label: '15. des Monats' },
-                  ].map((opt) => (
-                    <label
-                      key={opt.value}
-                      className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border cursor-pointer transition-all text-sm ${
-                        formData.abrechnungstag === opt.value
-                          ? 'border-brand-500 bg-brand-500/10 font-bold'
-                          : 'border-dark-700 hover:border-dark-600'
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="abrechnungstag"
-                        value={opt.value}
-                        checked={formData.abrechnungstag === opt.value}
-                        onChange={(e) => updateField('abrechnungstag', e.target.value)}
-                        className="accent-brand-500"
-                      />
-                      {opt.label}
-                    </label>
-                  ))}
+                {/* Form-State bleibt mit Default '1' bestehen, damit Vertrag-PDF
+                    und Bestätigungs-Mail (lib/contract-pdf.tsx, /api/contract/send)
+                    den Wert weiterhin als String rendern. */}
+                <div className="flex items-center gap-2 p-3 rounded-lg border border-admin-hairline bg-admin-surface-soft text-sm">
+                  <svg className="w-4 h-4 text-status-info shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  <span className="text-admin-ink"><strong>1. des Monats</strong></span>
+                  <span className="text-admin-mute text-xs">— einheitlich für alle Neu-Verträge</span>
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Mitgliederfoto */}
+          <div className="bg-dark-900/50 rounded-xl border border-dark-800 p-6">
+            <h3 className="text-lg font-bold mb-1">Mitgliederfoto</h3>
+            <p className="text-sm text-dark-400 mb-4">Optional — direkt aus der Kamera (Web + iPad) oder aus der Galerie. Wird nach Vertragsabschluss am Mitglied gespeichert.</p>
+            <MemberPhotoUpload
+              memberId={null}
+              memberName={`${formData.vorname} ${formData.nachname}`.trim() || 'Neues Mitglied'}
+              currentPhotoUrl={null}
+              supabase={null}
+              localPreview={photoPreview}
+              onLocalFile={(file, preview) => {
+                setPhotoFile(file)
+                setPhotoPreview(preview)
+              }}
+              size="lg"
+            />
           </div>
 
           {/* Vertragsbeginn */}

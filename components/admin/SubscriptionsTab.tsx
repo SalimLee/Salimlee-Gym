@@ -1,8 +1,12 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { adminDelete } from '@/lib/admin-delete'
+import {
+  Card, CardHeader, Button, IconButton, Badge, Input, Select, SearchInput, Checkbox,
+  Snackbar, EmptyState, SortHeader, useSort, KpiTile, type BadgeTone,
+} from './ui'
 
 const PLAN_OPTIONS: { id: string; label: string; price: number }[] = [
   { id: 'erwachsene_6', label: 'Erwachsene & Jugendliche – 6 Monate', price: 90 },
@@ -13,17 +17,9 @@ const PLAN_OPTIONS: { id: string; label: string; price: number }[] = [
   { id: 'schueler_12', label: 'Schüler/Azubi/Student – 12 Monate', price: 55 },
 ]
 
-interface Member { id: string; created_at: string; updated_at: string; name: string; email: string; phone: string | null; notes: string | null; active: boolean }
-interface Subscription { id: string; created_at: string; updated_at: string; member_id: string; name: string; type: string; start_date: string; end_date: string | null; total_units: number | null; remaining_units: number | null; price: number; status: 'active' | 'expired' | 'cancelled' | 'paused' | 'pending'; notes: string | null; payment_status?: string | null; stripe_checkout_session_id?: string | null; stripe_subscription_id?: string | null }
+interface Member { id: string; name: string; email: string; phone: string | null; active: boolean; created_at: string; updated_at: string; notes: string | null; photo_url?: string | null }
+interface Subscription { id: string; created_at: string; updated_at: string; member_id: string; name: string; type: string; start_date: string; end_date: string | null; total_units: number | null; remaining_units: number | null; price: number; status: SubStatus; notes: string | null; payment_status?: string | null; stripe_checkout_session_id?: string | null; stripe_subscription_id?: string | null }
 type SubStatus = 'active' | 'expired' | 'cancelled' | 'paused' | 'pending'
-
-const STATUS_CONFIG: Record<SubStatus, { label: string; color: string; bg: string }> = {
-  active: { label: 'Aktiv', color: 'text-green-400', bg: 'bg-green-400/10 border-green-400/30' },
-  pending: { label: 'Zahlung ausstehend', color: 'text-orange-400', bg: 'bg-orange-400/10 border-orange-400/30' },
-  expired: { label: 'Abgelaufen', color: 'text-red-400', bg: 'bg-red-400/10 border-red-400/30' },
-  cancelled: { label: 'Gekündigt', color: 'text-dark-500', bg: 'bg-dark-700/50 border-dark-600' },
-  paused: { label: 'Pausiert', color: 'text-yellow-400', bg: 'bg-yellow-400/10 border-yellow-400/30' },
-}
 
 interface SubscriptionsTabProps {
   subscriptions: Subscription[]
@@ -33,110 +29,123 @@ interface SubscriptionsTabProps {
   onRefresh: () => void
 }
 
-function getFirstOfNextMonth(): Date {
-  const d = new Date()
-  return new Date(d.getFullYear(), d.getMonth() + 1, 1)
+function formatDateDE(d: string | Date): string {
+  return new Date(d).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
-function formatDateDE(date: string | Date): string {
-  return new Date(date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
-}
-
-/** Check if a subscription is still in its binding period (6/12 month contract) */
 function isInBindingPeriod(sub: Subscription): boolean {
   if (!sub.end_date || sub.type === 'punch_card') return false
   return new Date(sub.end_date).getTime() > new Date().getTime()
 }
 
-/** 14-Tage-Widerrufsfrist ab Vertragserstellung (created_at) */
-const REVOCATION_DAYS = 14
-function getRevocationDeadline(sub: Subscription): Date {
-  const d = new Date(sub.created_at)
-  d.setDate(d.getDate() + REVOCATION_DAYS)
-  return d
+const STATUS_META: Record<SubStatus, { label: string; tone: BadgeTone; description: string }> = {
+  active:    { label: 'Aktiv',              tone: 'success',  description: 'Abo läuft regulär' },
+  pending:   { label: 'Zahlung ausstehend', tone: 'warning',  description: 'Wartet auf erste Zahlung' },
+  paused:    { label: 'Pausiert',           tone: 'info',     description: 'Keine Abbuchung' },
+  expired:   { label: 'Abgelaufen',         tone: 'danger',   description: 'Vertrag beendet' },
+  cancelled: { label: 'Gekündigt',          tone: 'neutral',  description: 'Coach kann reaktivieren' },
 }
-function isWithinRevocationPeriod(sub: Subscription): boolean {
-  return new Date().getTime() <= getRevocationDeadline(sub).getTime()
+
+/**
+ * Klar getrennter "echter" Pending-Status:
+ *  - Kunde hat noch nie auf Stripe-Checkout geklickt → 'pending', payment_status null/pending → Erinnerung sinnvoll
+ *  - Reaktivierung läuft → 'pending', payment_status 'reactivation_pending' → Erinnerung sinnvoll
+ *  - Kunde hat Checkout durchgeführt aber SEPA-Lastschrift braucht 3-5 Werktage → 'processing' → KEINE Erinnerung
+ */
+function isAwaitingReminder(sub: Subscription): boolean {
+  if (sub.status !== 'pending') return false
+  return sub.payment_status !== 'processing'
 }
-function daysLeftInRevocation(sub: Subscription): number {
-  const diff = getRevocationDeadline(sub).getTime() - new Date().getTime()
-  return Math.ceil(diff / (1000 * 60 * 60 * 24))
+function isSepaInProgress(sub: Subscription): boolean {
+  return sub.payment_status === 'processing'
+}
+function isReactivationPending(sub: Subscription): boolean {
+  return sub.payment_status === 'reactivation_pending'
 }
 
 export default function SubscriptionsTab({ subscriptions, setSubscriptions, members, supabase, onRefresh }: SubscriptionsTabProps) {
-  const [filter, setFilter] = useState<SubStatus | 'all'>('all')
   const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState<SubStatus | 'all'>('all')
+  const [typeFilter, setTypeFilter] = useState<'all' | 'monthly' | 'punch_card'>('all')
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
   const [formData, setFormData] = useState({
     member_id: '', name: '', type: 'monthly' as string, start_date: '', end_date: '',
     total_units: '', remaining_units: '', price: '', notes: '',
   })
+
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
-  const [sendingReminder, setSendingReminder] = useState<string | null>(null)
 
-  // Modal state for status changes with email
-  const [showStatusModal, setShowStatusModal] = useState(false)
-  const [pendingAction, setPendingAction] = useState<{ sub: Subscription; newStatus: SubStatus } | null>(null)
+  const [statusModal, setStatusModal] = useState<{ sub: Subscription; newStatus: SubStatus } | null>(null)
   const [personalMessage, setPersonalMessage] = useState('')
   const [sendingStatus, setSendingStatus] = useState(false)
   const [emailError, setEmailError] = useState<string | null>(null)
 
-  // Snackbar
-  const [snackbar, setSnackbar] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+  const [sendingReminder, setSendingReminder] = useState<string | null>(null)
+  const [reactivating, setReactivating] = useState<string | null>(null)
 
-  // Alle erinnern
+  const [snackbar, setSnackbar] = useState<{ message: string; tone: 'success' | 'danger' | 'info' } | null>(null)
+
   const [showRemindAllModal, setShowRemindAllModal] = useState(false)
   const [sendingRemindAll, setSendingRemindAll] = useState(false)
   const [remindAllProgress, setRemindAllProgress] = useState({ sent: 0, failed: 0, total: 0 })
 
-  // Stripe Re-Sync
   const [resyncing, setResyncing] = useState(false)
 
-  // Tarifwechsel
-  const [showChangePlanModal, setShowChangePlanModal] = useState(false)
-  const [changePlanSub, setChangePlanSub] = useState<Subscription | null>(null)
+  const [changePlan, setChangePlan] = useState<Subscription | null>(null)
   const [selectedPlanId, setSelectedPlanId] = useState<string>('')
   const [changingPlan, setChangingPlan] = useState(false)
   const [changePlanError, setChangePlanError] = useState<string | null>(null)
 
-  const showSnackbar = useCallback((message: string, type: 'success' | 'error' = 'success') => {
-    setSnackbar({ message, type })
-  }, [])
-
+  const showSnackbar = useCallback((message: string, tone: 'success' | 'danger' | 'info' = 'success') => setSnackbar({ message, tone }), [])
   useEffect(() => {
     if (!snackbar) return
-    const timer = setTimeout(() => setSnackbar(null), 4000)
-    return () => clearTimeout(timer)
+    const t = setTimeout(() => setSnackbar(null), 4000)
+    return () => clearTimeout(t)
   }, [snackbar])
 
-  const getMemberName = (memberId: string) => members.find(m => m.id === memberId)?.name || 'Unbekannt'
-  const getMemberEmail = (memberId: string) => members.find(m => m.id === memberId)?.email || ''
+  const memberLookup = useMemo(() => {
+    const map = new Map<string, Member>()
+    members.forEach(m => map.set(m.id, m))
+    return map
+  }, [members])
+  const getMember = (id: string) => memberLookup.get(id)
 
-  const filteredSubs = subscriptions.filter(s => {
-    const matchesFilter = filter === 'all' || s.status === filter
-    const memberName = getMemberName(s.member_id)
-    const matchesSearch = search === '' ||
-      memberName.toLowerCase().includes(search.toLowerCase()) ||
-      s.name.toLowerCase().includes(search.toLowerCase())
-    return matchesFilter && matchesSearch
-  })
+  // ── Filter ──
+  const filtered = useMemo(() => {
+    return subscriptions.filter(s => {
+      if (statusFilter !== 'all' && s.status !== statusFilter) return false
+      if (typeFilter !== 'all' && s.type !== typeFilter) return false
+      if (search) {
+        const q = search.toLowerCase()
+        const memberName = getMember(s.member_id)?.name.toLowerCase() || ''
+        if (!memberName.includes(q) && !s.name.toLowerCase().includes(q)) return false
+      }
+      return true
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subscriptions, statusFilter, typeFilter, search, memberLookup])
 
-  const stats = {
+  type SortableSub = Subscription & { _memberName: string }
+  const sortable: SortableSub[] = filtered.map(s => ({ ...s, _memberName: getMember(s.member_id)?.name || 'Unbekannt' }))
+  const { sorted, isActive, dirOf, setSort } = useSort<SortableSub>(sortable, 'created_at', 'desc')
+
+  // ── Stats ──
+  const stats = useMemo(() => ({
+    total: subscriptions.length,
     active: subscriptions.filter(s => s.status === 'active').length,
-    pending: subscriptions.filter(s => s.status === 'pending').length,
-    expired: subscriptions.filter(s => s.status === 'expired').length,
+    pending: subscriptions.filter(isAwaitingReminder).length, // nur "echte" Pending
+    sepaProcessing: subscriptions.filter(isSepaInProgress).length,
     paused: subscriptions.filter(s => s.status === 'paused').length,
-  }
+    cancelled: subscriptions.filter(s => s.status === 'cancelled').length,
+    expired: subscriptions.filter(s => s.status === 'expired').length,
+    mrr: subscriptions.filter(s => s.status === 'active' && s.type !== 'punch_card').reduce((sum, s) => sum + Number(s.price), 0),
+  }), [subscriptions])
 
-  const now = new Date()
-
-  const daysUntil = (date: string) => {
-    const diff = new Date(date).getTime() - now.getTime()
-    return Math.ceil(diff / (1000 * 60 * 60 * 24))
-  }
-
+  // ── Aktionen ──
   const resetForm = () => {
     setFormData({ member_id: '', name: '', type: 'monthly', start_date: '', end_date: '', total_units: '', remaining_units: '', price: '', notes: '' })
     setShowForm(false)
@@ -145,8 +154,7 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
   const saveSub = async () => {
     if (!formData.member_id || !formData.name || !formData.start_date || !formData.price) return
     setSaving(true)
-
-    const insertData = {
+    const { data, error } = await supabase.from('subscriptions').insert({
       member_id: formData.member_id,
       name: formData.name,
       type: formData.type,
@@ -156,848 +164,658 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
       remaining_units: formData.remaining_units ? parseInt(formData.remaining_units) : null,
       price: parseFloat(formData.price),
       notes: formData.notes || null,
-    }
-
-    const { data, error } = await supabase.from('subscriptions').insert(insertData).select().single()
+    }).select().single()
     if (!error && data) {
       setSubscriptions(prev => [data as Subscription, ...prev])
+      showSnackbar('Abo erstellt')
+    } else if (error) {
+      showSnackbar('Fehler beim Erstellen', 'danger')
     }
     setSaving(false)
     resetForm()
   }
 
-  // Open confirmation modal before changing status
-  const openStatusModal = (sub: Subscription, newStatus: SubStatus) => {
-    setPendingAction({ sub, newStatus })
-    setPersonalMessage('')
-    setEmailError(null)
-    setShowStatusModal(true)
-  }
-
-  // Execute status change + send email
   const confirmStatusChange = async () => {
-    if (!pendingAction) return
-    const { sub, newStatus } = pendingAction
+    if (!statusModal) return
+    const { sub, newStatus } = statusModal
     setSendingStatus(true)
     setEmailError(null)
 
-    // Sync with Stripe first (pause/resume/cancel)
     const stripeAction = newStatus === 'paused' ? 'pause' : newStatus === 'active' ? 'resume' : newStatus === 'cancelled' ? 'cancel' : null
-    if (stripeAction) {
+    if (stripeAction && sub.stripe_subscription_id) {
       try {
-        const stripeRes = await fetch('/api/subscription/stripe-action', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: stripeAction,
-            stripeSubscriptionId: sub.stripe_subscription_id,
-          }),
+        const r = await fetch('/api/subscription/stripe-action', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: stripeAction, stripeSubscriptionId: sub.stripe_subscription_id }),
         })
-        const stripeData = await stripeRes.json()
-        if (!stripeRes.ok) {
-          setEmailError(stripeData.error || 'Stripe-Aktion fehlgeschlagen')
-          setSendingStatus(false)
-          return
-        }
-      } catch {
-        setEmailError('Stripe-Verbindung fehlgeschlagen')
-        setSendingStatus(false)
-        return
-      }
+        const d = await r.json()
+        if (!r.ok) { setEmailError(d.error || 'Stripe-Aktion fehlgeschlagen'); setSendingStatus(false); return }
+      } catch { setEmailError('Stripe-Verbindung fehlgeschlagen'); setSendingStatus(false); return }
     }
 
-    // Update status in Supabase
     const { error } = await supabase.from('subscriptions').update({ status: newStatus }).eq('id', sub.id)
-    if (error) {
-      setEmailError('Status konnte nicht aktualisiert werden.')
-      setSendingStatus(false)
-      return
-    }
-
+    if (error) { setEmailError('Status konnte nicht aktualisiert werden.'); setSendingStatus(false); return }
     setSubscriptions(prev => prev.map(s => s.id === sub.id ? { ...s, status: newStatus } : s))
 
-    // Send notification email
-    const memberEmail = getMemberEmail(sub.member_id)
-    const memberName = getMemberName(sub.member_id)
-    if (memberEmail) {
+    const member = getMember(sub.member_id)
+    if (member?.email) {
       try {
-        const effectiveDate = newStatus === 'cancelled' ? 'Sofort' : newStatus === 'paused' ? formatDateDE(getFirstOfNextMonth()) : undefined
-        const res = await fetch('/api/subscription/send-notification', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            status: newStatus,
-            memberName,
-            memberEmail,
-            subscriptionName: sub.name,
-            effectiveDate,
-            personalMessage: personalMessage || undefined,
-          }),
+        const firstNext = new Date(); firstNext.setMonth(firstNext.getMonth() + 1, 1)
+        const effectiveDate = newStatus === 'cancelled' ? 'Sofort' : newStatus === 'paused' ? formatDateDE(firstNext) : undefined
+        await fetch('/api/subscription/send-notification', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: newStatus, memberName: member.name, memberEmail: member.email, subscriptionName: sub.name, effectiveDate, personalMessage: personalMessage || undefined }),
         })
-        const data = await res.json()
-        if (!res.ok || data.error) {
-          setEmailError(data.error || 'E-Mail konnte nicht gesendet werden')
-        }
-      } catch {
-        setEmailError('E-Mail-Versand fehlgeschlagen.')
-      }
+      } catch { /* silent */ }
     }
 
     setSendingStatus(false)
-    setShowStatusModal(false)
-    setPendingAction(null)
+    setStatusModal(null)
     setPersonalMessage('')
+    showSnackbar(`Status geändert auf "${STATUS_META[newStatus].label}"`)
+  }
+
+  const reactivate = async (sub: Subscription) => {
+    setReactivating(sub.id)
+    const member = getMember(sub.member_id)
+    if (!member) { setReactivating(null); return }
+
+    // WICHTIG: Vor dem Reminder markieren wir die Sub als 'reactivation_pending'.
+    // Damit erkennt der Checkout-API-Endpunkt, dass KEINE anteilige Erstmonats-Rechnung
+    // gestellt werden darf — der Kunde hat schon einmal gezahlt, der Zyklus war nur
+    // unterbrochen. Stattdessen: Karte hinterlegen, erste Abbuchung am 1. nächsten
+    // Monats für vollen Monat.
+    await supabase.from('subscriptions').update({
+      status: 'pending',
+      payment_status: 'reactivation_pending',
+      stripe_subscription_id: null
+    }).eq('id', sub.id)
+    setSubscriptions(prev => prev.map(s => s.id === sub.id
+      ? { ...s, status: 'pending', payment_status: 'reactivation_pending', stripe_subscription_id: null }
+      : s))
+
+    try {
+      const res = await fetch('/api/subscription/send-reminder', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subscriptionId: sub.id, memberEmail: member.email, memberName: member.name, subscriptionName: sub.name }),
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) {
+        showSnackbar(data.error || 'Reaktivierung fehlgeschlagen', 'danger')
+      } else {
+        showSnackbar(`Reaktivierung gestartet — neuer Zahlungslink an ${member.name} verschickt`)
+      }
+    } catch {
+      showSnackbar('Verbindung fehlgeschlagen', 'danger')
+    }
+    setReactivating(null)
+  }
+
+  const sendReminder = async (sub: Subscription) => {
+    setSendingReminder(sub.id)
+    const member = getMember(sub.member_id)
+    if (!member) { setSendingReminder(null); return }
+    try {
+      const res = await fetch('/api/subscription/send-reminder', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subscriptionId: sub.id, memberEmail: member.email, memberName: member.name, subscriptionName: sub.name }),
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) showSnackbar(data.error || 'Erinnerung fehlgeschlagen', 'danger')
+      else showSnackbar(`Erinnerung an ${member.name} versendet`)
+    } catch {
+      showSnackbar('Erinnerung fehlgeschlagen', 'danger')
+    }
+    setSendingReminder(null)
+  }
+
+  // Nur Subs die wirklich eine Erinnerung brauchen — SEPA-in-Bearbeitung NICHT.
+  const pendingSubs = subscriptions.filter(isAwaitingReminder)
+  const sepaProcessingSubs = subscriptions.filter(isSepaInProgress)
+  const sendRemindAll = async () => {
+    setSendingRemindAll(true)
+    setRemindAllProgress({ sent: 0, failed: 0, total: pendingSubs.length })
+    let sent = 0, failed = 0
+    for (const sub of pendingSubs) {
+      const member = getMember(sub.member_id)
+      if (!member) { failed++; continue }
+      try {
+        const r = await fetch('/api/subscription/send-reminder', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ subscriptionId: sub.id, memberEmail: member.email, memberName: member.name, subscriptionName: sub.name }),
+        })
+        const d = await r.json()
+        if (!r.ok || d.error) failed++; else sent++
+      } catch { failed++ }
+      setRemindAllProgress({ sent, failed, total: pendingSubs.length })
+    }
+    setSendingRemindAll(false)
+    setShowRemindAllModal(false)
+    showSnackbar(failed === 0 ? `${sent} Erinnerung${sent !== 1 ? 'en' : ''} versendet` : `${sent} versendet, ${failed} fehlgeschlagen`, failed === 0 ? 'success' : 'danger')
+  }
+
+  const confirmChangePlan = async () => {
+    if (!changePlan || !selectedPlanId) return
+    setChangingPlan(true); setChangePlanError(null)
+    try {
+      const res = await fetch('/api/subscription/change-plan', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subscriptionId: changePlan.id, newMembershipId: selectedPlanId }),
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) { setChangePlanError(data.error || 'Tarifwechsel fehlgeschlagen'); setChangingPlan(false); return }
+      setSubscriptions(prev => prev.map(s => s.id === changePlan.id ? { ...s, name: data.newName, price: data.newPrice, end_date: data.newEndDate } : s))
+      showSnackbar(`Tarif gewechselt zu ${data.newName}`)
+      setChangePlan(null); setSelectedPlanId('')
+    } catch { setChangePlanError('Verbindung fehlgeschlagen') }
+    setChangingPlan(false)
   }
 
   const deleteSub = async (id: string) => {
     setDeleting(true)
     const { error } = await adminDelete(supabase, 'subscriptions', id)
-    if (!error) {
-      setSubscriptions(prev => prev.filter(s => s.id !== id))
-    } else {
-      setEmailError(error)
-    }
-    setDeleting(false)
-    setDeleteConfirm(null)
-  }
-
-  const sendReminder = async (sub: Subscription) => {
-    setSendingReminder(sub.id)
-    setEmailError(null)
-    const memberEmail = getMemberEmail(sub.member_id)
-    const memberName = getMemberName(sub.member_id)
-    try {
-      const res = await fetch('/api/subscription/send-reminder', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          subscriptionId: sub.id,
-          memberEmail,
-          memberName,
-          subscriptionName: sub.name,
-        }),
-      })
-      const data = await res.json()
-      if (!res.ok || data.error) {
-        showSnackbar(data.error || 'Erinnerung fehlgeschlagen', 'error')
-      } else {
-        showSnackbar(`Erinnerung versendet an ${memberName}`)
-      }
-    } catch {
-      showSnackbar('Erinnerung fehlgeschlagen', 'error')
-    }
-    setSendingReminder(null)
-  }
-
-  const pendingSubs = subscriptions.filter(s => s.status === 'pending')
-
-  const sendRemindAll = async () => {
-    setSendingRemindAll(true)
-    setRemindAllProgress({ sent: 0, failed: 0, total: pendingSubs.length })
-
-    let sent = 0
-    let failed = 0
-    for (const sub of pendingSubs) {
-      const memberEmail = getMemberEmail(sub.member_id)
-      const memberName = getMemberName(sub.member_id)
-      try {
-        const res = await fetch('/api/subscription/send-reminder', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            subscriptionId: sub.id,
-            memberEmail,
-            memberName,
-            subscriptionName: sub.name,
-          }),
-        })
-        const data = await res.json()
-        if (!res.ok || data.error) {
-          failed++
-        } else {
-          sent++
-        }
-      } catch {
-        failed++
-      }
-      setRemindAllProgress({ sent, failed, total: pendingSubs.length })
-    }
-
-    setSendingRemindAll(false)
-    setShowRemindAllModal(false)
-    if (failed === 0) {
-      showSnackbar(`${sent} Erinnerung${sent !== 1 ? 'en' : ''} erfolgreich versendet`)
-    } else {
-      showSnackbar(`${sent} versendet, ${failed} fehlgeschlagen`, 'error')
-    }
-  }
-
-  const openChangePlanModal = (sub: Subscription) => {
-    setChangePlanSub(sub)
-    setSelectedPlanId('')
-    setChangePlanError(null)
-    setShowChangePlanModal(true)
-  }
-
-  const confirmChangePlan = async () => {
-    if (!changePlanSub || !selectedPlanId) return
-    setChangingPlan(true)
-    setChangePlanError(null)
-    try {
-      const res = await fetch('/api/subscription/change-plan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          subscriptionId: changePlanSub.id,
-          newMembershipId: selectedPlanId,
-        }),
-      })
-      const data = await res.json()
-      if (!res.ok || data.error) {
-        setChangePlanError(data.error || 'Tarifwechsel fehlgeschlagen')
-        setChangingPlan(false)
-        return
-      }
-      setSubscriptions(prev => prev.map(s => s.id === changePlanSub.id
-        ? { ...s, name: data.newName, price: data.newPrice, end_date: data.newEndDate }
-        : s))
-      showSnackbar(`Tarif gewechselt zu ${data.newName}`)
-      setShowChangePlanModal(false)
-      setChangePlanSub(null)
-      setSelectedPlanId('')
-    } catch {
-      setChangePlanError('Verbindung fehlgeschlagen')
-    } finally {
-      setChangingPlan(false)
-    }
+    if (!error) { setSubscriptions(prev => prev.filter(s => s.id !== id)); showSnackbar('Abo gelöscht') }
+    else showSnackbar(error, 'danger')
+    setDeleting(false); setDeleteConfirm(null)
   }
 
   const updateUnits = async (id: string, remaining: number) => {
     const { error } = await supabase.from('subscriptions').update({ remaining_units: remaining }).eq('id', id)
-    if (!error) {
-      setSubscriptions(prev => prev.map(s => s.id === id ? { ...s, remaining_units: remaining } : s))
-    }
+    if (!error) setSubscriptions(prev => prev.map(s => s.id === id ? { ...s, remaining_units: remaining } : s))
   }
 
-  const updateStatus = async (id: string, status: SubStatus) => {
-    const { error } = await supabase.from('subscriptions').update({ status }).eq('id', id)
-    if (!error) {
-      setSubscriptions(prev => prev.map(s => s.id === id ? { ...s, status } : s))
-    }
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+  const toggleSelectAll = () => {
+    if (selectedIds.size === sorted.length) setSelectedIds(new Set())
+    else setSelectedIds(new Set(sorted.map(s => s.id)))
   }
 
+  const runStripeResync = async () => {
+    setResyncing(true)
+    try {
+      const r = await fetch('/api/admin/resync-stripe', { method: 'POST' })
+      const d = await r.json()
+      if (!r.ok || d.error) showSnackbar(d.error || 'Re-Sync fehlgeschlagen', 'danger')
+      else {
+        const reverted = d.subscriptions.revertedToPending || 0
+        const ghosts = d.subscriptions.ghostSubsCleared || 0
+        const notes: string[] = []
+        if (reverted > 0) notes.push(`${reverted}× fälschlich als SEPA → "Erinnerung fällig"`)
+        if (ghosts > 0) notes.push(`${ghosts}× Geister-Abos ohne Stripe → "Erinnerung fällig"`)
+        const noteStr = notes.length > 0 ? ` · ${notes.join(' · ')}` : ''
+        showSnackbar(`Re-Sync: ${d.subscriptions.updated}/${d.subscriptions.checked} Abos · ${d.invoices.synced} neue Rechnungen${noteStr}`)
+        onRefresh()
+      }
+    } catch { showSnackbar('Re-Sync fehlgeschlagen', 'danger') }
+    setResyncing(false)
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-6">
-      {/* Statistiken */}
-      <div className="grid grid-cols-4 gap-3">
-        <button onClick={() => setFilter(filter === 'active' ? 'all' : 'active')} className={`p-4 rounded-xl border transition-all text-left ${filter === 'active' ? 'bg-green-500/10 border-green-500/50' : 'bg-dark-900/50 border-dark-800'}`}>
-          <p className="text-2xl font-black text-green-400">{stats.active}</p>
-          <p className="text-xs text-dark-400">Aktiv</p>
-        </button>
-        <button onClick={() => setFilter(filter === 'pending' ? 'all' : 'pending')} className={`p-4 rounded-xl border transition-all text-left ${filter === 'pending' ? 'bg-orange-500/10 border-orange-500/50' : 'bg-dark-900/50 border-dark-800'}`}>
-          <p className="text-2xl font-black text-orange-400">{stats.pending}</p>
-          <p className="text-xs text-dark-400">Ausstehend</p>
-        </button>
-        <button onClick={() => setFilter(filter === 'paused' ? 'all' : 'paused')} className={`p-4 rounded-xl border transition-all text-left ${filter === 'paused' ? 'bg-yellow-500/10 border-yellow-500/50' : 'bg-dark-900/50 border-dark-800'}`}>
-          <p className="text-2xl font-black text-yellow-400">{stats.paused}</p>
-          <p className="text-xs text-dark-400">Pausiert</p>
-        </button>
-        <button onClick={() => setFilter(filter === 'expired' ? 'all' : 'expired')} className={`p-4 rounded-xl border transition-all text-left ${filter === 'expired' ? 'bg-red-500/10 border-red-500/50' : 'bg-dark-900/50 border-dark-800'}`}>
-          <p className="text-2xl font-black text-red-400">{stats.expired}</p>
-          <p className="text-xs text-dark-400">Abgelaufen</p>
-        </button>
+    <div className="space-y-5 animate-fade-in-fast">
+      {/* Headline */}
+      <div className="flex items-end justify-between gap-4 flex-wrap">
+        <div>
+          <p className="admin-eyebrow">Abonnements</p>
+          <h1 className="admin-h1 mt-1">Abos verwalten</h1>
+          <p className="admin-body mt-1">Aktivieren, pausieren, kündigen, reaktivieren — alles ein Klick weit weg.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={runStripeResync} disabled={resyncing}
+            icon={<svg className={`w-4 h-4 ${resyncing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>}
+          >
+            {resyncing ? 'Synchronisiert…' : 'Stripe-Sync'}
+          </Button>
+          <Button variant="primary" onClick={() => { resetForm(); setShowForm(true) }}
+            icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>}
+          >
+            Neues Abo
+          </Button>
+        </div>
       </div>
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-          <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Abo suchen (Mitglied, Name)..." className="w-full pl-10 pr-4 py-3 bg-dark-900/50 border border-dark-800 rounded-xl text-dark-100 placeholder:text-dark-500 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 text-sm" />
-        </div>
-        <button
-          onClick={async () => {
-            setResyncing(true)
-            try {
-              const res = await fetch('/api/admin/resync-stripe', { method: 'POST' })
-              const data = await res.json()
-              if (!res.ok || data.error) {
-                showSnackbar(data.error || 'Re-Sync fehlgeschlagen', 'error')
-              } else {
-                showSnackbar(`Re-Sync: ${data.subscriptions.updated}/${data.subscriptions.checked} Abos aktualisiert, ${data.invoices.synced} neue Rechnungen`)
-                onRefresh()
-              }
-            } catch {
-              showSnackbar('Re-Sync fehlgeschlagen', 'error')
-            } finally {
-              setResyncing(false)
-            }
-          }}
-          disabled={resyncing}
-          className="px-5 py-3 bg-blue-500/10 text-blue-400 border border-blue-500/30 hover:bg-blue-500/20 font-bold rounded-xl transition-colors text-sm whitespace-nowrap disabled:opacity-50"
-          title="Status aller Stripe-Abos und Rechnungen neu synchronisieren"
-        >
-          {resyncing ? 'Synchronisiert…' : '↻ Stripe sync'}
-        </button>
-        <button onClick={() => { resetForm(); setShowForm(true) }} className="px-5 py-3 bg-brand-500 text-dark-950 font-bold rounded-xl hover:bg-brand-400 transition-colors text-sm whitespace-nowrap">
-          + Neues Abo
-        </button>
+      {/* KPIs */}
+      <div className="grid grid-cols-2 lg:grid-cols-7 gap-3">
+        <KpiTile label="Aktiv" value={stats.active} onClick={() => setStatusFilter(statusFilter === 'active' ? 'all' : 'active')} />
+        <KpiTile label="SEPA läuft" value={stats.sepaProcessing} hint="3–5 Werktage" />
+        <KpiTile label="Erinnerung fällig" value={stats.pending} deltaTone={stats.pending > 0 ? 'danger' : 'neutral'} onClick={() => setStatusFilter(statusFilter === 'pending' ? 'all' : 'pending')} />
+        <KpiTile label="Pausiert" value={stats.paused} onClick={() => setStatusFilter(statusFilter === 'paused' ? 'all' : 'paused')} />
+        <KpiTile label="Gekündigt" value={stats.cancelled} onClick={() => setStatusFilter(statusFilter === 'cancelled' ? 'all' : 'cancelled')} />
+        <KpiTile label="Abgelaufen" value={stats.expired} onClick={() => setStatusFilter(statusFilter === 'expired' ? 'all' : 'expired')} />
+        <KpiTile label="MRR" value={`${stats.mrr.toFixed(0)} €`} hint="Wiederkehrend / Monat" />
       </div>
 
       {/* Formular */}
       {showForm && (
-        <div className="bg-dark-900/50 rounded-xl border border-brand-500/30 p-5">
-          <h3 className="font-bold text-dark-100 mb-4">Neues Abonnement</h3>
-          <div className="grid sm:grid-cols-2 gap-4">
-            <select value={formData.member_id} onChange={e => setFormData(p => ({ ...p, member_id: e.target.value }))} className="input-field text-sm">
-              <option value="">Mitglied wählen *</option>
-              {members.filter(m => m.active).map(m => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
-            </select>
-            <select value={formData.type} onChange={e => setFormData(p => ({ ...p, type: e.target.value }))} className="input-field text-sm">
-              <option value="monthly">Monatsabo</option>
-              <option value="punch_card">Mehrfachkarte</option>
-            </select>
-            <input type="text" value={formData.name} onChange={e => setFormData(p => ({ ...p, name: e.target.value }))} placeholder="Bezeichnung (z.B. Monatskarte Gruppenkurse) *" className="input-field text-sm sm:col-span-2" />
-            <div>
-              <label className="text-xs text-dark-500 block mb-1">Startdatum *</label>
-              <input type="date" value={formData.start_date} onChange={e => setFormData(p => ({ ...p, start_date: e.target.value }))} className="input-field text-sm" />
-            </div>
-            {formData.type === 'monthly' && (
-              <div>
-                <label className="text-xs text-dark-500 block mb-1">Enddatum</label>
-                <input type="date" value={formData.end_date} onChange={e => setFormData(p => ({ ...p, end_date: e.target.value }))} className="input-field text-sm" />
-              </div>
-            )}
-            {formData.type === 'punch_card' && (
+        <Card>
+          <CardHeader
+            eyebrow="Neu anlegen"
+            title="Abo erstellen"
+            description="Coach legt das Abo manuell an. Für die Zahlung wird der Stripe-Checkout separat per Reminder versendet."
+            actions={
+              <Button variant="ghost" size="sm" onClick={resetForm}
+                icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>}
+              />
+            }
+          />
+          <div className="grid sm:grid-cols-2 gap-3">
+            <label className="block">
+              <span className="admin-caption block mb-1">Mitglied *</span>
+              <Select value={formData.member_id} onChange={e => setFormData(p => ({ ...p, member_id: e.target.value }))}>
+                <option value="">Mitglied wählen</option>
+                {members.filter(m => m.active).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </Select>
+            </label>
+            <label className="block">
+              <span className="admin-caption block mb-1">Typ</span>
+              <Select value={formData.type} onChange={e => setFormData(p => ({ ...p, type: e.target.value }))}>
+                <option value="monthly">Monatsabo</option>
+                <option value="punch_card">Mehrfachkarte</option>
+              </Select>
+            </label>
+            <label className="sm:col-span-2 block">
+              <span className="admin-caption block mb-1">Bezeichnung *</span>
+              <Input type="text" value={formData.name} onChange={e => setFormData(p => ({ ...p, name: e.target.value }))} placeholder="z.B. Erwachsene & Jugendliche – 12 Monate" />
+            </label>
+            <label className="block">
+              <span className="admin-caption block mb-1">Startdatum *</span>
+              <Input type="date" value={formData.start_date} onChange={e => setFormData(p => ({ ...p, start_date: e.target.value }))} />
+            </label>
+            {formData.type === 'monthly' ? (
+              <label className="block">
+                <span className="admin-caption block mb-1">Enddatum (Bindung)</span>
+                <Input type="date" value={formData.end_date} onChange={e => setFormData(p => ({ ...p, end_date: e.target.value }))} />
+              </label>
+            ) : (
               <>
-                <input type="number" value={formData.total_units} onChange={e => setFormData(p => ({ ...p, total_units: e.target.value, remaining_units: e.target.value }))} placeholder="Gesamteinheiten (z.B. 10)" className="input-field text-sm" />
-                <input type="number" value={formData.remaining_units} onChange={e => setFormData(p => ({ ...p, remaining_units: e.target.value }))} placeholder="Verbleibende Einheiten" className="input-field text-sm" />
+                <label className="block">
+                  <span className="admin-caption block mb-1">Gesamteinheiten</span>
+                  <Input type="number" value={formData.total_units} onChange={e => setFormData(p => ({ ...p, total_units: e.target.value, remaining_units: e.target.value }))} placeholder="z.B. 10" />
+                </label>
+                <label className="block">
+                  <span className="admin-caption block mb-1">Verbleibend</span>
+                  <Input type="number" value={formData.remaining_units} onChange={e => setFormData(p => ({ ...p, remaining_units: e.target.value }))} />
+                </label>
               </>
             )}
-            <input type="number" step="0.01" value={formData.price} onChange={e => setFormData(p => ({ ...p, price: e.target.value }))} placeholder="Preis (€) *" className="input-field text-sm" />
-            <input type="text" value={formData.notes} onChange={e => setFormData(p => ({ ...p, notes: e.target.value }))} placeholder="Notizen" className="input-field text-sm" />
+            <label className="block">
+              <span className="admin-caption block mb-1">Preis (€) *</span>
+              <Input type="number" step="0.01" value={formData.price} onChange={e => setFormData(p => ({ ...p, price: e.target.value }))} />
+            </label>
+            <label className="block sm:col-span-2">
+              <span className="admin-caption block mb-1">Notizen</span>
+              <Input type="text" value={formData.notes} onChange={e => setFormData(p => ({ ...p, notes: e.target.value }))} />
+            </label>
           </div>
-          <div className="flex gap-3 mt-4">
-            <button onClick={saveSub} disabled={saving || !formData.member_id || !formData.name || !formData.start_date || !formData.price} className="px-5 py-2 bg-brand-500 text-dark-950 font-bold rounded-lg hover:bg-brand-400 transition-colors text-sm disabled:opacity-50">
-              {saving ? 'Speichert...' : 'Abo erstellen'}
-            </button>
-            <button onClick={resetForm} className="px-5 py-2 text-dark-400 border border-dark-700 rounded-lg hover:border-dark-600 transition-colors text-sm">Abbrechen</button>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="ghost" onClick={resetForm}>Abbrechen</Button>
+            <Button variant="primary" onClick={saveSub} disabled={saving || !formData.member_id || !formData.name || !formData.start_date || !formData.price}>
+              {saving ? 'Speichert…' : 'Abo erstellen'}
+            </Button>
           </div>
-        </div>
+        </Card>
       )}
 
-      {/* Email-Fehler Hinweis */}
-      {emailError && !showStatusModal && (
-        <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl">
-          <p className="text-sm text-red-400">E-Mail nicht gesendet: {emailError}</p>
-        </div>
-      )}
-
-      {/* Abo-Liste */}
-      <div className="bg-dark-900/50 rounded-xl border border-dark-800 overflow-hidden">
-        <div className="p-4 border-b border-dark-800 flex items-center justify-between">
-          <h2 className="font-bold text-dark-100">
-            Abonnements
-            <span className="text-dark-500 font-normal ml-2 text-sm">{filteredSubs.length} Ergebnisse</span>
-          </h2>
-          <div className="flex items-center gap-2">
-            {pendingSubs.length > 0 && (
-              <button
-                onClick={() => setShowRemindAllModal(true)}
-                className="px-3 py-1.5 text-xs font-bold rounded-lg bg-orange-500/10 text-orange-400 border border-orange-500/30 hover:bg-orange-500/20 transition-all"
-              >
-                Alle erinnern ({pendingSubs.length})
-              </button>
-            )}
-            <button onClick={onRefresh} className="text-sm text-dark-400 hover:text-brand-500 transition-colors">Aktualisieren</button>
+      {/* Filter Toolbar */}
+      <Card padded={false}>
+        <div className="p-4 flex items-center gap-2 flex-wrap border-b border-admin-hairline-soft">
+          <div className="relative flex-1 min-w-[220px]">
+            <SearchInput value={search} onChange={setSearch} placeholder="Mitglied oder Abo-Bezeichnung..." />
           </div>
+          <Select value={statusFilter} onChange={e => setStatusFilter(e.target.value as SubStatus | 'all')} className="min-w-[180px]">
+            <option value="all">Alle Status</option>
+            <option value="active">Nur Aktiv</option>
+            <option value="pending">Nur Ausstehend</option>
+            <option value="paused">Nur Pausiert</option>
+            <option value="cancelled">Nur Gekündigt</option>
+            <option value="expired">Nur Abgelaufen</option>
+          </Select>
+          <Select value={typeFilter} onChange={e => setTypeFilter(e.target.value as 'all' | 'monthly' | 'punch_card')} className="min-w-[160px]">
+            <option value="all">Alle Typen</option>
+            <option value="monthly">Monatsabo</option>
+            <option value="punch_card">Mehrfachkarte</option>
+          </Select>
+          {(statusFilter !== 'all' || typeFilter !== 'all' || search) && (
+            <Button variant="ghost" size="sm" onClick={() => { setStatusFilter('all'); setTypeFilter('all'); setSearch('') }}>
+              Filter zurücksetzen
+            </Button>
+          )}
         </div>
 
-        {filteredSubs.length === 0 ? (
-          <div className="p-12 text-center">
-            <p className="text-dark-500">{search ? 'Kein Abo gefunden' : 'Noch keine Abos angelegt'}</p>
-          </div>
-        ) : (
-          <div className="divide-y divide-dark-800">
-            {filteredSubs.map(sub => {
-              const member = members.find(m => m.id === sub.member_id)
-              const isExpiringSoon = sub.status === 'active' && sub.end_date && daysUntil(sub.end_date) <= 30 && daysUntil(sub.end_date) > 0
-              const isExpired = sub.end_date && daysUntil(sub.end_date) <= 0 && sub.status === 'active'
-              const inBinding = isInBindingPeriod(sub)
-              const cancelDate = formatDateDE(getFirstOfNextMonth())
-
-              return (
-                <div key={sub.id} className="p-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <p className="font-bold text-dark-100">{member?.name || 'Unbekannt'}</p>
-                        <span className={`px-2 py-0.5 rounded-full text-xs border ${STATUS_CONFIG[sub.status].bg} ${STATUS_CONFIG[sub.status].color}`}>
-                          {STATUS_CONFIG[sub.status].label}
-                        </span>
-                        {isExpiringSoon && (
-                          <span className="px-2 py-0.5 rounded-full text-xs bg-orange-400/10 text-orange-400 border border-orange-400/30">
-                            {daysUntil(sub.end_date!)} Tage
-                          </span>
-                        )}
-                        {inBinding && sub.status === 'active' && (
-                          <span className="px-2 py-0.5 rounded-full text-xs bg-blue-400/10 text-blue-400 border border-blue-400/30">
-                            Bindung bis {formatDateDE(sub.end_date!)}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-sm text-brand-500">{sub.name}</p>
-                      <div className="flex items-center gap-4 mt-1 text-xs text-dark-400 flex-wrap">
-                        <span>{formatDateDE(sub.start_date)}{sub.end_date ? ` - ${formatDateDE(sub.end_date)}` : ' – Monatlich kündbar'}</span>
-                        <span className="font-bold text-dark-300">{Number(sub.price).toFixed(0)}€</span>
-                        {sub.type === 'punch_card' && sub.total_units && (
-                          <span>{sub.remaining_units}/{sub.total_units} Einheiten</span>
-                        )}
-                      </div>
-
-                      {/* Progress bar für Monatsabos */}
-                      {sub.status === 'active' && sub.end_date && sub.type === 'monthly' && (
-                        <div className="mt-2 h-1.5 bg-dark-700 rounded-full overflow-hidden max-w-xs">
-                          <div
-                            className={`h-full rounded-full transition-all ${daysUntil(sub.end_date) <= 7 ? 'bg-red-500' : daysUntil(sub.end_date) <= 30 ? 'bg-yellow-500' : 'bg-green-500'}`}
-                            style={{ width: `${Math.max(0, Math.min(100, (daysUntil(sub.end_date) / Math.max(1, Math.ceil((new Date(sub.end_date).getTime() - new Date(sub.start_date).getTime()) / (1000 * 60 * 60 * 24)))) * 100))}%` }}
-                          />
-                        </div>
-                      )}
-
-                      {/* Progress bar für Punch Cards */}
-                      {sub.status === 'active' && sub.type === 'punch_card' && sub.total_units && sub.remaining_units !== null && (
-                        <div className="mt-2 h-1.5 bg-dark-700 rounded-full overflow-hidden max-w-xs">
-                          <div
-                            className={`h-full rounded-full transition-all ${(sub.remaining_units / sub.total_units) <= 0.2 ? 'bg-red-500' : (sub.remaining_units / sub.total_units) <= 0.4 ? 'bg-yellow-500' : 'bg-blue-500'}`}
-                            style={{ width: `${(sub.remaining_units / sub.total_units) * 100}%` }}
-                          />
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Aktionen */}
-                    <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
-                      {sub.status === 'active' && sub.type === 'punch_card' && sub.remaining_units !== null && sub.remaining_units > 0 && (
-                        <button
-                          onClick={() => updateUnits(sub.id, sub.remaining_units! - 1)}
-                          className="px-3 py-1.5 text-xs font-bold rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/30 hover:bg-blue-500/20 transition-all"
-                          title="Eine Einheit abziehen"
-                        >
-                          -1
-                        </button>
-                      )}
-                      {(sub.status === 'active' || sub.status === 'paused' || sub.status === 'pending') && sub.type !== 'punch_card' && (
-                        <button
-                          onClick={() => openChangePlanModal(sub)}
-                          className="px-3 py-1.5 text-xs font-bold rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/30 hover:bg-purple-500/20 transition-all"
-                          title="Auf anderen Tarif wechseln"
-                        >
-                          Tarif wechseln
-                        </button>
-                      )}
-                      {sub.status === 'active' && (
-                        <button onClick={() => openStatusModal(sub, 'paused')} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-yellow-500/10 text-yellow-400 border border-yellow-500/30 hover:bg-yellow-500/20 transition-all">
-                          Pause
-                        </button>
-                      )}
-                      {sub.status === 'paused' && (
-                        <button onClick={() => openStatusModal(sub, 'active')} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-green-500/10 text-green-400 border border-green-500/30 hover:bg-green-500/20 transition-all">
-                          Fortsetzen
-                        </button>
-                      )}
-                      {(sub.status === 'active' || sub.status === 'paused') && (
-                        <button
-                          onClick={() => openStatusModal(sub, 'cancelled')}
-                          className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${inBinding ? 'bg-orange-500/10 text-orange-400 border border-orange-500/30 hover:bg-orange-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20'}`}
-                          title={inBinding ? `Sonderkündigung – Vertragslaufzeit bis ${formatDateDE(sub.end_date!)}` : 'Kündigung sofort wirksam'}
-                        >
-                          {inBinding ? 'Sonderkündigung' : 'Kündigen'}
-                        </button>
-                      )}
-                      {isExpired && (
-                        <button onClick={() => updateStatus(sub.id, 'expired')} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 transition-all">
-                          Als abgelaufen markieren
-                        </button>
-                      )}
-                      {sub.status === 'pending' && (
-                        <button
-                          onClick={() => sendReminder(sub)}
-                          disabled={sendingReminder === sub.id}
-                          className="px-3 py-1.5 text-xs font-bold rounded-lg bg-orange-500/10 text-orange-400 border border-orange-500/30 hover:bg-orange-500/20 transition-all disabled:opacity-50"
-                          title="Zahlungserinnerung senden"
-                        >
-                          {sendingReminder === sub.id ? 'Sendet...' : 'Erinnerung'}
-                        </button>
-                      )}
-                      {deleteConfirm === sub.id ? (
-                        <>
-                          <button onClick={() => deleteSub(sub.id)} disabled={deleting} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-red-600 text-white hover:bg-red-500 transition-all disabled:opacity-50">
-                            {deleting ? '...' : 'Bestätigen'}
-                          </button>
-                          <button onClick={() => setDeleteConfirm(null)} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-dark-800 text-dark-400 border border-dark-700 hover:border-dark-600 transition-all">
-                            Abbruch
-                          </button>
-                        </>
-                      ) : (
-                        <button onClick={() => setDeleteConfirm(sub.id)} className="px-3 py-1.5 text-xs font-bold rounded-lg text-red-400/50 border border-dark-800 hover:border-red-500/30 hover:text-red-400 hover:bg-red-500/10 transition-all" title="Abo löschen">
-                          ✕
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
+        {/* Bulk-Action-Bar */}
+        {selectedIds.size > 0 && (
+          <div className="px-4 py-2.5 bg-admin-surface-soft border-b border-brand-500/30 flex items-center gap-3 flex-wrap">
+            <p className="text-[13px] font-semibold text-brand-500">{selectedIds.size} ausgewählt</p>
+            <Button size="sm" variant="outline" onClick={async () => {
+              const targets = sorted.filter(s => selectedIds.has(s.id) && isAwaitingReminder(s))
+              if (targets.length === 0) { showSnackbar('Keine erinnerbaren Abos in Auswahl (SEPA-Zahlungen brauchen 3–5 Werktage)', 'info'); return }
+              for (const s of targets) await sendReminder(s)
+              setSelectedIds(new Set())
+            }}>
+              Erinnerung senden
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>Auswahl aufheben</Button>
           </div>
         )}
-      </div>
-
-      {/* Status-Änderung Modal */}
-      {showStatusModal && pendingAction && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => !sendingStatus && setShowStatusModal(false)}>
-          <div className="bg-dark-900 border border-dark-700 rounded-2xl w-full max-w-lg shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="p-5 border-b border-dark-800 flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg ${
-                pendingAction.newStatus === 'active' ? 'bg-green-500/20 text-green-400' :
-                pendingAction.newStatus === 'paused' ? 'bg-yellow-500/20 text-yellow-400' :
-                'bg-red-500/20 text-red-400'
-              }`}>
-                {pendingAction.newStatus === 'active' ? '▶' : pendingAction.newStatus === 'paused' ? '⏸' : '✕'}
+        {selectedIds.size === 0 && (pendingSubs.length > 0 || sepaProcessingSubs.length > 0) && (
+          <div className="px-4 py-2.5 border-b border-admin-hairline-soft flex items-center gap-3 flex-wrap">
+            {pendingSubs.length > 0 && (
+              <>
+                <Badge tone="warning" dot>{pendingSubs.length} Erinnerung{pendingSubs.length !== 1 ? 'en' : ''} fällig</Badge>
+                <Button size="sm" variant="outline" onClick={() => setShowRemindAllModal(true)}>
+                  Alle erinnern
+                </Button>
+              </>
+            )}
+            {sepaProcessingSubs.length > 0 && (
+              <div className="flex items-center gap-2">
+                <Badge tone="info" dot>{sepaProcessingSubs.length} SEPA in Bearbeitung</Badge>
+                <span className="admin-caption">automatisch in 3–5 Werktagen abgeschlossen</span>
               </div>
-              <div>
-                <h3 className="font-bold text-dark-100 text-lg">
-                  {pendingAction.newStatus === 'active' ? 'Abo fortsetzen' :
-                   pendingAction.newStatus === 'paused' ? 'Abo pausieren' :
-                   'Abo kündigen'}
-                </h3>
-                <p className="text-dark-500 text-sm">
-                  {getMemberName(pendingAction.sub.member_id)} – {pendingAction.sub.name}
-                </p>
-              </div>
-            </div>
-
-            <div className="p-5 space-y-4">
-              {/* Info-Box */}
-              <div className="bg-dark-800/50 rounded-xl p-4 space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-dark-400">Mitglied</span>
-                  <span className="text-dark-100 font-medium">{getMemberName(pendingAction.sub.member_id)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-dark-400">E-Mail</span>
-                  <span className="text-dark-300">{getMemberEmail(pendingAction.sub.member_id) || 'Keine E-Mail'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-dark-400">Abo</span>
-                  <span className="text-dark-100">{pendingAction.sub.name}</span>
-                </div>
-                {pendingAction.newStatus === 'cancelled' && (
-                  <div className="flex justify-between pt-2 border-t border-dark-700">
-                    <span className="text-dark-400">Kündigung wirksam ab</span>
-                    <span className="text-red-400 font-bold">Sofort</span>
-                  </div>
-                )}
-                {pendingAction.newStatus === 'paused' && (
-                  <div className="flex justify-between pt-2 border-t border-dark-700">
-                    <span className="text-dark-400">Pause wirksam ab</span>
-                    <span className="text-yellow-400 font-bold">{formatDateDE(getFirstOfNextMonth())}</span>
-                  </div>
-                )}
-              </div>
-
-              {pendingAction.newStatus === 'cancelled' && (
-                <>
-                  {isInBindingPeriod(pendingAction.sub) && (
-                    <div className="p-3 bg-orange-500/10 border border-orange-500/20 rounded-lg">
-                      <p className="text-xs text-orange-400 font-bold">
-                        ⚠ Sonderkündigung — Vertragslaufzeit bis {formatDateDE(pendingAction.sub.end_date!)}
-                      </p>
-                      <p className="text-xs text-orange-400 mt-1">
-                        Das Abo wird trotz laufender Bindung sofort gekündigt (z.B. Umzug, Sonderkündigungsrecht). Stripe bucht ab sofort nichts mehr ab.
-                      </p>
-                    </div>
-                  )}
-                  <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-                    <p className="text-xs text-red-400">
-                      Die Kündigung wird <strong>sofort wirksam</strong>. Stripe bucht ab sofort nichts mehr ab.
-                    </p>
-                  </div>
-                </>
-              )}
-
-              {pendingAction.newStatus === 'paused' && (
-                <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
-                  <p className="text-xs text-yellow-400">
-                    Die Pause wird zum <strong>{formatDateDE(getFirstOfNextMonth())}</strong> wirksam. Bis dahin bleibt das Abo aktiv.
-                  </p>
-                </div>
-              )}
-
-              {/* Persönliche Nachricht */}
-              <div>
-                <label className="block text-sm font-medium text-dark-300 mb-2">
-                  Persönliche Nachricht <span className="text-dark-500">(optional)</span>
-                </label>
-                <textarea
-                  value={personalMessage}
-                  onChange={(e) => setPersonalMessage(e.target.value)}
-                  rows={3}
-                  className="w-full px-4 py-3 bg-dark-800/50 border border-dark-700 rounded-xl text-dark-100 placeholder:text-dark-500 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 text-sm resize-none"
-                  placeholder={
-                    pendingAction.newStatus === 'paused' ? 'z.B. "Wir hoffen, dich bald wieder zu sehen!"' :
-                    pendingAction.newStatus === 'active' ? 'z.B. "Willkommen zurück! Wir freuen uns auf dich."' :
-                    'z.B. "Wir bedauern deine Kündigung. Du bist jederzeit willkommen!"'
-                  }
-                  autoFocus
-                />
-              </div>
-
-              {emailError && (
-                <div className="p-2 bg-red-500/10 border border-red-500/30 rounded-lg">
-                  <p className="text-xs text-red-400 font-medium">E-Mail-Fehler: {emailError}</p>
-                </div>
-              )}
-            </div>
-
-            <div className="p-5 border-t border-dark-800 flex gap-3">
-              <button
-                onClick={() => { setShowStatusModal(false); setPendingAction(null); setPersonalMessage('') }}
-                disabled={sendingStatus}
-                className="flex-1 px-4 py-3 text-sm font-bold rounded-xl bg-dark-800 text-dark-300 border border-dark-700 hover:border-dark-600 transition-all disabled:opacity-50"
-              >
-                Abbrechen
-              </button>
-              <button
-                onClick={confirmStatusChange}
-                disabled={sendingStatus}
-                className={`flex-1 px-4 py-3 text-sm font-bold rounded-xl transition-all disabled:opacity-50 ${
-                  pendingAction.newStatus === 'active'
-                    ? 'bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-green-500/30'
-                    : pendingAction.newStatus === 'paused'
-                    ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 hover:bg-yellow-500/30'
-                    : 'bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30'
-                }`}
-              >
-                {sendingStatus
-                  ? 'Wird gesendet...'
-                  : pendingAction.newStatus === 'active'
-                  ? 'Fortsetzen & E-Mail senden'
-                  : pendingAction.newStatus === 'paused'
-                  ? 'Pausieren & E-Mail senden'
-                  : 'Kündigen & E-Mail senden'}
-              </button>
-            </div>
+            )}
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Alle erinnern Modal */}
-      {showRemindAllModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => !sendingRemindAll && setShowRemindAllModal(false)}>
-          <div className="bg-dark-900 border border-dark-700 rounded-2xl w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="p-5 border-b border-dark-800 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-orange-500/20 flex items-center justify-center text-lg">
-                ⚠
-              </div>
-              <div>
-                <h3 className="font-bold text-dark-100 text-lg">Alle erinnern?</h3>
-                <p className="text-dark-500 text-sm">{pendingSubs.length} ausstehende Zahlung{pendingSubs.length !== 1 ? 'en' : ''}</p>
-              </div>
-            </div>
-
-            <div className="p-5 space-y-3">
-              <div className="p-3 bg-orange-500/10 border border-orange-500/20 rounded-lg">
-                <p className="text-xs text-orange-400">
-                  Es wird an <strong>{pendingSubs.length} Mitglied{pendingSubs.length !== 1 ? 'er' : ''}</strong> eine Zahlungserinnerung mit neuem Checkout-Link gesendet.
-                </p>
-              </div>
-
-              <div className="space-y-2 max-h-48 overflow-y-auto">
-                {pendingSubs.map(sub => (
-                  <div key={sub.id} className="flex items-center justify-between p-2 bg-dark-800/50 rounded-lg text-sm">
-                    <span className="text-dark-200">{getMemberName(sub.member_id)}</span>
-                    <span className="text-dark-400 text-xs">{sub.name}</span>
-                  </div>
-                ))}
-              </div>
-
-              {sendingRemindAll && (
-                <div className="space-y-2">
-                  <div className="h-2 bg-dark-700 rounded-full overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-orange-500 transition-all"
-                      style={{ width: `${remindAllProgress.total > 0 ? ((remindAllProgress.sent + remindAllProgress.failed) / remindAllProgress.total) * 100 : 0}%` }}
+        {/* Tabelle */}
+        {sorted.length === 0 ? (
+          <EmptyState
+            icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" /></svg>}
+            title="Keine Abos gefunden"
+            description={search || statusFilter !== 'all' || typeFilter !== 'all' ? 'Filter zurücksetzen, um alle Abos zu sehen.' : 'Lege das erste Abo über "Neues Abo" an.'}
+          />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th className="w-10">
+                    <Checkbox
+                      checked={selectedIds.size === sorted.length && sorted.length > 0}
+                      indeterminate={selectedIds.size > 0 && selectedIds.size < sorted.length}
+                      onChange={toggleSelectAll}
+                      ariaLabel="Alle auswählen"
                     />
-                  </div>
-                  <p className="text-xs text-dark-400 text-center">{remindAllProgress.sent + remindAllProgress.failed} / {remindAllProgress.total} verarbeitet</p>
+                  </th>
+                  <th><SortHeader label="Mitglied" active={isActive('_memberName')} direction={dirOf('_memberName')} onClick={() => setSort('_memberName')} /></th>
+                  <th><SortHeader label="Abo" active={isActive('name')} direction={dirOf('name')} onClick={() => setSort('name')} /></th>
+                  <th><SortHeader label="Status" active={isActive('status')} direction={dirOf('status')} onClick={() => setSort('status')} /></th>
+                  <th className="text-right"><SortHeader label="Preis" active={isActive('price')} direction={dirOf('price')} onClick={() => setSort('price')} align="right" /></th>
+                  <th><SortHeader label="Laufzeit" active={isActive('end_date')} direction={dirOf('end_date')} onClick={() => setSort('end_date')} /></th>
+                  <th className="text-right">Aktionen</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sorted.map(sub => {
+                  const member = getMember(sub.member_id)
+                  const meta = STATUS_META[sub.status]
+                  const inBinding = isInBindingPeriod(sub)
+                  const isOverdue = sub.end_date && new Date(sub.end_date) < new Date() && sub.status === 'active'
+                  return (
+                    <tr key={sub.id}>
+                      <td>
+                        <Checkbox checked={selectedIds.has(sub.id)} onChange={() => toggleSelect(sub.id)} ariaLabel="Auswählen" />
+                      </td>
+                      <td>
+                        <div className="flex items-center gap-2.5">
+                          <div className={`w-7 h-7 rounded-full overflow-hidden flex items-center justify-center text-[11px] font-bold shrink-0 ${member?.photo_url ? 'bg-admin-surface-soft' : 'bg-admin-surface-soft text-brand-500 border border-brand-500/30'}`}>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            {member?.photo_url ? <img src={member.photo_url} alt={member.name} className="w-full h-full object-cover" /> : (member?.name || '?').charAt(0).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[13px] font-semibold text-admin-ink truncate">{member?.name || 'Unbekannt'}</p>
+                            <p className="admin-caption truncate">{member?.email || '—'}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <p className="text-[13px] text-admin-ink">{sub.name}</p>
+                        <p className="admin-caption">{sub.type === 'punch_card' ? `${sub.remaining_units}/${sub.total_units} Einheiten` : 'Monatsabo'}</p>
+                      </td>
+                      <td>
+                        {isSepaInProgress(sub) ? (
+                          <>
+                            <Badge tone="info" dot>SEPA in Bearbeitung</Badge>
+                            <p className="admin-caption mt-0.5">3–5 Werktage automatisch</p>
+                          </>
+                        ) : isReactivationPending(sub) ? (
+                          <>
+                            <Badge tone="warning" dot>Reaktivierung wartet</Badge>
+                            <p className="admin-caption mt-0.5">Karte hinterlegen · ab 1. nächsten Monats</p>
+                          </>
+                        ) : (
+                          <Badge tone={meta.tone} dot>{meta.label}</Badge>
+                        )}
+                      </td>
+                      <td className="text-right">
+                        <p className="text-[13px] font-semibold text-admin-ink">{Number(sub.price).toFixed(0)} €</p>
+                        <p className="admin-caption">{sub.type === 'punch_card' ? 'gesamt' : '/Monat'}</p>
+                      </td>
+                      <td>
+                        <p className="admin-caption">
+                          {formatDateDE(sub.start_date)}
+                          {sub.end_date ? ` → ${formatDateDE(sub.end_date)}` : ' · offen'}
+                        </p>
+                        {isOverdue && <Badge tone="danger">Abgelaufen</Badge>}
+                        {inBinding && sub.status === 'active' && <Badge tone="info">Bindung läuft</Badge>}
+                      </td>
+                      <td>
+                        <div className="flex items-center justify-end gap-1">
+                          {/* Reaktivieren - nur bei cancelled / expired */}
+                          {(sub.status === 'cancelled' || sub.status === 'expired') && (
+                            <Button size="sm" variant="success" onClick={() => reactivate(sub)} disabled={reactivating === sub.id}
+                              icon={<svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>}
+                            >
+                              {reactivating === sub.id ? 'Sendet…' : 'Reaktivieren'}
+                            </Button>
+                          )}
+                          {isAwaitingReminder(sub) && (
+                            <Button size="sm" variant="outline" onClick={() => sendReminder(sub)} disabled={sendingReminder === sub.id}>
+                              {sendingReminder === sub.id ? 'Sendet…' : 'Erinnern'}
+                            </Button>
+                          )}
+                          {sub.status === 'active' && (
+                            <Button size="sm" variant="outline" onClick={() => { setStatusModal({ sub, newStatus: 'paused' }); setPersonalMessage(''); setEmailError(null) }}>
+                              Pause
+                            </Button>
+                          )}
+                          {sub.status === 'paused' && (
+                            <Button size="sm" variant="success" onClick={() => { setStatusModal({ sub, newStatus: 'active' }); setPersonalMessage(''); setEmailError(null) }}>
+                              Fortsetzen
+                            </Button>
+                          )}
+                          {sub.status === 'active' && sub.type === 'punch_card' && sub.remaining_units !== null && sub.remaining_units > 0 && (
+                            <IconButton onClick={() => updateUnits(sub.id, sub.remaining_units! - 1)} title="Eine Einheit abziehen">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" /></svg>
+                            </IconButton>
+                          )}
+                          {(sub.status === 'active' || sub.status === 'paused') && (
+                            <IconButton onClick={() => { setChangePlan(sub); setSelectedPlanId(''); setChangePlanError(null) }} title="Tarif wechseln">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
+                            </IconButton>
+                          )}
+                          {(sub.status === 'active' || sub.status === 'paused') && (
+                            <IconButton onClick={() => { setStatusModal({ sub, newStatus: 'cancelled' }); setPersonalMessage(''); setEmailError(null) }} title={inBinding ? 'Sonderkündigung' : 'Kündigen'}>
+                              <svg className="w-4 h-4 text-status-danger" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>
+                            </IconButton>
+                          )}
+                          {deleteConfirm === sub.id ? (
+                            <>
+                              <Button size="sm" variant="danger" onClick={() => deleteSub(sub.id)} disabled={deleting}>
+                                {deleting ? '…' : 'Löschen'}
+                              </Button>
+                              <Button size="sm" variant="ghost" onClick={() => setDeleteConfirm(null)}>Abbruch</Button>
+                            </>
+                          ) : (
+                            <IconButton onClick={() => setDeleteConfirm(sub.id)} title="Abo löschen">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M10 7V4a1 1 0 011-1h2a1 1 0 011 1v3" /></svg>
+                            </IconButton>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      {/* ─── Status-Wechsel Modal ───────────────────────────────────────── */}
+      {statusModal && (
+        <Modal onClose={() => !sendingStatus && setStatusModal(null)}>
+          <div className="p-5 border-b border-admin-hairline flex items-center gap-3">
+            <div className={`w-9 h-9 rounded-full flex items-center justify-center ${
+              statusModal.newStatus === 'active' ? 'bg-status-success-soft text-status-success' :
+              statusModal.newStatus === 'paused' ? 'bg-status-info-soft text-status-info' :
+              'bg-status-danger-soft text-status-danger'
+            }`}>
+              {statusModal.newStatus === 'active' ? '▶' : statusModal.newStatus === 'paused' ? '⏸' : '✕'}
+            </div>
+            <div>
+              <h3 className="admin-h2">{statusModal.newStatus === 'active' ? 'Fortsetzen' : statusModal.newStatus === 'paused' ? 'Pausieren' : 'Kündigen'}</h3>
+              <p className="admin-caption">{getMember(statusModal.sub.member_id)?.name} · {statusModal.sub.name}</p>
+            </div>
+          </div>
+          <div className="p-5 space-y-3">
+            <div className="bg-admin-surface-soft rounded-btn p-3 space-y-2 text-[13px]">
+              {statusModal.newStatus === 'cancelled' && (
+                <div className="flex justify-between">
+                  <span className="text-admin-mute">Kündigung wirksam ab</span>
+                  <strong className="text-status-danger">Sofort</strong>
+                </div>
+              )}
+              {statusModal.newStatus === 'paused' && (
+                <div className="flex justify-between">
+                  <span className="text-admin-mute">Pause wirksam ab</span>
+                  <strong className="text-status-info">{formatDateDE(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1))}</strong>
                 </div>
               )}
             </div>
 
-            <div className="p-5 border-t border-dark-800 flex gap-3">
-              <button
-                onClick={() => setShowRemindAllModal(false)}
-                disabled={sendingRemindAll}
-                className="flex-1 px-4 py-3 text-sm font-bold rounded-xl bg-dark-800 text-dark-300 border border-dark-700 hover:border-dark-600 transition-all disabled:opacity-50"
-              >
-                Abbrechen
-              </button>
-              <button
-                onClick={sendRemindAll}
-                disabled={sendingRemindAll}
-                className="flex-1 px-4 py-3 text-sm font-bold rounded-xl bg-orange-500/20 text-orange-400 border border-orange-500/30 hover:bg-orange-500/30 transition-all disabled:opacity-50"
-              >
-                {sendingRemindAll ? 'Wird gesendet...' : `Ja, alle ${pendingSubs.length} erinnern`}
-              </button>
-            </div>
+            {statusModal.newStatus === 'cancelled' && isInBindingPeriod(statusModal.sub) && (
+              <div className="p-3 bg-status-warning-soft border border-status-warning-border rounded-btn">
+                <p className="text-[12px] font-semibold text-status-warning">⚠ Sonderkündigung — Bindung bis {formatDateDE(statusModal.sub.end_date!)}</p>
+                <p className="text-[12px] text-status-warning mt-1">Das Abo wird trotz Bindung sofort beendet (z.B. Umzug, Sonderkündigungsrecht).</p>
+              </div>
+            )}
+
+            <label className="block">
+              <span className="admin-caption block mb-1">Persönliche Nachricht (optional)</span>
+              <textarea
+                value={personalMessage}
+                onChange={(e) => setPersonalMessage(e.target.value)}
+                rows={3}
+                placeholder={statusModal.newStatus === 'cancelled' ? 'z.B. "Wir bedauern deine Kündigung. Du bist jederzeit willkommen!"' : statusModal.newStatus === 'paused' ? 'z.B. "Wir hoffen, dich bald wieder zu sehen!"' : 'z.B. "Willkommen zurück!"'}
+                className="admin-input resize-none"
+              />
+            </label>
+
+            {emailError && (
+              <div className="p-2.5 bg-status-danger-soft border border-status-danger-border rounded-btn">
+                <p className="text-[12px] text-status-danger font-medium">Fehler: {emailError}</p>
+              </div>
+            )}
           </div>
-        </div>
+          <div className="p-5 border-t border-admin-hairline flex gap-2 justify-end">
+            <Button variant="ghost" onClick={() => { setStatusModal(null); setPersonalMessage('') }} disabled={sendingStatus}>Abbrechen</Button>
+            <Button variant={statusModal.newStatus === 'cancelled' ? 'danger' : 'primary'} onClick={confirmStatusChange} disabled={sendingStatus}>
+              {sendingStatus ? 'Wird gesendet…' :
+                statusModal.newStatus === 'active' ? 'Fortsetzen' :
+                statusModal.newStatus === 'paused' ? 'Pausieren' : 'Kündigen'}
+            </Button>
+          </div>
+        </Modal>
       )}
 
-      {/* Tarifwechsel Modal */}
-      {showChangePlanModal && changePlanSub && (() => {
-        const canChange = isWithinRevocationPeriod(changePlanSub)
-        const daysLeft = daysLeftInRevocation(changePlanSub)
-        const deadline = getRevocationDeadline(changePlanSub)
-        return (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => !changingPlan && setShowChangePlanModal(false)}>
-          <div className="bg-dark-900 border border-dark-700 rounded-2xl w-full max-w-lg shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="p-5 border-b border-dark-800 flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg ${canChange ? 'bg-purple-500/20 text-purple-400' : 'bg-red-500/20 text-red-400'}`}>
-                {canChange ? '⇄' : '✕'}
-              </div>
+      {/* ─── Alle erinnern Modal ────────────────────────────────────────── */}
+      {showRemindAllModal && (
+        <Modal onClose={() => !sendingRemindAll && setShowRemindAllModal(false)}>
+          <div className="p-5 border-b border-admin-hairline flex items-center gap-3">
+            <div className="w-9 h-9 rounded-full bg-status-warning-soft text-status-warning flex items-center justify-center">⚠</div>
+            <div>
+              <h3 className="admin-h2">Alle erinnern?</h3>
+              <p className="admin-caption">{pendingSubs.length} ausstehende Zahlung{pendingSubs.length !== 1 ? 'en' : ''}</p>
+            </div>
+          </div>
+          <div className="p-5 space-y-3">
+            <div className="p-3 bg-status-warning-soft border border-status-warning-border rounded-btn">
+              <p className="text-[12px] text-status-warning">An <strong>{pendingSubs.length} Mitglied{pendingSubs.length !== 1 ? 'er' : ''}</strong> geht eine Zahlungserinnerung mit neuem Checkout-Link.</p>
+            </div>
+            <div className="space-y-1.5 max-h-48 overflow-y-auto">
+              {pendingSubs.map(s => (
+                <div key={s.id} className="flex items-center justify-between px-3 py-2 bg-admin-surface-soft rounded-btn text-[13px]">
+                  <span className="text-admin-ink">{getMember(s.member_id)?.name || 'Unbekannt'}</span>
+                  <span className="admin-caption">{s.name}</span>
+                </div>
+              ))}
+            </div>
+            {sendingRemindAll && (
               <div>
-                <h3 className="font-bold text-dark-100 text-lg">
-                  {canChange ? 'Tarif wechseln' : 'Wechsel nicht möglich'}
-                </h3>
-                <p className="text-dark-500 text-sm">
-                  {getMemberName(changePlanSub.member_id)} – aktuell: {changePlanSub.name}
-                </p>
+                <div className="h-1.5 bg-admin-surface-soft rounded-full overflow-hidden">
+                  <div className="h-full bg-brand-500 transition-all" style={{ width: `${remindAllProgress.total > 0 ? ((remindAllProgress.sent + remindAllProgress.failed) / remindAllProgress.total) * 100 : 0}%` }} />
+                </div>
+                <p className="admin-caption text-center mt-1.5">{remindAllProgress.sent + remindAllProgress.failed} / {remindAllProgress.total}</p>
               </div>
-            </div>
-
-            <div className="p-5 space-y-4">
-              <div className="bg-dark-800/50 rounded-xl p-4 space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-dark-400">Vertrag erstellt</span>
-                  <span className="text-dark-100 font-medium">{formatDateDE(changePlanSub.created_at)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-dark-400">Widerrufsfrist bis</span>
-                  <span className={`font-medium ${canChange ? 'text-dark-100' : 'text-red-400'}`}>{formatDateDE(deadline)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-dark-400">Aktueller Tarif</span>
-                  <span className="text-dark-100 font-medium">{changePlanSub.name}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-dark-400">Aktueller Preis</span>
-                  <span className="text-dark-100 font-medium">{Number(changePlanSub.price).toFixed(0)} €</span>
-                </div>
-              </div>
-
-              {!canChange ? (
-                <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
-                  <p className="text-sm text-red-400 font-bold mb-1">
-                    Dieser Benutzer ist in der Vertragslaufzeit und kann nicht wechseln und widerrufen.
-                  </p>
-                  <p className="text-xs text-red-400/80">
-                    Die 14-tägige Widerrufsfrist endete am {formatDateDE(deadline)}.
-                    Ein Tarifwechsel ist nur innerhalb der gesetzlichen Widerrufsfrist möglich.
-                  </p>
-                </div>
-              ) : (
-                <>
-                  <div className="p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
-                    <p className="text-xs text-green-400">
-                      <strong>In Widerrufsfrist:</strong> Noch {daysLeft} Tag{daysLeft !== 1 ? 'e' : ''}
-                      bis zum Ende am {formatDateDE(deadline)}. Wechsel ist möglich.
-                    </p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-dark-300 mb-2">
-                      Neuer Tarif
-                    </label>
-                    <select
-                      value={selectedPlanId}
-                      onChange={(e) => setSelectedPlanId(e.target.value)}
-                      className="w-full px-4 py-3 bg-dark-800/50 border border-dark-700 rounded-xl text-dark-100 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 text-sm"
-                    >
-                      <option value="">Tarif wählen…</option>
-                      {PLAN_OPTIONS.map(p => (
-                        <option key={p.id} value={p.id}>{p.label} — {p.price} €/Monat</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg">
-                    {changePlanSub.status === 'pending' ? (
-                      <p className="text-xs text-purple-400">
-                        <strong>Hinweis:</strong> Dieses Abo ist noch nicht aktiv — der alte Zahlungslink wird
-                        deaktiviert und das Abo auf den neuen Tarif umgestellt. Danach bitte auf
-                        <strong> „Erinnerung"</strong> klicken, um den neuen Zahlungslink an das Mitglied zu senden.
-                      </p>
-                    ) : (
-                      <p className="text-xs text-purple-400">
-                        <strong>Hinweis:</strong> Der Wechsel wird sofort auf Stripe übertragen.
-                        Während einer laufenden Trial wird nichts abgebucht.
-                        Nach Trial-Ende gilt der neue Preis ab der nächsten Abrechnungsperiode (keine Proration).
-                      </p>
-                    )}
-                  </div>
-                </>
-              )}
-
-              {changePlanError && (
-                <div className="p-2 bg-red-500/10 border border-red-500/30 rounded-lg">
-                  <p className="text-xs text-red-400 font-medium">{changePlanError}</p>
-                </div>
-              )}
-            </div>
-
-            <div className="p-5 border-t border-dark-800 flex gap-3">
-              <button
-                onClick={() => { setShowChangePlanModal(false); setChangePlanSub(null); setSelectedPlanId('') }}
-                disabled={changingPlan}
-                className="flex-1 px-4 py-3 text-sm font-bold rounded-xl bg-dark-800 text-dark-300 border border-dark-700 hover:border-dark-600 transition-all disabled:opacity-50"
-              >
-                {canChange ? 'Abbrechen' : 'Schließen'}
-              </button>
-              {canChange && (
-                <button
-                  onClick={confirmChangePlan}
-                  disabled={changingPlan || !selectedPlanId}
-                  className="flex-1 px-4 py-3 text-sm font-bold rounded-xl bg-purple-500/20 text-purple-400 border border-purple-500/30 hover:bg-purple-500/30 transition-all disabled:opacity-50"
-                >
-                  {changingPlan ? 'Wird gewechselt…' : 'Tarif wechseln'}
-                </button>
-              )}
-            </div>
+            )}
           </div>
-        </div>
-        )
-      })()}
-
-      {/* Snackbar */}
-      {snackbar && (
-        <div
-          className={`fixed bottom-6 left-6 z-50 px-5 py-3 rounded-xl shadow-2xl border backdrop-blur-sm ${
-            snackbar.type === 'success'
-              ? 'bg-green-500/10 border-green-500/30 text-green-400'
-              : 'bg-red-500/10 border-red-500/30 text-red-400'
-          }`}
-          style={{ animation: 'snackbarSlideIn 0.3s ease-out' }}
-        >
-          <style>{`@keyframes snackbarSlideIn { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }`}</style>
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">{snackbar.type === 'success' ? '✓' : '✕'}</span>
-            <p className="text-sm font-medium">{snackbar.message}</p>
+          <div className="p-5 border-t border-admin-hairline flex gap-2 justify-end">
+            <Button variant="ghost" onClick={() => setShowRemindAllModal(false)} disabled={sendingRemindAll}>Abbrechen</Button>
+            <Button variant="primary" onClick={sendRemindAll} disabled={sendingRemindAll}>
+              {sendingRemindAll ? 'Wird gesendet…' : `Ja, ${pendingSubs.length} erinnern`}
+            </Button>
           </div>
-        </div>
+        </Modal>
       )}
+
+      {/* ─── Tarifwechsel Modal ─────────────────────────────────────────── */}
+      {changePlan && (
+        <Modal onClose={() => !changingPlan && setChangePlan(null)}>
+          <div className="p-5 border-b border-admin-hairline">
+            <h3 className="admin-h2">Tarif wechseln</h3>
+            <p className="admin-caption mt-1">{getMember(changePlan.member_id)?.name} · aktuell {changePlan.name}</p>
+          </div>
+          <div className="p-5 space-y-3">
+            <label className="block">
+              <span className="admin-caption block mb-1">Neuer Tarif</span>
+              <Select value={selectedPlanId} onChange={e => setSelectedPlanId(e.target.value)}>
+                <option value="">Tarif wählen</option>
+                {PLAN_OPTIONS.map(p => <option key={p.id} value={p.id}>{p.label} · {p.price} €/Monat</option>)}
+              </Select>
+            </label>
+            {changePlanError && (
+              <div className="p-2.5 bg-status-danger-soft border border-status-danger-border rounded-btn">
+                <p className="text-[12px] text-status-danger">{changePlanError}</p>
+              </div>
+            )}
+          </div>
+          <div className="p-5 border-t border-admin-hairline flex gap-2 justify-end">
+            <Button variant="ghost" onClick={() => setChangePlan(null)} disabled={changingPlan}>Abbrechen</Button>
+            <Button variant="primary" onClick={confirmChangePlan} disabled={changingPlan || !selectedPlanId}>
+              {changingPlan ? 'Wechselt…' : 'Wechseln'}
+            </Button>
+          </div>
+        </Modal>
+      )}
+
+      {snackbar && <Snackbar message={snackbar.message} tone={snackbar.tone} />}
+    </div>
+  )
+}
+
+// Modal helper
+function Modal({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in-fast" onClick={onClose}>
+      <div className="admin-card bg-admin-surface w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        {children}
+      </div>
     </div>
   )
 }
