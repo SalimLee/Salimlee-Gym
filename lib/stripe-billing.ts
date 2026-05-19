@@ -136,14 +136,14 @@ export async function upsertFirstMonthInvoiceItem(opts: {
 
   if (plan.proratedCents <= 0) return
 
-  // Dedup: alte pending first_month_prorated Items derselben Subscription löschen
+  // Aggressiver Dedup VOR der Item-Anlage: ALLE pending first_month_prorated Items
+  // des Customers löschen — egal welche subscription_id. Sonst bleiben Reste aus
+  // früheren Checkout-Versuchen hängen und Stripe packt ALLE auf die initial Invoice
+  // (Doppel-Charge wie bei Gurbet Duygu beobachtet).
   try {
     const existing = await stripe.invoiceItems.list({ customer: customerId, limit: 100, pending: true })
     for (const item of existing.data) {
-      if (
-        item.metadata?.type === 'first_month_prorated' &&
-        item.metadata?.subscription_id === subscriptionId
-      ) {
+      if (item.metadata?.type === 'first_month_prorated') {
         await stripe.invoiceItems.del(item.id)
       }
     }

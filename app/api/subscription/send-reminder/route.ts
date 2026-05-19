@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { stripe, getOrCreateStripePrice, getOrCreateStripeCustomer, getOrCreateTaxRate, MEMBERSHIP_STRIPE_MAP } from '@/lib/stripe'
-import { computeProratedFirstMonth, buildFirstMonthAddInvoiceItem } from '@/lib/stripe-billing'
+import { computeProratedFirstMonth, upsertFirstMonthInvoiceItem } from '@/lib/stripe-billing'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseAdmin = createClient(
@@ -139,36 +139,23 @@ export async function POST(request: NextRequest) {
         }
         // Bewusst KEIN upsertFirstMonthInvoiceItem — keine anteilige Berechnung.
       } else {
-        // Anteilige Erstmonats-Berechnung — über `subscription_data.add_invoice_items`,
-        // damit der Betrag im Stripe Checkout UI sofort als "Heute fällig" erscheint.
+        // Anteilige Erstmonats-Berechnung via pending Invoice Item am Customer
+        // (siehe ausführliche Doku in create-checkout/route.ts). Stripe legt das Item
+        // beim Checkout-Complete automatisch auf die initial Invoice (durch trial_end).
         const plan = computeProratedFirstMonth(signupDate, config.unitAmount)
 
-        // KRITISCH: VOR Session-Erstellung ALLE pending first_month_prorated Items des
-        // Customers entfernen — sonst werden mehrere parallele Anteils-Posten an die
-        // initial Invoice gepackt (Doppel-Charge). Wir bauen das Item gleich frisch.
-        try {
-          const existing = await stripe.invoiceItems.list({ customer: customerId, limit: 100, pending: true })
-          for (const item of existing.data) {
-            if (item.metadata?.type === 'first_month_prorated') {
-              await stripe.invoiceItems.del(item.id)
-              console.log(`[send-reminder] Pending first_month_prorated Item ${item.id} gelöscht (Customer ${customerId})`)
-            }
-          }
-        } catch (e) {
-          console.warn('Konnte alte first_month_prorated Items nicht aufräumen:', e)
-        }
-
-        const firstMonthItem = buildFirstMonthAddInvoiceItem({
-          plan,
-          taxRateId,
-          membershipId,
+        await upsertFirstMonthInvoiceItem({
+          stripe,
+          customerId,
           subscriptionId,
+          membershipId,
+          taxRateId,
+          plan,
         })
 
         sessionParams.subscription_data = {
           ...plan.billing,
           default_tax_rates: [taxRateId],
-          ...(firstMonthItem ? { add_invoice_items: [firstMonthItem] } : {}),
           metadata: {
             subscription_id: subscriptionId,
             membership_id: membershipId,

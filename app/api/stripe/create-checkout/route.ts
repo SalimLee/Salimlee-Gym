@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { stripe, getOrCreateStripePrice, getOrCreateStripeCustomer, getOrCreateTaxRate, getOrCreateActionCoupon, MEMBERSHIP_STRIPE_MAP } from '@/lib/stripe'
-import { computeProratedFirstMonth, buildFirstMonthAddInvoiceItem } from '@/lib/stripe-billing'
+import { computeProratedFirstMonth, upsertFirstMonthInvoiceItem } from '@/lib/stripe-billing'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseAdmin = createClient(
@@ -192,38 +192,30 @@ export async function POST(request: NextRequest) {
         // Bewusst KEIN upsertFirstMonthInvoiceItem — keine anteilige Berechnung bei Reaktivierung.
       } else {
         // Normale Erst-Anmeldung: anteilig vom Vertragsabschluss bis zum 1. nächsten Monats.
-        // Der anteilige Betrag wird via `subscription_data.add_invoice_items` direkt mit
-        // der Checkout-Session erstellt — Stripe Checkout UI zeigt den Betrag sofort.
+        //
+        // Mechanik:
+        //   1. plan.billing setzt `trial_end: anchorUnix` (kein billing_cycle_anchor).
+        //      → Stripe erzeugt SOFORT eine initial Invoice für den Customer.
+        //   2. Wir legen VOR der Checkout-Session ein pending Invoice Item am Customer
+        //      an (`stripe.invoiceItems.create({customer, amount, ...})`).
+        //   3. Beim Checkout-Complete erstellt Stripe die Subscription mit trial_end.
+        //      Stripe sammelt alle pending invoice items des Customers auf die initial
+        //      Invoice und chargt sie sofort von der hinterlegten Zahlungsmethode.
+        //   4. Sub geht in Trial bis Anchor, dann startet der reguläre Zyklus voll.
+        //
+        // Hinweis zu `subscription_data.add_invoice_items`: wäre der direktere Weg,
+        // ist aber in unserer Stripe API Version nicht verfügbar
+        // ("Received unknown parameter: subscription_data[add_invoice_items]").
         const plan = computeProratedFirstMonth(signupDate, effectiveMonthlyCents)
 
-        // ─── KRITISCHER CLEANUP — muss VOR der Session-Erstellung laufen ───
-        // Stripe hängt JEDES pending invoice item des Customers an die nächste
-        // Invoice. Wenn aus früheren Checkouts/Reminder-Klicks pending Items
-        // hängen geblieben sind (egal welche subscription_id), kommen die ALLE
-        // auf die initial Subscription Invoice — Kunde zahlt doppelt anteilig.
-        //
-        // Daher: AGGRESSIV ALLE pending first_month_prorated Items des Customers
-        // löschen — wir bauen sie gleich frisch via add_invoice_items neu auf.
-        // Auch andere "service_fee"/"dunning_fee" Items in 'pending' wären riskant,
-        // aber die werden normalerweise nur kurz vor Invoice-Erstellung gesetzt
-        // und sind keine Doppel-Charge-Quelle. Wir greifen nur first_month_prorated an.
-        try {
-          const existing = await stripe.invoiceItems.list({ customer: customerId, limit: 100, pending: true })
-          for (const item of existing.data) {
-            if (item.metadata?.type === 'first_month_prorated') {
-              await stripe.invoiceItems.del(item.id)
-              console.log(`[create-checkout] Pending first_month_prorated Item ${item.id} gelöscht (Customer ${customerId})`)
-            }
-          }
-        } catch (e) {
-          console.warn('Konnte alte first_month_prorated Items nicht aufräumen:', e)
-        }
-
-        const firstMonthItem = buildFirstMonthAddInvoiceItem({
-          plan,
-          taxRateId,
-          membershipId: effectiveMembershipId,
+        // Pending Invoice Item — interner aggressiver Cleanup räumt alte Reste auf.
+        await upsertFirstMonthInvoiceItem({
+          stripe,
+          customerId,
           subscriptionId,
+          membershipId: effectiveMembershipId,
+          taxRateId,
+          plan,
           extraMetadata: isCustomAction
             ? { is_custom_action: 'true', custom_action_basis_id: String(customAction.basisId) }
             : undefined,
@@ -232,7 +224,6 @@ export async function POST(request: NextRequest) {
         sessionParams.subscription_data = {
           ...plan.billing,
           default_tax_rates: [taxRateId],
-          ...(firstMonthItem ? { add_invoice_items: [firstMonthItem] } : {}),
           metadata: {
             ...baseMetadata,
             signup_date: dbSub?.start_date || new Date().toISOString().split('T')[0],
