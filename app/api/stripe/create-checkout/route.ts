@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { stripe, getOrCreateStripePrice, getOrCreateStripeCustomer, getOrCreateTaxRate, getOrCreateActionCoupon, MEMBERSHIP_STRIPE_MAP } from '@/lib/stripe'
-import { buildSubscriptionBillingParams } from '@/lib/stripe-billing'
+import { computeProratedFirstMonth, upsertFirstMonthInvoiceItem } from '@/lib/stripe-billing'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseAdmin = createClient(
@@ -106,18 +106,67 @@ export async function POST(request: NextRequest) {
       sessionParams.mode = 'subscription'
       sessionParams.line_items = [{ price: priceId, quantity: 1, tax_rates: [taxRateId] }]
 
-      // Billing-Parameter: bis 30.04 Trial-Logik, ab 01.05 Proration
+      // ─────────────────────────────────────────────────────────────────────
+      // Faire Proration: Referenz ist Vertragsabschluss (sub.start_date), NICHT
+      // das Klickdatum. Wer am 14.5 angemeldet wird aber erst am 21.5 zahlt,
+      // soll trotzdem 18/31 zahlen (vom 14.5 bis 1.6) statt nur 11/31.
+      //
+      // Mechanik:
+      //   1. proratedCents wird manuell berechnet
+      //   2. Pending Invoice Item (mit MwSt) für den Customer anlegen — wird von
+      //      Stripe automatisch an die initial Subscription-Invoice gehängt
+      //   3. subscription_data setzt billing_cycle_anchor + proration_behavior:'none',
+      //      damit Stripe nicht ein zweites Mal eigene Proration drauflegt
+      // ─────────────────────────────────────────────────────────────────────
+      const { data: dbSub } = await supabaseAdmin
+        .from('subscriptions')
+        .select('start_date, created_at, price')
+        .eq('id', subscriptionId)
+        .maybeSingle()
+
+      const signupDate = dbSub?.start_date
+        ? new Date(`${dbSub.start_date}T00:00:00Z`)
+        : (dbSub?.created_at ? new Date(dbSub.created_at) : new Date())
+
+      // Für individuelle Aktionen ist `config.unitAmount` der Basis-Preis und der Aktionsrabatt
+      // läuft als Stripe-Coupon. Damit die Proration auf den ECHTEN Aktionsbetrag rechnet,
+      // nutzen wir bei Aktionen die per UI eingegebene `aktionsPreis` (in Euro).
+      const effectiveMonthlyCents = isCustomAction
+        ? Math.round(customAction.aktionsPreis * 100)
+        : config.unitAmount
+
+      const plan = computeProratedFirstMonth(signupDate, effectiveMonthlyCents)
+
       sessionParams.subscription_data = {
-        ...buildSubscriptionBillingParams(),
+        ...plan.billing,
         default_tax_rates: [taxRateId],
         metadata: {
           ...baseMetadata,
+          signup_date: dbSub?.start_date || new Date().toISOString().split('T')[0],
+          first_month_prorated_cents: String(plan.proratedCents),
           ...(config.intervalCount ? { cancel_after_months: String(config.intervalCount) } : {}),
         },
       }
 
+      // Pending Invoice Item für den anteiligen Erstmonat-Betrag. Idempotent —
+      // alte pending Items derselben Subscription werden vorher entfernt, damit
+      // mehrfaches Generieren des Checkout-Links keine Duplikate erzeugt.
+      await upsertFirstMonthInvoiceItem({
+        stripe,
+        customerId,
+        subscriptionId,
+        membershipId: effectiveMembershipId,
+        taxRateId,
+        plan,
+        extraMetadata: isCustomAction
+          ? { is_custom_action: 'true', custom_action_basis_id: String(customAction.basisId) }
+          : undefined,
+      })
+
       // Aktionsrabatt als repeating Coupon anhängen — gilt automatisch nur für die ersten
       // `aktionsMonate` Abrechnungen und wird von Stripe danach selbst entfernt.
+      // (Greift NICHT auf das pending Invoice Item, das ist bewusst — der Aktionsrabatt
+      // wirkt erst ab dem ersten regulären Abrechnungszyklus.)
       if (actionCouponId) {
         sessionParams.discounts = [{ coupon: actionCouponId }]
       }
