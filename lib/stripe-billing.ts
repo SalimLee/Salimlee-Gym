@@ -79,36 +79,28 @@ export function computeProratedFirstMonth(
   const proratedCents = Math.round((monthlyCents * daysRemaining) / daysInMonth)
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Stripe-Verhalten: KEY-INSIGHT
+  // Stripe-Verhalten: Wir nutzen die eingebaute Auto-Proration.
   //
-  // Mit `billing_cycle_anchor: future` + `proration_behavior: 'none'` packt
-  // Stripe die `add_invoice_items` auf die ERSTE Zyklus-Invoice am Anchor — NICHT
-  // auf eine sofortige Initial-Invoice. Heißt: Kunde sieht "Heute 0 €, alles am 1."
+  //   billing_cycle_anchor: <1. nächsten Monats>
+  //   proration_behavior:  'create_prorations'
   //
-  // Mit `trial_end: future` + `add_invoice_items` hingegen erstellt Stripe SOFORT
-  // beim Checkout eine Initial-Invoice mit dem Item drauf und chargt sie SOFORT.
-  // Die Sub geht in Trial bis zum Anchor, dann startet der reguläre Zyklus.
-  // → Genau was wir wollen: anteilig heute + voller Monat ab 1.
+  // Stripe rechnet automatisch (now → anchor) / Tage × Monatspreis als
+  // Proration-Item auf die Initial-Invoice und chargt sie SOFORT beim
+  // Checkout-Complete. Ab Anchor läuft der reguläre Zyklus zum 1.
   //
-  // Edge-Case: `trial_end` braucht ≥ 48h Vorlauf bei Stripe. An den letzten 1-2
-  // Tagen eines Monats (29./30./31.) ist das nicht erfüllt — dort fallen wir auf
-  // `billing_cycle_anchor` zurück. Der anteilige Betrag wäre dann eh nur ein paar
-  // Euro — der Kunde "trainiert" diese ~24h gratis und startet am 1. voll.
+  // Trade-off: Stripe rechnet ab `subscription.created` (= Klickdatum), NICHT
+  // ab `signup_date` aus unserer DB. Klickt der Kunde 5 Tage nach Vertrag-
+  // Abschluss, "schenken" wir diese 5 Tage. Bewusst akzeptiert für eine
+  // saubere Stripe-Checkout-UI-Erfahrung.
   // ─────────────────────────────────────────────────────────────────────────
-  const MIN_TRIAL_HOURS = 48
-  const hoursUntilAnchor = (anchorDate.getTime() - now.getTime()) / (1000 * 60 * 60)
-  const useTrialEnd = hoursUntilAnchor >= MIN_TRIAL_HOURS && proratedCents > 0
-
-  const billing: SubscriptionBillingParams = useTrialEnd
-    ? { trial_end: anchorUnix }
-    : { billing_cycle_anchor: anchorUnix, proration_behavior: 'none' }
+  const billing: SubscriptionBillingParams = {
+    billing_cycle_anchor: anchorUnix,
+    proration_behavior: 'create_prorations',
+  }
 
   return {
     billing,
-    // Wenn wir auf billing_cycle_anchor zurückfallen, NICHT noch ein
-    // add_invoice_item anhängen — sonst landet es am Anchor und der Kunde zahlt
-    // im Folgemonat anteilig + voller Monat (verwirrend und zu viel).
-    proratedCents: useTrialEnd ? proratedCents : 0,
+    proratedCents,
     referenceDate,
     anchorDate,
     daysRemaining,

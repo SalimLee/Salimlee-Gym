@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { stripe, getOrCreateStripePrice, getOrCreateStripeCustomer, getOrCreateTaxRate, getOrCreateActionCoupon, MEMBERSHIP_STRIPE_MAP } from '@/lib/stripe'
-import { computeProratedFirstMonth, upsertFirstMonthInvoiceItem } from '@/lib/stripe-billing'
+import { computeProratedFirstMonth } from '@/lib/stripe-billing'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseAdmin = createClient(
@@ -191,35 +191,25 @@ export async function POST(request: NextRequest) {
         }
         // Bewusst KEIN upsertFirstMonthInvoiceItem — keine anteilige Berechnung bei Reaktivierung.
       } else {
-        // Normale Erst-Anmeldung: anteilig vom Vertragsabschluss bis zum 1. nächsten Monats.
-        //
-        // Mechanik:
-        //   1. plan.billing setzt `trial_end: anchorUnix` (kein billing_cycle_anchor).
-        //      → Stripe erzeugt SOFORT eine initial Invoice für den Customer.
-        //   2. Wir legen VOR der Checkout-Session ein pending Invoice Item am Customer
-        //      an (`stripe.invoiceItems.create({customer, amount, ...})`).
-        //   3. Beim Checkout-Complete erstellt Stripe die Subscription mit trial_end.
-        //      Stripe sammelt alle pending invoice items des Customers auf die initial
-        //      Invoice und chargt sie sofort von der hinterlegten Zahlungsmethode.
-        //   4. Sub geht in Trial bis Anchor, dann startet der reguläre Zyklus voll.
-        //
-        // Hinweis zu `subscription_data.add_invoice_items`: wäre der direktere Weg,
-        // ist aber in unserer Stripe API Version nicht verfügbar
-        // ("Received unknown parameter: subscription_data[add_invoice_items]").
+        // Normale Erst-Anmeldung — Stripe rechnet die anteilige Erstmonats-Charge
+        // automatisch via `billing_cycle_anchor: 01.<next> + proration_behavior:
+        // 'create_prorations'`. Stripe Checkout UI zeigt "Heute fällig: X €" direkt.
         const plan = computeProratedFirstMonth(signupDate, effectiveMonthlyCents)
 
-        // Pending Invoice Item — interner aggressiver Cleanup räumt alte Reste auf.
-        await upsertFirstMonthInvoiceItem({
-          stripe,
-          customerId,
-          subscriptionId,
-          membershipId: effectiveMembershipId,
-          taxRateId,
-          plan,
-          extraMetadata: isCustomAction
-            ? { is_custom_action: 'true', custom_action_basis_id: String(customAction.basisId) }
-            : undefined,
-        })
+        // CLEANUP: alte pending first_month_prorated Items aus früheren Test-
+        // Versuchen entfernen, sonst landen sie zusätzlich zur Auto-Proration
+        // auf der Initial-Invoice und der Kunde zahlt doppelt anteilig.
+        try {
+          const existing = await stripe.invoiceItems.list({ customer: customerId, limit: 100, pending: true })
+          for (const item of existing.data) {
+            if (item.metadata?.type === 'first_month_prorated') {
+              await stripe.invoiceItems.del(item.id)
+              console.log(`[create-checkout] Pending first_month_prorated Item ${item.id} gelöscht (Customer ${customerId})`)
+            }
+          }
+        } catch (e) {
+          console.warn('Konnte alte first_month_prorated Items nicht aufräumen:', e)
+        }
 
         sessionParams.subscription_data = {
           ...plan.billing,

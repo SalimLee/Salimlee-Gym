@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { stripe, getOrCreateStripePrice, getOrCreateStripeCustomer, getOrCreateTaxRate, MEMBERSHIP_STRIPE_MAP } from '@/lib/stripe'
-import { computeProratedFirstMonth, upsertFirstMonthInvoiceItem } from '@/lib/stripe-billing'
+import { computeProratedFirstMonth } from '@/lib/stripe-billing'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseAdmin = createClient(
@@ -139,19 +139,21 @@ export async function POST(request: NextRequest) {
         }
         // Bewusst KEIN upsertFirstMonthInvoiceItem — keine anteilige Berechnung.
       } else {
-        // Anteilige Erstmonats-Berechnung via pending Invoice Item am Customer
-        // (siehe ausführliche Doku in create-checkout/route.ts). Stripe legt das Item
-        // beim Checkout-Complete automatisch auf die initial Invoice (durch trial_end).
+        // Stripe-native Auto-Proration ab Klickdatum bis 1. nächsten Monats.
         const plan = computeProratedFirstMonth(signupDate, config.unitAmount)
 
-        await upsertFirstMonthInvoiceItem({
-          stripe,
-          customerId,
-          subscriptionId,
-          membershipId,
-          taxRateId,
-          plan,
-        })
+        // Cleanup alter pending first_month_prorated Items (aus früheren Versuchen).
+        try {
+          const existing = await stripe.invoiceItems.list({ customer: customerId, limit: 100, pending: true })
+          for (const item of existing.data) {
+            if (item.metadata?.type === 'first_month_prorated') {
+              await stripe.invoiceItems.del(item.id)
+              console.log(`[send-reminder] Pending first_month_prorated Item ${item.id} gelöscht (Customer ${customerId})`)
+            }
+          }
+        } catch (e) {
+          console.warn('Konnte alte first_month_prorated Items nicht aufräumen:', e)
+        }
 
         sessionParams.subscription_data = {
           ...plan.billing,
