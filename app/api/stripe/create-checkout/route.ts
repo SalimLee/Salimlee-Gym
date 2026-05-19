@@ -281,9 +281,13 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ checkoutUrl: session.url })
   } catch (error) {
+    // Stripe-Fehler 1:1 weiterleiten — sonst weiß der Coach im Frontend nicht
+    // warum kein Checkout-Link entstanden ist. Stripe-Errors haben oft
+    // sprechende Messages ("trial_end is in the past", "tax_behavior conflicts ...").
+    const msg = error instanceof Error ? error.message : 'Unbekannter Fehler'
     console.error('Stripe Checkout Session Erstellung fehlgeschlagen:', error)
     return NextResponse.json(
-      { error: 'Checkout Session konnte nicht erstellt werden' },
+      { error: `Checkout Session: ${msg}` },
       { status: 500 }
     )
   }

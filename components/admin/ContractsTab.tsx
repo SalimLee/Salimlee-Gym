@@ -449,10 +449,24 @@ export function ContractsTab({ members, supabase, onRefresh }: ContractsTabProps
         if (checkoutRes.ok) {
           checkoutUrl = checkoutResult.checkoutUrl
         } else {
-          console.warn('Stripe Checkout Erstellung fehlgeschlagen:', checkoutResult.error)
+          // WICHTIG: Coach DEUTLICH warnen — sonst geht die E-Mail ohne
+          // Zahlungsbutton raus und keiner merkt's bis Tage später.
+          console.error('Stripe Checkout Erstellung fehlgeschlagen:', checkoutResult.error)
+          setSendResult({
+            success: false,
+            message: `Stripe-Checkout konnte nicht erstellt werden: ${checkoutResult.error || 'unbekannter Fehler'}. Vertrag wurde NICHT versendet. Bitte prüfen und erneut versuchen.`,
+          })
+          setIsSending(false)
+          return
         }
       } catch (e) {
-        console.warn('Stripe Checkout Fehler:', e)
+        console.error('Stripe Checkout Fehler:', e)
+        setSendResult({
+          success: false,
+          message: `Stripe-Verbindung fehlgeschlagen: ${e instanceof Error ? e.message : 'unbekannt'}. Vertrag wurde NICHT versendet.`,
+        })
+        setIsSending(false)
+        return
       }
 
       // 4. Generate PDF and send email with checkout link

@@ -198,7 +198,6 @@ export function buildFirstMonthAddInvoiceItem(opts: {
     currency: string
     product_data: { name: string; metadata?: Record<string, string> }
     unit_amount: number
-    tax_behavior: 'inclusive'
   }
   quantity: number
   tax_rates: string[]
@@ -212,6 +211,10 @@ export function buildFirstMonthAddInvoiceItem(opts: {
     ? `Erster Monat ${formatDateDE(plan.referenceDate)} – ${formatDateDE(dayBefore)}`
     : `Anteilig erster Monat (${formatDateDE(plan.referenceDate)} – ${formatDateDE(dayBefore)}, ${plan.daysRemaining}/${plan.daysInMonth} Tage)`
 
+  // Kein `tax_behavior` hier — wir verlassen uns auf die taxRate-Definition
+  // (`inclusive: true` in getOrCreateTaxRate()). `tax_behavior` zusätzlich
+  // anzugeben kann mit Stripe Tax Settings kollidieren und die Session-Erstellung
+  // mit "tax_behavior conflicts with tax_rate" failen lassen.
   return {
     price_data: {
       currency: 'eur',
@@ -229,7 +232,6 @@ export function buildFirstMonthAddInvoiceItem(opts: {
         },
       },
       unit_amount: plan.proratedCents,
-      tax_behavior: 'inclusive',
     },
     quantity: 1,
     tax_rates: [taxRateId],
