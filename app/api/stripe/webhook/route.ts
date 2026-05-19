@@ -83,6 +83,18 @@ export async function POST(request: NextRequest) {
             } catch (e) {
               console.warn('Konnte Subscription-Parameter nicht setzen:', e)
             }
+
+            // Defensive: alle Stripe-Invoices dieser Sub auch direkt syncen.
+            // Schützt vor dem Fall, dass invoice.paid Webhook später verpasst wird und
+            // die initiale Invoice als "open" mit altem due_date in der DB hängen bleibt.
+            try {
+              const subInvoices = await stripe.invoices.list({ subscription: stripeSubId, limit: 20 })
+              for (const subInv of subInvoices.data) {
+                await upsertStripeInvoice(subInv.id)
+              }
+            } catch (e) {
+              console.warn('Konnte Sub-Invoices nach Checkout nicht resyncen:', e)
+            }
           }
         }
 
@@ -156,8 +168,12 @@ export async function POST(request: NextRequest) {
       }
 
       case 'invoice.paid':
-      case 'invoice.finalized': {
-        // Stripe Invoice in lokale DB synchronisieren
+      case 'invoice.finalized':
+      case 'invoice.voided':
+      case 'invoice.marked_uncollectible': {
+        // Stripe Invoice in lokale DB synchronisieren — auch voided/uncollectible,
+        // damit alte fehlgeschlagene Initialzahlungs-Rechnungen nicht als "überfällig"
+        // im Dashboard hängenbleiben (Stripe-Status void → lokal 'cancelled').
         const syncInvoice = event.data.object as Stripe.Invoice
         try {
           await upsertStripeInvoice(syncInvoice.id)
@@ -332,16 +348,35 @@ export async function POST(request: NextRequest) {
         const subId = subscription.metadata?.subscription_id
 
         if (subId) {
-          // Aktuellen Status prüfen — pending Subs (Initialzahlung nie erfolgreich) sollen NICHT
-          // automatisch auf 'cancelled' gesetzt werden, sonst stehen sie für den Coach fälschlich
-          // im Dashboard als "Gekündigt" obwohl der Kunde nur die Zahlung nicht abgeschlossen hat.
           const { data: existing } = await supabaseAdmin
             .from('subscriptions')
-            .select('status')
+            .select('status, stripe_subscription_id')
             .eq('id', subId)
             .maybeSingle()
 
+          // SCHUTZ vor Multi-Checkout: wenn der Coach mehrfach Checkout-Links generiert
+          // hat, gibt es ggf. mehrere Stripe-Subs für dieselbe lokale Sub. Stripe löscht die
+          // alten (incomplete_expired) → wir würden lokal fälschlich auf 'cancelled' setzen,
+          // obwohl die NEUE Stripe-Sub gerade aktiv ist. Wenn die DB einen anderen Stripe-ID
+          // hält als die gerade gelöschte, ignorieren wir das Event.
+          if (existing?.stripe_subscription_id && existing.stripe_subscription_id !== subscription.id) {
+            console.log(`Sub ${subId}: ignore deletion of obsolete Stripe sub ${subscription.id} (current: ${existing.stripe_subscription_id})`)
+            // Trotzdem deren Invoices voidieren, damit sie nicht als "open/überfällig" rumstehen
+            try {
+              const obsoleteInvs = await stripe.invoices.list({ subscription: subscription.id, limit: 50 })
+              for (const obsInv of obsoleteInvs.data) {
+                if (obsInv.status !== 'paid') {
+                  await upsertStripeInvoice(obsInv.id)
+                }
+              }
+            } catch (e) {
+              console.warn('Konnte Invoices der obsoleten Sub nicht resyncen:', e)
+            }
+            break
+          }
+
           if (existing?.status === 'pending') {
+            // Initialzahlung nie erfolgreich → lokal pending lassen, Coach soll manuell entscheiden
             console.log(`Subscription ${subId}: Stripe-Sub gelöscht, lokal pending — bleibt pending`)
           } else {
             await supabaseAdmin
