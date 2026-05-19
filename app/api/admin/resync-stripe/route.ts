@@ -25,7 +25,7 @@ export async function POST() {
     // 2. Alle Abos laden — wir prüfen sowohl verknüpfte als auch unverknüpfte
     //    (manche wurden mit Anon-Key erstellt, wo RLS die Stripe-ID-Writes silently verwarf)
     const { data: subs } = await supabaseAdmin.from("subscriptions").select(`
-        id, status, payment_status, name, type, member_id,
+        id, status, payment_status, name, member_id,
         stripe_subscription_id, stripe_checkout_session_id, stripe_customer_id,
         members:member_id ( email, name )
       `);
@@ -258,49 +258,6 @@ export async function POST() {
           ) {
             updateData.payment_status = "pending";
             subResult.revertedToPending++;
-          }
-        }
-
-        // C2) Spezial-Pfad für 10er-Karten (punch_card). Einmalzahlung — wenn Stripe
-        //     irgendeinen erfolgreichen Payment Intent für diesen Customer hat,
-        //     setzen wir die Sub auf 'active' + 'paid'. Egal in welchem Sync-Pfad wir
-        //     vorher gelandet sind.
-        if (
-          sub.type === "punch_card" &&
-          sub.status === "pending" &&
-          !updateData.status &&
-          (stripeCustomerId || memberEmail)
-        ) {
-          try {
-            const customerIds: string[] = [];
-            if (stripeCustomerId) customerIds.push(stripeCustomerId);
-            if (memberEmail) {
-              const customers = await stripe.customers.list({
-                email: memberEmail,
-                limit: 5,
-              });
-              for (const c of customers.data) {
-                if (!customerIds.includes(c.id)) customerIds.push(c.id);
-              }
-            }
-            let foundPaid = false;
-            for (const cid of customerIds) {
-              const pis = await stripe.paymentIntents.list({
-                customer: cid,
-                limit: 20,
-              });
-              if (pis.data.some((p) => p.status === "succeeded")) {
-                foundPaid = true;
-                if (!stripeCustomerId) updateData.stripe_customer_id = cid;
-                break;
-              }
-            }
-            if (foundPaid) {
-              updateData.status = "active";
-              updateData.payment_status = "paid";
-            }
-          } catch (e) {
-            console.warn(`Sub ${sub.id}: 10er-Karten-Check fehlgeschlagen:`, e);
           }
         }
 
