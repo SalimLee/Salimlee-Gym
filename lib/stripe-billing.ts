@@ -62,8 +62,38 @@ export function computeProratedFirstMonth(
   monthlyCents: number,
   now: Date = new Date()
 ): ProratedFirstMonthPlan {
-  // Wenn signupDate in der Zukunft → today als Basis (Stripe kann nicht "rückwärts" chargen).
-  const referenceDate = signupDate.getTime() < now.getTime() ? signupDate : now
+  // ─────────────────────────────────────────────────────────────────────────
+  // SONDERFALL: Vertragsbeginn liegt in der Zukunft.
+  //   Beispiel: Heute 23.5., Coach trägt 01.07. als Vertragsbeginn ein.
+  //   Gewünscht: HEUTE 0 € (nur SEPA-Mandat einrichten), erste echte Ab-
+  //   buchung am Vertragsbeginn (bzw. 1. des Folgemonats wenn Vertrags-
+  //   beginn nicht der 1. ist).
+  //   Würden wir hier in die normale Logik fallen, würde Stripe anteilig
+  //   ab Klickdatum (today → next 1st) chargen — der Kunde zahlt für einen
+  //   Zeitraum, in dem er noch nicht Mitglied ist.
+  // ─────────────────────────────────────────────────────────────────────────
+  if (signupDate.getTime() > now.getTime()) {
+    const isFirstOfMonth = signupDate.getUTCDate() === 1
+    const anchorDate = isFirstOfMonth ? signupDate : firstOfNextMonthUTC(signupDate)
+    const anchorUnix = Math.floor(anchorDate.getTime() / 1000)
+    const daysInMonth = daysInMonthOf(signupDate)
+    return {
+      billing: {
+        billing_cycle_anchor: anchorUnix,
+        proration_behavior: 'none',
+      },
+      proratedCents: 0,
+      referenceDate: signupDate,
+      anchorDate,
+      daysRemaining: 0,
+      daysInMonth,
+    }
+  }
+
+  // signupDate in der Vergangenheit (oder genau jetzt): faire Proration ab
+  // Vertragsabschluss. Wer am 14.5. angemeldet wurde aber erst am 21.5. klickt,
+  // zahlt trotzdem 18/31 (vom 14.5. bis 1.6.) statt nur 11/31.
+  const referenceDate = signupDate
 
   // Anchor = 1. des nächsten Monats nach referenceDate.
   const anchorDate = firstOfNextMonthUTC(referenceDate)
