@@ -93,10 +93,16 @@ export function computeProratedFirstMonth(
   // signupDate in der Vergangenheit (oder genau jetzt): faire Proration ab
   // Vertragsabschluss. Wer am 14.5. angemeldet wurde aber erst am 21.5. klickt,
   // zahlt trotzdem 18/31 (vom 14.5. bis 1.6.) statt nur 11/31.
-  const referenceDate = signupDate
-
-  // Anchor = 1. des nächsten Monats nach referenceDate.
-  const anchorDate = firstOfNextMonthUTC(referenceDate)
+  //
+  // SCHUTZ: Wenn der Anchor (1. des Monats nach signupDate) bereits in der
+  // Vergangenheit liegt — z.B. Signup im Vormonat, Reminder erst diesen Monat —
+  // würde Stripe die Session-Erstellung mit "billing_cycle_anchor must be in
+  // the future" ablehnen. Dann re-basen wir auf `now`: Anchor = 1. des
+  // nächsten Monats relativ zu HEUTE, Proration vom heutigen Tag.
+  const candidateAnchor = firstOfNextMonthUTC(signupDate)
+  const isAnchorInPast = candidateAnchor.getTime() <= now.getTime()
+  const referenceDate = isAnchorInPast ? now : signupDate
+  const anchorDate = isAnchorInPast ? firstOfNextMonthUTC(now) : candidateAnchor
   const anchorUnix = Math.floor(anchorDate.getTime() / 1000)
 
   const msPerDay = 24 * 60 * 60 * 1000

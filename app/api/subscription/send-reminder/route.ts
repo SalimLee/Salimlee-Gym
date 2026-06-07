@@ -267,7 +267,11 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
+    // Echten Fehler ans Frontend weiterreichen — sonst tappt der Coach im Dunkeln.
+    // Häufige Ursachen: Stripe-API-Fehler (z.B. ungültige Konfiguration), Supabase
+    // RLS, oder Resend-API-Fehler. Stack/Code für Debug ins Server-Log.
+    const msg = error instanceof Error ? error.message : 'Unbekannter Fehler'
     console.error('Zahlungserinnerung fehlgeschlagen:', error)
-    return NextResponse.json({ error: 'Zahlungserinnerung konnte nicht gesendet werden' }, { status: 500 })
+    return NextResponse.json({ error: `Erinnerung: ${msg}` }, { status: 500 })
   }
 }
