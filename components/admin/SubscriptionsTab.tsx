@@ -43,7 +43,7 @@ const STATUS_META: Record<SubStatus, { label: string; tone: BadgeTone; descripti
   pending:   { label: 'Zahlung ausstehend', tone: 'warning',  description: 'Wartet auf erste Zahlung' },
   paused:    { label: 'Pausiert',           tone: 'info',     description: 'Keine Abbuchung' },
   expired:   { label: 'Abgelaufen',         tone: 'danger',   description: 'Vertrag beendet' },
-  cancelled: { label: 'Gekündigt',          tone: 'neutral',  description: 'Coach kann reaktivieren' },
+  cancelled: { label: 'Gekündigt',          tone: 'neutral',  description: 'Vom Coach gekündigt oder SEPA geplatzt — reaktivierbar' },
 }
 
 /**
@@ -71,6 +71,7 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<SubStatus | 'all'>('all')
   const [typeFilter, setTypeFilter] = useState<'all' | 'monthly' | 'punch_card'>('all')
+  const [hideDeadSubs, setHideDeadSubs] = useState(true) // alte tote Fehlversuch-Abos ausblenden
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
   const [showForm, setShowForm] = useState(false)
@@ -119,10 +120,26 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
   const getMember = (id: string) => memberLookup.get(id)
 
   // ── Filter ──
+  // Mitglieder, die ein lebendes Abo (aktiv/pending/pausiert) haben. Deren alte
+  // gekündigte/abgelaufene Abos sind "tote" Fehlversuch-Reste und können in der
+  // Standardansicht ausgeblendet werden.
+  const liveMemberIds = useMemo(() => {
+    const s = new Set<string>()
+    for (const sub of subscriptions) {
+      if (sub.status === 'active' || sub.status === 'pending' || sub.status === 'paused') s.add(sub.member_id)
+    }
+    return s
+  }, [subscriptions])
+
   const filtered = useMemo(() => {
     return subscriptions.filter(s => {
       if (statusFilter !== 'all' && s.status !== statusFilter) return false
       if (typeFilter !== 'all' && s.type !== typeFilter) return false
+      // Tote Abos ausblenden — nur in der "Alle"-Ansicht. Filtert man explizit nach
+      // "Gekündigt"/"Abgelaufen", werden sie trotzdem gezeigt (zum Löschen/Reaktivieren).
+      if (hideDeadSubs && statusFilter === 'all'
+        && (s.status === 'cancelled' || s.status === 'expired')
+        && liveMemberIds.has(s.member_id)) return false
       if (search) {
         const q = search.toLowerCase()
         const memberName = getMember(s.member_id)?.name.toLowerCase() || ''
@@ -131,7 +148,12 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
       return true
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subscriptions, statusFilter, typeFilter, search, memberLookup])
+  }, [subscriptions, statusFilter, typeFilter, search, memberLookup, hideDeadSubs, liveMemberIds])
+
+  const hiddenDeadCount = useMemo(
+    () => (hideDeadSubs ? subscriptions.filter(s => (s.status === 'cancelled' || s.status === 'expired') && liveMemberIds.has(s.member_id)).length : 0),
+    [hideDeadSubs, subscriptions, liveMemberIds]
+  )
 
   type SortableSub = Subscription & { _memberName: string }
   const sortable: SortableSub[] = filtered.map(s => ({ ...s, _memberName: getMember(s.member_id)?.name || 'Unbekannt' }))
@@ -223,6 +245,9 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
     setReactivating(sub.id)
     const member = getMember(sub.member_id)
     if (!member) { setReactivating(null); return }
+    // Vor dem Status-Update merken, ob die Kündigung durch eine geplatzte Zahlung kam —
+    // dann geht die "Zahlung fehlgeschlagen"-Mail raus statt der neutralen Reaktivierung.
+    const wasPaymentFailed = sub.payment_status === 'failed'
 
     // 1) Falls eine alte Stripe-Sub noch läuft (z.B. 0 €-Initial-Checkout), CANCELN.
     //    Sonst hätten wir nach der Reaktivierung zwei parallele Stripe-Subs und
@@ -256,7 +281,7 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
     try {
       const res = await fetch('/api/subscription/send-reminder', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subscriptionId: sub.id, memberEmail: member.email, memberName: member.name, subscriptionName: sub.name }),
+        body: JSON.stringify({ subscriptionId: sub.id, memberEmail: member.email, memberName: member.name, subscriptionName: sub.name, reason: wasPaymentFailed ? 'payment_failed' : undefined }),
       })
       const data = await res.json()
       if (!res.ok || data.error) {
@@ -277,7 +302,7 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
     try {
       const res = await fetch('/api/subscription/send-reminder', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subscriptionId: sub.id, memberEmail: member.email, memberName: member.name, subscriptionName: sub.name }),
+        body: JSON.stringify({ subscriptionId: sub.id, memberEmail: member.email, memberName: member.name, subscriptionName: sub.name, reason: sub.payment_status === 'failed' ? 'payment_failed' : undefined }),
       })
       const data = await res.json()
       if (!res.ok || data.error) showSnackbar(data.error || 'Erinnerung fehlgeschlagen', 'danger')
@@ -500,6 +525,10 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
             <option value="monthly">Monatsabo</option>
             <option value="punch_card">Mehrfachkarte</option>
           </Select>
+          <label className="flex items-center gap-1.5 text-[12px] text-admin-mute cursor-pointer select-none whitespace-nowrap" title="Alte gekündigte Fehlversuch-Abos ausblenden, wenn das Mitglied bereits ein aktives Abo hat">
+            <input type="checkbox" checked={hideDeadSubs} onChange={e => setHideDeadSubs(e.target.checked)} className="accent-brand-500" />
+            Tote Abos ausblenden{hiddenDeadCount > 0 ? ` (${hiddenDeadCount})` : ''}
+          </label>
           {(statusFilter !== 'all' || typeFilter !== 'all' || search) && (
             <Button variant="ghost" size="sm" onClick={() => { setStatusFilter('all'); setTypeFilter('all'); setSearch('') }}>
               Filter zurücksetzen
@@ -574,7 +603,10 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
                   const member = getMember(sub.member_id)
                   const meta = STATUS_META[sub.status]
                   const inBinding = isInBindingPeriod(sub)
-                  const isOverdue = sub.end_date && new Date(sub.end_date) < new Date() && sub.status === 'active'
+                  // Mindestlaufzeit vorbei, Abo läuft aber aktiv weiter → monatlich kündbar
+                  // (KEIN "Abgelaufen" — der Vertrag verlängert sich automatisch monatlich).
+                  const monthlyRolling = sub.end_date && new Date(sub.end_date) < new Date()
+                    && sub.status === 'active' && sub.type !== 'punch_card'
                   return (
                     <tr key={sub.id}>
                       <td>
@@ -608,7 +640,18 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
                             <p className="admin-caption mt-0.5">Karte hinterlegen · ab 1. nächsten Monats</p>
                           </>
                         ) : (
-                          <Badge tone={meta.tone} dot>{meta.label}</Badge>
+                          <>
+                            <Badge tone={meta.tone} dot>{meta.label}</Badge>
+                            {/* SEPA-Lastschrift geplatzt — auch bei aktivem Abo sichtbar machen,
+                                damit der Coach den Zahlungsausfall sofort erkennt (nicht erst wenn
+                                Stripe irgendwann kündigt). */}
+                            {sub.payment_status === 'failed' && (
+                              <p className="mt-0.5"><Badge tone="danger" dot>Zahlung fehlgeschlagen</Badge></p>
+                            )}
+                            {sub.status === 'cancelled' && sub.payment_status === 'failed' && (
+                              <p className="admin-caption mt-0.5">SEPA geplatzt · reaktivieren</p>
+                            )}
+                          </>
                         )}
                       </td>
                       <td className="text-right">
@@ -620,7 +663,7 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
                           {formatDateDE(sub.start_date)}
                           {sub.end_date ? ` → ${formatDateDE(sub.end_date)}` : ' · offen'}
                         </p>
-                        {isOverdue && <Badge tone="danger">Abgelaufen</Badge>}
+                        {monthlyRolling && <Badge tone="neutral">Monatlich kündbar</Badge>}
                         {inBinding && sub.status === 'active' && <Badge tone="info">Bindung läuft</Badge>}
                       </td>
                       <td>

@@ -72,17 +72,14 @@ export async function POST(request: NextRequest) {
           updateData.stripe_subscription_id = stripeSubId
 
           if (isPaid) {
-            try {
-              const stripeSub = await stripe.subscriptions.retrieve(stripeSubId)
-              const cancelAfterMonths = stripeSub.metadata?.cancel_after_months
-              if (cancelAfterMonths) {
-                await stripe.subscriptions.update(stripeSubId, {
-                  cancel_at: Math.floor(Date.now() / 1000) + parseInt(cancelAfterMonths) * 30 * 24 * 60 * 60,
-                } as Stripe.SubscriptionUpdateParams)
-              }
-            } catch (e) {
-              console.warn('Konnte Subscription-Parameter nicht setzen:', e)
-            }
+            // WICHTIG: Die Vertragslaufzeit (cancel_after_months, z.B. 6/12 Monate) ist eine
+            // MINDESTLAUFZEIT (Bindung) — KEIN Enddatum. Laut Vertrag verlängert sich die
+            // Mitgliedschaft nach Ablauf der Mindestlaufzeit automatisch monatlich und ist
+            // dann monatlich kündbar. Wir setzen daher BEWUSST KEIN `cancel_at` mehr — sonst
+            // würde Stripe das Abo am Ende der Mindestlaufzeit beenden und die Abbuchungen
+            // stoppen (Kunde erschien fälschlich als "gekündigt"). Die Sub läuft monatlich
+            // weiter, bis der Coach sie im Dashboard manuell kündigt. Die Mindestlaufzeit
+            // wird nur über subscriptions.end_date (Bindungs-Badge) im Dashboard getrackt.
 
             // Defensive: alle Stripe-Invoices dieser Sub auch direkt syncen.
             // Schützt vor dem Fall, dass invoice.paid Webhook später verpasst wird und

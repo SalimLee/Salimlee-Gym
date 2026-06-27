@@ -43,6 +43,7 @@ export default function InvoicesTab({ invoices, setInvoices, members, supabase, 
   const [viewInvoice, setViewInvoice] = useState<Invoice | null>(null)
   const [sendingPaid, setSendingPaid] = useState<string | null>(null)
   const [sendingDunning, setSendingDunning] = useState<string | null>(null)
+  const [stripeActing, setStripeActing] = useState<string | null>(null)
 
   const showSnackbar = useCallback((message: string, tone: 'success' | 'danger' | 'info' = 'success') => setSnackbar({ message, tone }), [])
   useEffect(() => { if (!snackbar) return; const t = setTimeout(() => setSnackbar(null), 4000); return () => clearTimeout(t) }, [snackbar])
@@ -154,6 +155,33 @@ export default function InvoicesTab({ invoices, setInvoices, members, supabase, 
     await supabase.from('invoices').update({ status: 'cancelled' as InvoiceStatus }).eq('id', id)
     setInvoices(prev => prev.map(i => i.id === id ? { ...i, status: 'cancelled' as InvoiceStatus } : i))
     showSnackbar('Rechnung storniert')
+  }
+
+  // Stripe-Aktionen (Einziehen / Stornieren) brauchen den Server (Stripe-Secret).
+  // Token mitschicken — die Routen prüfen die Admin-Session.
+  const stripeInvoiceAction = async (inv: Invoice, action: 'collect' | 'void') => {
+    if (!inv.stripe_invoice_id) { showSnackbar('Keine Stripe-Rechnung', 'danger'); return }
+    setStripeActing(inv.id)
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData.session?.access_token
+      if (!token) { showSnackbar('Keine aktive Session. Bitte neu anmelden.', 'danger'); setStripeActing(null); return }
+      const res = await fetch(`/api/invoice/${action}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ stripeInvoiceId: inv.stripe_invoice_id }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || data.error) {
+        showSnackbar(data.error || (action === 'collect' ? 'Einzug fehlgeschlagen' : 'Stornierung fehlgeschlagen'), 'danger')
+      } else {
+        showSnackbar(action === 'collect' ? 'Einzug ausgelöst — Status folgt via Stripe' : 'Rechnung storniert (uneinbringlich)')
+        onRefresh()
+      }
+    } catch {
+      showSnackbar('Verbindung fehlgeschlagen', 'danger')
+    }
+    setStripeActing(null)
   }
 
   // Hinweis: Stripe-Sync gibt es zentral im Abos-Tab. Hier wird er bewusst nicht angeboten,
@@ -347,6 +375,16 @@ export default function InvoicesTab({ invoices, setInvoices, members, supabase, 
                             <a href={inv.stripe_invoice_pdf_url} target="_blank" rel="noopener noreferrer" className="admin-btn-icon" title="Stripe-PDF">
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                             </a>
+                          )}
+                          {isStripe && inv.stripe_invoice_id && (inv.status === 'open' || inv.status === 'overdue') && (
+                            <>
+                              <Button size="sm" variant="success" onClick={() => stripeInvoiceAction(inv, 'collect')} disabled={stripeActing === inv.id} title="Erneut per SEPA-Lastschrift einziehen">
+                                {stripeActing === inv.id ? '…' : 'Einziehen'}
+                              </Button>
+                              <IconButton onClick={() => stripeInvoiceAction(inv, 'void')} disabled={stripeActing === inv.id} title="Als uneinbringlich stornieren">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M6 18L18 6M6 6l12 12" /></svg>
+                              </IconButton>
+                            </>
                           )}
                           {!isStripe && (inv.status === 'open' || inv.status === 'overdue') && (
                             <>

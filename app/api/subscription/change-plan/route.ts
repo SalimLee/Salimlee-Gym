@@ -95,15 +95,15 @@ export async function POST(request: NextRequest) {
         getOrCreateTaxRate(),
       ])
 
-      // Neues cancel_at vom Original-Start-Datum aus berechnen
+      // Mindestlaufzeit (Bindung) neu vom Original-Start-Datum aus berechnen — nur für
+      // die Dashboard-Anzeige (end_date), NICHT als Stripe-Enddatum. Nach Ablauf der
+      // Mindestlaufzeit läuft das Abo monatlich weiter, bis der Coach kündigt.
       const startTs = stripeSub.start_date || stripeSub.created
       const startDate = new Date(startTs * 1000)
-      let newCancelAt: number | null = null
 
       if (newConfig.intervalCount) {
         const endDate = new Date(startDate)
         endDate.setMonth(endDate.getMonth() + newConfig.intervalCount)
-        newCancelAt = Math.floor(endDate.getTime() / 1000)
         newEndDateIso = endDate.toISOString().slice(0, 10)
       }
 
@@ -119,12 +119,9 @@ export async function POST(request: NextRequest) {
             ? { cancel_after_months: String(newConfig.intervalCount) }
             : { cancel_after_months: '' }),
         },
-      }
-
-      if (newCancelAt) {
-        updateParams.cancel_at = newCancelAt
-      } else {
-        updateParams.cancel_at = null
+        // Bewusst IMMER cancel_at: null — Abo darf nie automatisch enden. Das räumt
+        // zugleich ein evtl. früher (durch die alte Logik) gesetztes cancel_at wieder ab.
+        cancel_at: null,
       }
 
       await stripe.subscriptions.update(sub.stripe_subscription_id, updateParams)

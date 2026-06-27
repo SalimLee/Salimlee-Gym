@@ -40,7 +40,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Resend nicht konfiguriert' }, { status: 500 })
     }
 
-    const { subscriptionId, memberEmail, memberName, subscriptionName } = await request.json()
+    const { subscriptionId, memberEmail, memberName, subscriptionName, reason } = await request.json()
+    // reason === 'payment_failed' → andere E-Mail-Tonalität (Lastschrift geplatzt),
+    // sonst die normale Zahlungserinnerung.
+    const isPaymentFailed = reason === 'payment_failed'
 
     if (!subscriptionId || !memberEmail || !memberName || !subscriptionName) {
       return NextResponse.json({ error: 'subscriptionId, memberEmail, memberName und subscriptionName sind erforderlich' }, { status: 400 })
@@ -205,10 +208,23 @@ export async function POST(request: NextRequest) {
     const resend = new Resend(process.env.RESEND_API_KEY)
     const EMAIL_FROM = process.env.EMAIL_FROM || 'Salim Lee Gym <noreply@salimlee-gym.de>'
 
+    const emailHeading = isPaymentFailed ? 'Zahlung fehlgeschlagen' : 'Zahlungserinnerung'
+    const emailIntro = isPaymentFailed
+      ? `leider konnte deine letzte Zahlung per SEPA-Lastschrift für dein Abonnement
+                <strong style="color: #fafafa;">${subscriptionName}</strong> nicht eingezogen werden
+                (z.B. wegen fehlender Deckung oder einer geänderten Bankverbindung).
+                Damit deine Mitgliedschaft aktiv bleibt, schließe deine Zahlung bitte über den Button
+                unten ab bzw. hinterlege ein gültiges SEPA-Mandat.`
+      : `wir möchten dich freundlich daran erinnern, dass die Zahlung für dein Abonnement
+                <strong style="color: #fafafa;">${subscriptionName}</strong> noch aussteht.
+                Bitte schließe deine Zahlung über den Button unten ab, um deine Mitgliedschaft zu aktivieren.`
+
     const { error: emailError } = await resend.emails.send({
       from: EMAIL_FROM,
       to: memberEmail,
-      subject: 'Zahlungserinnerung – Salim Lee Gym',
+      subject: isPaymentFailed
+        ? 'Deine Zahlung ist fehlgeschlagen – Salim Lee Gym'
+        : 'Zahlungserinnerung – Salim Lee Gym',
       html: `
         <!DOCTYPE html>
         <html>
@@ -224,13 +240,11 @@ export async function POST(request: NextRequest) {
                 <div style="width: 64px; height: 64px; background: #ffa50020; border-radius: 50%; margin: 0 auto 16px; display: flex; align-items: center; justify-content: center;">
                   <span style="font-size: 28px;">⚠</span>
                 </div>
-                <h2 style="color: #ffa500; margin: 0 0 10px; font-size: 24px;">Zahlungserinnerung</h2>
+                <h2 style="color: #ffa500; margin: 0 0 10px; font-size: 24px;">${emailHeading}</h2>
               </div>
               <p style="color: #a1a1aa; line-height: 1.8; margin: 0 0 25px;">
                 Hallo <strong style="color: #fafafa;">${memberName}</strong>,<br><br>
-                wir möchten dich freundlich daran erinnern, dass die Zahlung für dein Abonnement
-                <strong style="color: #fafafa;">${subscriptionName}</strong> noch aussteht.
-                Bitte schließe deine Zahlung über den Button unten ab, um deine Mitgliedschaft zu aktivieren.
+                ${emailIntro}
               </p>
               <div style="text-align: center; margin: 30px 0;">
                 <a href="${checkoutUrl}" style="display: inline-block; padding: 16px 40px; background: linear-gradient(to right, #b00000, #900000); color: #ffffff; font-weight: bold; font-size: 16px; text-decoration: none; border-radius: 8px;">
