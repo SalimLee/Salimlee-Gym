@@ -269,12 +269,20 @@ export async function getOrCreateActionCoupon(
   )
   if (match) return match.id
 
+  // WICHTIG: Stripe erlaubt für Coupon.name max. 40 Zeichen. Der frühere Name
+  // hängte zusätzlich `config.name` (Basis-Tarif) an und sprengte das Limit fast
+  // immer → "Field must be at most 40 characters", kein Checkout-Link.
+  // Der Name ist reines Anzeige-Label; die vollständige Info (Basis-Tarif,
+  // Bezeichnung) steckt in den Metadaten hier + in der Checkout-Session-Metadata.
+  // Dedup läuft über Metadaten, nicht über den Namen — Kürzung ist unkritisch.
+  const couponName = `Aktion: ${aktionsPreis}€ statt ${basisPreis}€ (${aktionsMonate} Mon.)`.slice(0, 40)
+
   const coupon = await stripe.coupons.create({
     amount_off: amountOffCents,
     currency: 'eur',
     duration: 'repeating',
     duration_in_months: aktionsMonate,
-    name: `Aktion: ${aktionsPreis}€ statt ${basisPreis}€ (${aktionsMonate} Monate) – ${config.name}`,
+    name: couponName,
     metadata: {
       type: 'custom_action',
       basis_id: basisId,
