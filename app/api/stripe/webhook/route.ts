@@ -295,6 +295,46 @@ export async function POST(request: NextRequest) {
           console.log(`Zahlung fehlgeschlagen für Stripe Subscription ${stripeSubId} (attempt ${invoice.attempt_count})`)
         }
 
+        // ─── AUTOMATISCHE ERINNERUNG AN DEN KUNDEN ────────────────────────────
+        // Kunde soll sofort erfahren, dass die Lastschrift geplatzt ist, damit er
+        // sein Konto deckt bzw. direkt über den Stripe-Link zahlt. Wir können seine
+        // Zahlungsdaten nicht ändern — nur erinnern.
+        try {
+          const toEmail = invoice.customer_email
+          const payUrl = invoice.hosted_invoice_url
+          if (process.env.RESEND_API_KEY && toEmail && payUrl) {
+            const openAmount = ((invoice.amount_due - (invoice.amount_paid || 0)) / 100).toFixed(2)
+            const { Resend } = await import('resend')
+            const resend = new Resend(process.env.RESEND_API_KEY)
+            await resend.emails.send({
+              from: process.env.EMAIL_FROM || 'Salim Lee Gym <noreply@salimlee-gym.de>',
+              to: toEmail,
+              subject: 'Deine Zahlung konnte nicht eingezogen werden – Salim Lee Gym',
+              html: `<body style="font-family:Arial,sans-serif;background:#09090b;padding:20px">
+                <div style="max-width:600px;margin:0 auto;background:#18181b;border-radius:16px;overflow:hidden;border:1px solid rgba(176,0,0,0.3)">
+                  <div style="background:linear-gradient(to right,#b00000,#900000);padding:30px;text-align:center">
+                    <div style="font-size:32px;font-weight:900;color:#fff">SALIM LEE</div>
+                  </div>
+                  <div style="padding:40px 30px">
+                    <h2 style="color:#ffa500;margin:0 0 10px">Zahlung fehlgeschlagen</h2>
+                    <p style="color:#a1a1aa;line-height:1.8">Hallo${invoice.customer_name ? ` <strong style="color:#fafafa">${invoice.customer_name}</strong>` : ''},<br><br>
+                    deine SEPA-Lastschrift über <strong style="color:#fafafa">${openAmount} €</strong> konnte nicht eingezogen werden
+                    (z.B. wegen fehlender Kontodeckung). <strong style="color:#fafafa">Bitte sorge für ausreichende Deckung</strong> —
+                    oder begleiche den Betrag sofort über den Button unten.</p>
+                    <div style="text-align:center;margin:30px 0">
+                      <a href="${payUrl}" style="display:inline-block;padding:16px 40px;background:linear-gradient(to right,#b00000,#900000);color:#fff;font-weight:bold;text-decoration:none;border-radius:8px">Jetzt bezahlen</a>
+                    </div>
+                    <p style="color:#a1a1aa;line-height:1.8">Fragen? <a href="mailto:info@salimlee-gym.de" style="color:#b00000">info@salimlee-gym.de</a> · +49 151 68457943</p>
+                    <p style="color:#a1a1aa;margin-top:24px">Sportliche Grüße,<br><strong style="color:#b00000">Dein Salim Lee Team</strong></p>
+                  </div>
+                </div></body>`,
+            })
+            console.log(`Mahn-Mail an ${toEmail} für Invoice ${invoice.id} verschickt`)
+          }
+        } catch (e) {
+          console.warn('Automatische Mahn-Mail fehlgeschlagen:', e)
+        }
+
         // Mahngebühr 4€ ab dem 2. fehlgeschlagenen Versuch — einmalig pro Invoice anhängen,
         // wird dann von Stripe automatisch beim nächsten Abrechnungslauf (Smart Retries oder
         // nächster regulärer Sub-Zyklus) an die Customer-Rechnung gepackt.

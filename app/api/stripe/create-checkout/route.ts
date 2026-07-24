@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { stripe, getOrCreateStripePrice, getOrCreateStripeCustomer, getOrCreateTaxRate, getOrCreateActionCoupon, MEMBERSHIP_STRIPE_MAP } from '@/lib/stripe'
-import { computeProratedFirstMonth } from '@/lib/stripe-billing'
+import { computeProratedFirstMonth, upsertFirstMonthInvoiceItem } from '@/lib/stripe-billing'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseAdmin = createClient(
@@ -196,20 +196,17 @@ export async function POST(request: NextRequest) {
         // 'create_prorations'`. Stripe Checkout UI zeigt "Heute fällig: X €" direkt.
         const plan = computeProratedFirstMonth(signupDate, effectiveMonthlyCents)
 
-        // CLEANUP: alte pending first_month_prorated Items aus früheren Test-
-        // Versuchen entfernen, sonst landen sie zusätzlich zur Auto-Proration
-        // auf der Initial-Invoice und der Kunde zahlt doppelt anteilig.
-        try {
-          const existing = await stripe.invoiceItems.list({ customer: customerId, limit: 100, pending: true })
-          for (const item of existing.data) {
-            if (item.metadata?.type === 'first_month_prorated') {
-              await stripe.invoiceItems.del(item.id)
-              console.log(`[create-checkout] Pending first_month_prorated Item ${item.id} gelöscht (Customer ${customerId})`)
-            }
-          }
-        } catch (e) {
-          console.warn('Konnte alte first_month_prorated Items nicht aufräumen:', e)
-        }
+        // Betrag EXPLIZIT ab Vertragsbeginn als Invoice-Item anhängen (statt Stripe ab
+        // Klickdatum rechnen zu lassen). upsertFirstMonthInvoiceItem räumt alte pending
+        // first_month_prorated Items vorher auf → keine Doppelbelastung.
+        await upsertFirstMonthInvoiceItem({
+          stripe,
+          customerId,
+          subscriptionId,
+          membershipId: effectiveMembershipId,
+          taxRateId,
+          plan,
+        })
 
         // ─────────────────────────────────────────────────────────────────────
         // AKTIONEN (amount_off Coupon): Stripe verbietet `amount_off`-Coupons in

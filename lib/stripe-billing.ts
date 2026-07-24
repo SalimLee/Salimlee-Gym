@@ -129,9 +129,15 @@ export function computeProratedFirstMonth(
   // Abschluss, "schenken" wir diese 5 Tage. Bewusst akzeptiert für eine
   // saubere Stripe-Checkout-UI-Erfahrung.
   // ─────────────────────────────────────────────────────────────────────────
+  // WICHTIG (Vertragsbeginn hat Priorität):
+  // 'create_prorations' würde Stripe ab `subscription.created` (= Klickdatum) rechnen
+  // lassen. Klickt der Kunde erst 10 Tage nach Vertragsbeginn, zahlt er dann nur den
+  // Rest — falsch. Deshalb 'none': Stripe legt KEINE eigene Proration an, stattdessen
+  // hängt der Aufrufer den exakt ab `signupDate` berechneten Betrag als Invoice-Item an
+  // (upsertFirstMonthInvoiceItem). Damit ist immer der Vertragsbeginn die Rechenbasis.
   const billing: SubscriptionBillingParams = {
     billing_cycle_anchor: anchorUnix,
-    proration_behavior: 'create_prorations',
+    proration_behavior: 'none',
   }
 
   return {
