@@ -9,7 +9,19 @@ import {
 } from './ui'
 
 interface Member { id: string; name: string; email: string; phone: string | null; created_at: string; updated_at: string; notes: string | null; active: boolean; photo_url?: string | null }
-interface Invoice { id: string; created_at: string; updated_at: string; member_id: string; invoice_number: string; description: string; amount: number; status: InvoiceStatus; due_date: string; paid_date: string | null; notes: string | null; source?: 'manual' | 'stripe'; stripe_invoice_id?: string | null; stripe_invoice_pdf_url?: string | null }
+interface Invoice { id: string; created_at: string; updated_at: string; member_id: string; invoice_number: string; description: string; amount: number; status: InvoiceStatus; due_date: string; paid_date: string | null; notes: string | null; source?: 'manual' | 'stripe'; stripe_invoice_id?: string | null; stripe_invoice_pdf_url?: string | null; payment_state?: string | null }
+
+// R6: feiner Stripe-Zahlungsstatus (aus Migration 008) → klare Badges. Fallback unten,
+// solange payment_state noch NULL ist (Migration nicht eingespielt / Alt-Rechnung).
+const PAYMENT_STATE_META: Record<string, { label: string; tone: BadgeTone }> = {
+  processing:      { label: 'SEPA in Bearbeitung', tone: 'info' },
+  retry_scheduled: { label: 'Einzug geplant',      tone: 'info' },
+  failed:          { label: 'Fehlgeschlagen',      tone: 'danger' },
+  pending:         { label: 'Offen',               tone: 'warning' },
+  paid:            { label: 'Bezahlt',             tone: 'success' },
+  void:            { label: 'Storniert',           tone: 'neutral' },
+  uncollectible:   { label: 'Uneinbringlich',      tone: 'danger' },
+}
 type InvoiceStatus = 'open' | 'paid' | 'overdue' | 'cancelled'
 
 const STATUS_META: Record<InvoiceStatus, { label: string; tone: BadgeTone }> = {
@@ -370,7 +382,10 @@ export default function InvoicesTab({ invoices, setInvoices, members, supabase, 
                   const SEPA_GRACE_MS = 7 * 24 * 60 * 60 * 1000
                   const isOverdueByDate = inv.status === 'open' && new Date(inv.due_date).getTime() + SEPA_GRACE_MS < Date.now()
                   const isAwaitingSepa = isStripe && inv.status === 'open' && new Date(inv.due_date).getTime() + SEPA_GRACE_MS >= Date.now()
-                  const displayMeta = isOverdueByDate ? STATUS_META.overdue : isAwaitingSepa ? { label: 'SEPA in Bearbeitung', tone: 'info' as BadgeTone } : meta
+                  // R6: exakter Stripe-Status hat Vorrang (falls Migration 008 eingespielt + befüllt),
+                  // sonst Fallback auf die bisherige Fälligkeits-Heuristik.
+                  const psMeta = inv.payment_state && inv.status === 'open' ? PAYMENT_STATE_META[inv.payment_state] : undefined
+                  const displayMeta = psMeta || (isOverdueByDate ? STATUS_META.overdue : isAwaitingSepa ? { label: 'SEPA in Bearbeitung', tone: 'info' as BadgeTone } : meta)
                   const member = getMember(inv.member_id)
                   return (
                     <tr key={inv.id}>

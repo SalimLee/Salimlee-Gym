@@ -65,6 +65,11 @@ async function findMemberByStripeCustomer(stripeCustomerId: string): Promise<str
           .update({ stripe_customer_id: stripeCustomerId })
           .eq('member_id', memberMatch.id)
           .is('stripe_customer_id', null)
+        // R7: auch direkt am Member hinterlegen (best-effort; ignoriert falls Migration 009 fehlt)
+        await supabaseAdmin
+          .from('members')
+          .update({ stripe_customer_id: stripeCustomerId })
+          .eq('id', memberMatch.id)
         return memberMatch.id
       }
     }
@@ -73,6 +78,31 @@ async function findMemberByStripeCustomer(stripeCustomerId: string): Promise<str
   }
 
   return null
+}
+
+// R6/R7: feine Zahlungs-Metadaten best-effort schreiben. Fehlt Migration 008/009 noch,
+// liefert der Update-Aufruf nur einen (ignorierten) Fehler zurück — nichts bricht,
+// die Basis-Rechnung wurde vorher bereits korrekt geschrieben.
+async function enrichInvoiceFields(localInvoiceId: string, inv: Stripe.Invoice): Promise<void> {
+  const piRef = (inv as unknown as { payment_intent?: Stripe.PaymentIntent | string | null }).payment_intent
+  const pi = piRef && typeof piRef !== 'string' ? piRef : null
+  let paymentState: string
+  if (inv.status === 'paid') paymentState = 'paid'
+  else if (inv.status === 'void') paymentState = 'void'
+  else if (inv.status === 'uncollectible') paymentState = 'uncollectible'
+  else if (pi && (pi.status === 'processing' || pi.status === 'requires_action')) paymentState = 'processing'
+  else if (inv.next_payment_attempt) paymentState = 'retry_scheduled'
+  else if ((inv.attempt_count || 0) >= 1) paymentState = 'failed'
+  else paymentState = 'pending'
+  const subRef = (inv as unknown as { subscription?: string | { id?: string } | null }).subscription
+  const subId = typeof subRef === 'string' ? subRef : subRef?.id ?? null
+  // Bewusst KEIN Fehler-Handling nötig: supabase-js wirft hier nicht, liefert error im Objekt.
+  await supabaseAdmin.from('invoices').update({
+    payment_state: paymentState,
+    attempt_count: inv.attempt_count ?? null,
+    next_attempt_date: inv.next_payment_attempt ? new Date(inv.next_payment_attempt * 1000).toISOString().split('T')[0] : null,
+    stripe_subscription_id: subId,
+  }).eq('id', localInvoiceId)
 }
 
 interface SyncResult {
@@ -99,7 +129,7 @@ export async function syncStripeInvoices(daysBack = 30): Promise<SyncResult> {
     const params: Stripe.InvoiceListParams = {
       created: { gte: since },
       limit: 100,
-      expand: ['data.customer'],
+      expand: ['data.customer', 'data.payment_intent'],
     }
     if (startingAfter) params.starting_after = startingAfter
 
@@ -142,6 +172,7 @@ export async function syncStripeInvoices(daysBack = 30): Promise<SyncResult> {
               stripe_invoice_pdf_url: inv.invoice_pdf || null,
             })
             .eq('id', existing.id)
+          await enrichInvoiceFields(existing.id, inv)
           result.updated++
           continue
         }
@@ -168,7 +199,7 @@ export async function syncStripeInvoices(daysBack = 30): Promise<SyncResult> {
 
         const amount = (inv.amount_paid || inv.total || 0) / 100 // Cent -> Euro
 
-        await supabaseAdmin.from('invoices').insert({
+        const { data: insertedSync } = await supabaseAdmin.from('invoices').insert({
           member_id: memberId,
           invoice_number: invoiceNumber,
           description,
@@ -184,7 +215,8 @@ export async function syncStripeInvoices(daysBack = 30): Promise<SyncResult> {
           stripe_invoice_id: stripeInvoiceId,
           stripe_invoice_pdf_url: inv.invoice_pdf || null,
           notes: inv.number ? `Stripe: ${inv.number}` : null,
-        })
+        }).select('id').single()
+        if (insertedSync?.id) await enrichInvoiceFields(insertedSync.id, inv)
 
         result.synced++
       } catch (e) {
@@ -205,7 +237,7 @@ export async function syncStripeInvoices(daysBack = 30): Promise<SyncResult> {
  * Upsert einer einzelnen Stripe Invoice (genutzt vom Webhook).
  */
 export async function upsertStripeInvoice(stripeInvoiceId: string): Promise<void> {
-  const inv = await stripe.invoices.retrieve(stripeInvoiceId)
+  const inv = await stripe.invoices.retrieve(stripeInvoiceId, { expand: ['payment_intent'] })
   if (inv.status === 'draft') return
 
   const customerId = typeof inv.customer === 'string' ? inv.customer : inv.customer?.id
@@ -226,6 +258,7 @@ export async function upsertStripeInvoice(stripeInvoiceId: string): Promise<void
         stripe_invoice_pdf_url: inv.invoice_pdf || null,
       })
       .eq('id', existing.id)
+    await enrichInvoiceFields(existing.id, inv)
     return
   }
 
@@ -245,7 +278,7 @@ export async function upsertStripeInvoice(stripeInvoiceId: string): Promise<void
   const invoiceNumber = await generateInvoiceNumber(invoiceDate)
   const amount = (inv.amount_paid || inv.total || 0) / 100
 
-  await supabaseAdmin.from('invoices').insert({
+  const { data: inserted } = await supabaseAdmin.from('invoices').insert({
     member_id: memberId,
     invoice_number: invoiceNumber,
     description,
@@ -261,5 +294,6 @@ export async function upsertStripeInvoice(stripeInvoiceId: string): Promise<void
     stripe_invoice_id: stripeInvoiceId,
     stripe_invoice_pdf_url: inv.invoice_pdf || null,
     notes: inv.number ? `Stripe: ${inv.number}` : null,
-  })
+  }).select('id').single()
+  if (inserted?.id) await enrichInvoiceFields(inserted.id, inv)
 }
