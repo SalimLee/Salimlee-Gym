@@ -84,14 +84,31 @@ async function findMemberByStripeCustomer(stripeCustomerId: string): Promise<str
 // liefert der Update-Aufruf nur einen (ignorierten) Fehler zurück — nichts bricht,
 // die Basis-Rechnung wurde vorher bereits korrekt geschrieben.
 async function enrichInvoiceFields(localInvoiceId: string, inv: Stripe.Invoice): Promise<void> {
-  const piRef = (inv as unknown as { payment_intent?: Stripe.PaymentIntent | string | null }).payment_intent
-  const pi = piRef && typeof piRef !== 'string' ? piRef : null
+  // Echten Zahlungsstatus über die PaymentIntents des KUNDEN ermitteln. `inv.payment_intent`
+  // ist in neueren Stripe-API-Versionen bei laufenden SEPA-Lastschriften oft null — würde man
+  // sich darauf verlassen, landet eine „ausstehende" (processing) Zahlung fälschlich auf
+  // 'failed'. Deshalb matchen wir den PI über das invoice-Feld (Fallback: passender Betrag).
+  let piStatus: string | null = null
+  if (inv.status === 'open') {
+    try {
+      const cid = typeof inv.customer === 'string' ? inv.customer : inv.customer?.id
+      if (cid) {
+        const remaining = inv.amount_due - (inv.amount_paid || 0)
+        const pis = await stripe.paymentIntents.list({ customer: cid, limit: 10 })
+        const match = pis.data.find(p => (p as unknown as { invoice?: string }).invoice === inv.id)
+          || pis.data.find(p => Math.abs(p.amount - remaining) < 100)
+        piStatus = match?.status || null
+      }
+    } catch { /* PI-Lookup best-effort */ }
+  }
   let paymentState: string
   if (inv.status === 'paid') paymentState = 'paid'
   else if (inv.status === 'void') paymentState = 'void'
   else if (inv.status === 'uncollectible') paymentState = 'uncollectible'
-  else if (pi && (pi.status === 'processing' || pi.status === 'requires_action')) paymentState = 'processing'
+  else if (piStatus === 'succeeded') paymentState = 'paid'
+  else if (piStatus === 'processing' || piStatus === 'requires_action') paymentState = 'processing'
   else if (inv.next_payment_attempt) paymentState = 'retry_scheduled'
+  else if (piStatus === 'requires_payment_method' || piStatus === 'canceled' || piStatus === 'requires_confirmation') paymentState = 'failed'
   else if ((inv.attempt_count || 0) >= 1) paymentState = 'failed'
   else paymentState = 'pending'
   const subRef = (inv as unknown as { subscription?: string | { id?: string } | null }).subscription
