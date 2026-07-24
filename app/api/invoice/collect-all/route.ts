@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { stripe } from '@/lib/stripe'
-import { upsertStripeInvoice } from '@/lib/stripe-invoice-sync'
+import { safeCollectInvoice } from '@/lib/stripe-collect'
 import { requireAdminClient } from '@/lib/admin-auth'
 
 /**
- * R5: Zieht ALLE offenen Stripe-Rechnungen erneut per SEPA ein (Rückstände sammeln).
+ * R5: Zieht ALLE offenen Stripe-Rechnungen (Rückstände) sicher ein.
  * Optional auf einen Kunden begrenzt via { stripeCustomerId }.
  *
- * SICHERHEIT gegen Doppelbelastung: Rechnungen mit geplantem Retry
- * (next_payment_attempt gesetzt) oder laufendem PaymentIntent ('processing'/
- * 'requires_action') werden ÜBERSPRUNGEN — dort zieht Stripe bereits selbst ein.
+ * Jede Rechnung geht durch safeCollectInvoice() — dort wird pro Rechnung FRISCH geprüft,
+ * ob Stripe bereits selbst einzieht (geplanter Retry oder laufender PaymentIntent). Solche
+ * Rechnungen werden übersprungen. Doppelbelastung ist damit ausgeschlossen.
  */
 export async function POST(request: NextRequest) {
   const auth = await requireAdminClient(request)
@@ -22,37 +22,22 @@ export async function POST(request: NextRequest) {
     const listParams: import('stripe').default.InvoiceListParams = { status: 'open', limit: 100 }
     if (stripeCustomerId) listParams.customer = stripeCustomerId
 
+    // Erst alle offenen IDs einsammeln, dann seriell sicher einziehen.
+    const ids: string[] = []
+    for await (const inv of stripe.invoices.list(listParams)) {
+      ids.push(inv.id)
+    }
+
     let collected = 0
     let skipped = 0
     let failed = 0
     const errors: string[] = []
 
-    for await (const inv of stripe.invoices.list(listParams)) {
-      const remaining = inv.amount_due - (inv.amount_paid || 0)
-      if (remaining <= 0) { skipped++; continue }
-
-      // Guard: läuft bei Stripe schon ein Einzug? Dann NICHT nochmal anstoßen.
-      let inFlight = !!inv.next_payment_attempt
-      if (!inFlight) {
-        const piRef = (inv as unknown as Record<string, unknown>).payment_intent as string | { id?: string } | null
-        const piId = typeof piRef === 'string' ? piRef : piRef?.id
-        if (piId) {
-          try {
-            const pi = await stripe.paymentIntents.retrieve(piId)
-            if (pi.status === 'processing' || pi.status === 'requires_action') inFlight = true
-          } catch { /* ignore */ }
-        }
-      }
-      if (inFlight) { skipped++; continue }
-
-      try {
-        await stripe.invoices.pay(inv.id)
-        collected++
-        try { await upsertStripeInvoice(inv.id) } catch { /* sync best-effort */ }
-      } catch (e) {
-        failed++
-        errors.push(`${inv.number || inv.id}: ${e instanceof Error ? e.message : e}`)
-      }
+    for (const id of ids) {
+      const outcome = await safeCollectInvoice(id)
+      if (outcome.result === 'collected') collected++
+      else if (outcome.result === 'skipped') skipped++
+      else { failed++; errors.push(`${id}: ${outcome.reason}`) }
     }
 
     return NextResponse.json({ ok: true, collected, skipped, failed, errors })

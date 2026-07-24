@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { stripe } from '@/lib/stripe'
-import { upsertStripeInvoice } from '@/lib/stripe-invoice-sync'
+import { safeCollectInvoice } from '@/lib/stripe-collect'
 import { requireAdminClient } from '@/lib/admin-auth'
 
 /**
@@ -20,17 +19,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'stripeInvoiceId ist erforderlich' }, { status: 400 })
     }
 
-    // Erneuten Einzug auslösen. Stripe nutzt das hinterlegte SEPA-Mandat des Customers.
-    const invoice = await stripe.invoices.pay(stripeInvoiceId)
-
-    // Lokale invoices-Tabelle direkt mit dem neuen Stripe-Status abgleichen.
-    try {
-      await upsertStripeInvoice(stripeInvoiceId)
-    } catch (e) {
-      console.warn('Invoice-Sync nach Einzug fehlgeschlagen:', e)
+    // Sicherer Einzug (verhindert Doppelbelastung, siehe lib/stripe-collect.ts).
+    const outcome = await safeCollectInvoice(stripeInvoiceId)
+    if (outcome.result === 'failed') {
+      return NextResponse.json({ error: `Einzug fehlgeschlagen: ${outcome.reason}` }, { status: 500 })
     }
-
-    return NextResponse.json({ ok: true, status: invoice.status })
+    if (outcome.result === 'skipped') {
+      return NextResponse.json({ ok: true, skipped: true, reason: outcome.reason })
+    }
+    return NextResponse.json({ ok: true, collected: true })
   } catch (error) {
     // Stripe wirft, wenn die Lastschrift sofort scheitert (z.B. kein Mandat,
     // Konto gedeckt erst in Tagen) — Fehler an den Coach durchreichen.
