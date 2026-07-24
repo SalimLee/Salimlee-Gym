@@ -21,6 +21,9 @@ const PAYMENT_STATE_META: Record<string, { label: string; tone: BadgeTone }> = {
   paid:            { label: 'Bezahlt',             tone: 'success' },
   void:            { label: 'Storniert',           tone: 'neutral' },
   uncollectible:   { label: 'Uneinbringlich',      tone: 'danger' },
+  // Manuell vom Coach als erledigt markiert (z.B. bar/Überweisung geregelt). Grün, und der
+  // Stripe-Sync überschreibt es NICHT mehr (Schutz in lib/stripe-invoice-sync.ts).
+  resolved:        { label: 'Erledigt',            tone: 'success' },
 }
 type InvoiceStatus = 'open' | 'paid' | 'overdue' | 'cancelled'
 
@@ -91,13 +94,15 @@ export default function InvoicesTab({ invoices, setInvoices, members, supabase, 
 
   // Stats — 7-Tage-Karenz für SEPA-Lastschriften
   const SEPA_GRACE_MS = 7 * 24 * 60 * 60 * 1000
-  const openAmount = invoices.filter(i => i.status === 'open' || i.status === 'overdue').reduce((s, i) => s + Number(i.amount), 0)
+  // Als "erledigt" markierte Rechnungen zählen NICHT mehr als offen/überfällig.
+  const isResolved = (i: Invoice) => i.payment_state === 'resolved'
+  const openAmount = invoices.filter(i => (i.status === 'open' || i.status === 'overdue') && !isResolved(i)).reduce((s, i) => s + Number(i.amount), 0)
   const paidAmount = invoices.filter(i => i.status === 'paid').reduce((s, i) => s + Number(i.amount), 0)
   const stats = {
-    open: invoices.filter(i => i.status === 'open' && new Date(i.due_date).getTime() + SEPA_GRACE_MS >= Date.now()).length,
-    sepaPending: invoices.filter(i => (i.source || 'manual') === 'stripe' && i.status === 'open' && new Date(i.due_date).getTime() + SEPA_GRACE_MS >= Date.now()).length,
+    open: invoices.filter(i => i.status === 'open' && !isResolved(i) && new Date(i.due_date).getTime() + SEPA_GRACE_MS >= Date.now()).length,
+    sepaPending: invoices.filter(i => (i.source || 'manual') === 'stripe' && i.status === 'open' && !isResolved(i) && new Date(i.due_date).getTime() + SEPA_GRACE_MS >= Date.now()).length,
     paid: invoices.filter(i => i.status === 'paid').length,
-    overdue: invoices.filter(i => i.status === 'overdue' || (i.status === 'open' && new Date(i.due_date).getTime() + SEPA_GRACE_MS < Date.now())).length,
+    overdue: invoices.filter(i => !isResolved(i) && (i.status === 'overdue' || (i.status === 'open' && new Date(i.due_date).getTime() + SEPA_GRACE_MS < Date.now()))).length,
     stripe: invoices.filter(i => (i.source || 'manual') === 'stripe').length,
   }
 
@@ -168,6 +173,14 @@ export default function InvoicesTab({ invoices, setInvoices, members, supabase, 
     await supabase.from('invoices').update({ status: 'cancelled' as InvoiceStatus }).eq('id', id)
     setInvoices(prev => prev.map(i => i.id === id ? { ...i, status: 'cancelled' as InvoiceStatus } : i))
     showSnackbar('Rechnung storniert')
+  }
+
+  // Manuell als erledigt markieren → grünes "Erledigt". payment_state='resolved' ist sticky
+  // (Stripe-Sync überschreibt es nicht mehr). Für Fälle, die außerhalb geregelt wurden.
+  const markResolved = async (id: string) => {
+    await supabase.from('invoices').update({ payment_state: 'resolved' }).eq('id', id)
+    setInvoices(prev => prev.map(i => i.id === id ? { ...i, payment_state: 'resolved' } : i))
+    showSnackbar('Als erledigt markiert')
   }
 
   // Stripe-Aktionen (Einziehen / Stornieren) brauchen den Server (Stripe-Secret).
@@ -420,6 +433,11 @@ export default function InvoicesTab({ invoices, setInvoices, members, supabase, 
                           <IconButton onClick={() => setViewInvoice(inv)} title="Ansehen">
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                           </IconButton>
+                          {(inv.status === 'open' || inv.status === 'overdue') && inv.payment_state !== 'resolved' && (
+                            <IconButton onClick={() => markResolved(inv.id)} title="Als erledigt markieren (grün) — Stripe-Sync überschreibt das nicht mehr">
+                              <svg className="w-4 h-4 text-status-success" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                            </IconButton>
+                          )}
                           {isStripe && inv.stripe_invoice_pdf_url && (
                             <a href={inv.stripe_invoice_pdf_url} target="_blank" rel="noopener noreferrer" className="admin-btn-icon" title="Stripe-PDF">
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>

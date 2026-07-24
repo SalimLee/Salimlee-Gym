@@ -114,12 +114,14 @@ async function enrichInvoiceFields(localInvoiceId: string, inv: Stripe.Invoice):
   const subRef = (inv as unknown as { subscription?: string | { id?: string } | null }).subscription
   const subId = typeof subRef === 'string' ? subRef : subRef?.id ?? null
   // Bewusst KEIN Fehler-Handling nötig: supabase-js wirft hier nicht, liefert error im Objekt.
+  // .neq('payment_state','resolved') → manuell als "erledigt" markierte Rechnungen bleiben
+  // grün und werden vom Sync NICHT wieder auf failed/processing zurückgesetzt.
   await supabaseAdmin.from('invoices').update({
     payment_state: paymentState,
     attempt_count: inv.attempt_count ?? null,
     next_attempt_date: inv.next_payment_attempt ? new Date(inv.next_payment_attempt * 1000).toISOString().split('T')[0] : null,
     stripe_subscription_id: subId,
-  }).eq('id', localInvoiceId)
+  }).eq('id', localInvoiceId).or('payment_state.is.null,payment_state.neq.resolved')
 }
 
 interface SyncResult {
