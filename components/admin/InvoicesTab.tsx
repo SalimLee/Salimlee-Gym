@@ -214,7 +214,7 @@ export default function InvoicesTab({ invoices, setInvoices, members, supabase, 
       if (!res.ok || data.error) {
         showSnackbar(data.error || 'Sammel-Einzug fehlgeschlagen', 'danger')
       } else {
-        showSnackbar(`Einzug angestoßen: ${data.collected} eingezogen, ${data.skipped} übersprungen${data.failed ? `, ${data.failed} fehlgeschlagen` : ''}`, data.failed ? 'danger' : 'success')
+        showSnackbar(`Einzug angestoßen: ${data.collected} eingezogen, ${data.skipped} übersprungen${data.skippedCustomers ? ` (${data.skippedCustomers} Kunde(n) mit laufender Zahlung geschützt)` : ''}${data.failed ? `, ${data.failed} fehlgeschlagen` : ''}`, data.failed ? 'danger' : 'success')
         onRefresh()
       }
     } catch {
