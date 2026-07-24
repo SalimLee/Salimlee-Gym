@@ -1,5 +1,77 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { syncStripeInvoices } from '@/lib/stripe-invoice-sync'
+import { stripe, DUNNING_FEE, getOrCreateDunningFeeProduct, getOrCreateTaxRate } from '@/lib/stripe'
+
+/**
+ * Mahngebühr-Pass: addiert €4 pro ÜBERFÄLLIGER Abo-Rechnung (Rückstand), dedupliziert
+ * pro Rechnung. So akkumulieren sich Mahngebühren monatlich (jeder unbezahlte Monat = eine
+ * überfällige Rechnung = eine €4-Gebühr). Die Gebühr wird als pending Invoice-Item an die
+ * Subscription gehängt → landet auf der nächsten Abo-Rechnung, sodass Abo + Mahngebühr
+ * zusammen eingezogen werden können.
+ *
+ * WICHTIG:
+ *  - Nur bei AKTIVEN Abos (active/past_due/unpaid/trialing) — nicht bei gekündigten.
+ *  - Respektiert den Abrechnungstag automatisch über das jeweilige due_date der Rechnung
+ *    (7-Tage-SEPA-Karenz) → funktioniert für 1.-des-Monats- UND 15.-des-Monats-Zahler.
+ */
+async function applyOverdueDunningFees() {
+  const GRACE_MS = 7 * 24 * 60 * 60 * 1000
+  const now = Date.now()
+
+  // Live-Abos einsammeln — nur dort macht eine Mahngebühr Sinn.
+  const liveSubs = new Set<string>()
+  for await (const s of stripe.subscriptions.list({ status: 'all', limit: 100 })) {
+    if (['active', 'past_due', 'unpaid', 'trialing'].includes(s.status)) liveSubs.add(s.id)
+  }
+
+  const [productId, taxRateId] = await Promise.all([
+    getOrCreateDunningFeeProduct(),
+    getOrCreateTaxRate(),
+  ])
+
+  let added = 0
+  let skipped = 0
+  for await (const inv of stripe.invoices.list({ status: 'open', limit: 100 })) {
+    const remaining = inv.amount_due - (inv.amount_paid || 0)
+    if (remaining <= 0) { skipped++; continue }
+
+    const subRef = (inv as unknown as { subscription?: string | { id?: string } | null }).subscription
+    const subId = typeof subRef === 'string' ? subRef : subRef?.id
+    if (!subId || !liveSubs.has(subId)) { skipped++; continue } // nur aktive Abo-Rechnungen
+
+    // Überfällig? (Fälligkeitsdatum + Karenz) — respektiert den Abrechnungstag der Rechnung.
+    const dueMs = (inv.due_date || inv.created) * 1000
+    if (dueMs + GRACE_MS >= now) { skipped++; continue } // noch in Karenz → keine Gebühr
+
+    const customerId = typeof inv.customer === 'string' ? inv.customer : inv.customer?.id
+    if (!customerId) { skipped++; continue }
+
+    // Dedup: pro überfälliger Rechnung nur EINE Mahngebühr.
+    const existing = await stripe.invoiceItems.list({ customer: customerId, limit: 100, pending: true })
+    const already = existing.data.some(
+      it => it.metadata?.type === 'dunning_fee' && it.metadata?.failed_invoice_id === inv.id
+    )
+    if (already) { skipped++; continue }
+
+    await stripe.invoiceItems.create({
+      customer: customerId,
+      subscription: subId,
+      amount: DUNNING_FEE.unitAmount,
+      currency: 'eur',
+      description: `${DUNNING_FEE.name} (Rückstand ${inv.number || inv.id})`,
+      tax_rates: [taxRateId],
+      metadata: {
+        type: 'dunning_fee',
+        product_id: productId,
+        failed_invoice_id: inv.id as string,
+        source: 'cron',
+      },
+    })
+    added++
+  }
+
+  return { added, skipped }
+}
 
 export async function GET(request: NextRequest) {
   // Vercel Cron Auth
@@ -10,8 +82,14 @@ export async function GET(request: NextRequest) {
 
   try {
     const result = await syncStripeInvoices(30)
-    console.log('Stripe Invoice Sync (Cron):', result)
-    return NextResponse.json(result)
+    let dunning = { added: 0, skipped: 0 }
+    try {
+      dunning = await applyOverdueDunningFees()
+    } catch (e) {
+      console.warn('Mahngebühr-Pass fehlgeschlagen:', e)
+    }
+    console.log('Cron Sync + Mahngebühr:', { result, dunning })
+    return NextResponse.json({ ...result, dunning })
   } catch (error) {
     console.error('Cron Sync fehlgeschlagen:', error)
     return NextResponse.json({ error: 'Sync fehlgeschlagen' }, { status: 500 })
