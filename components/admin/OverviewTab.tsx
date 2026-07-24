@@ -136,14 +136,27 @@ export default function OverviewTab({ bookings, members, subscriptions, invoices
   // SEPA-Lastschriften brauchen 3-5 Werktage → 7-Tage-Karenz nach Fälligkeit. Außerdem
   // werden Invoices, deren Subscription auf 'processing' steht, hier gar nicht alarmiert.
   const SEPA_GRACE_DAYS = 7
-  const overdueInvoices = useMemo(() => {
+  // Pro Mitglied gruppiert: Gesamtsaldo + Anzahl offener Rechnungen (R5), und ob gerade
+  // eine SEPA-Lastschrift läuft (dann NICHT rot "überfällig", sondern "in Bearbeitung", R6).
+  const overdueByMember = useMemo(() => {
     const cutoff = new Date(now.getTime() - SEPA_GRACE_DAYS * 24 * 60 * 60 * 1000)
-    return invoices.filter(i => {
-      if (i.status === 'paid' || i.status === 'cancelled') return false
-      if (new Date(i.due_date) > cutoff) return false
-      return true
-    })
-  }, [invoices, now])
+    const processing = new Set(
+      subscriptions.filter(s => s.payment_status === 'processing').map(s => s.member_id)
+    )
+    const map = new Map<string, { memberId: string; total: number; count: number }>()
+    for (const i of invoices) {
+      if (i.status === 'paid' || i.status === 'cancelled') continue
+      if (new Date(i.due_date) > cutoff) continue
+      const e = map.get(i.member_id) || { memberId: i.member_id, total: 0, count: 0 }
+      e.total += Number(i.amount)
+      e.count += 1
+      map.set(i.member_id, e)
+    }
+    return Array.from(map.values())
+      .map(e => ({ ...e, processing: processing.has(e.memberId) }))
+      // echte Überfälligkeiten zuerst, dann nach Betrag
+      .sort((a, b) => (a.processing ? 1 : 0) - (b.processing ? 1 : 0) || b.total - a.total)
+  }, [invoices, subscriptions, now])
 
   // SEPA-Lastschriften, die gerade verarbeitet werden — für eigene Warn-Karte
   const sepaInProgressList = useMemo(() =>
@@ -360,7 +373,7 @@ export default function OverviewTab({ bookings, members, subscriptions, invoices
           <div className="p-5 pb-3 flex items-start justify-between">
             <CardHeader eyebrow="Heute prüfen" title="Aufmerksamkeit" className="mb-0" />
           </div>
-          {(overdueInvoices.length === 0 && lowUnits.length === 0) ? (
+          {(overdueByMember.length === 0 && lowUnits.length === 0) ? (
             <EmptyState
               icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
               title="Alles im grünen Bereich"
@@ -368,13 +381,17 @@ export default function OverviewTab({ bookings, members, subscriptions, invoices
             />
           ) : (
             <div className="divide-y divide-admin-hairline-soft">
-              {overdueInvoices.map(inv => (
-                <div key={inv.id} className="px-5 py-3 flex items-center justify-between gap-3">
+              {overdueByMember.map(row => (
+                <div key={row.memberId} className="px-5 py-3 flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-[13px] font-semibold text-admin-ink">{getMemberName(members, inv.member_id)}</p>
-                    <p className="admin-caption">{inv.invoice_number} · {inv.description}</p>
+                    <p className="text-[13px] font-semibold text-admin-ink">{getMemberName(members, row.memberId)}</p>
+                    <p className="admin-caption">{row.count} offene {row.count === 1 ? 'Rechnung' : 'Rechnungen'}{row.processing ? ' · SEPA-Einzug läuft' : ''}</p>
                   </div>
-                  <Badge tone="danger">{Number(inv.amount).toFixed(0)} € überfällig</Badge>
+                  {row.processing ? (
+                    <Badge tone="info" dot>{Number(row.total).toFixed(0)} € in Bearbeitung</Badge>
+                  ) : (
+                    <Badge tone="danger">{Number(row.total).toFixed(0)} € überfällig</Badge>
+                  )}
                 </div>
               ))}
               {lowUnits.map(sub => (
