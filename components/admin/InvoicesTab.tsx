@@ -44,6 +44,7 @@ export default function InvoicesTab({ invoices, setInvoices, members, supabase, 
   const [sendingPaid, setSendingPaid] = useState<string | null>(null)
   const [sendingDunning, setSendingDunning] = useState<string | null>(null)
   const [stripeActing, setStripeActing] = useState<string | null>(null)
+  const [collectingAll, setCollectingAll] = useState(false)
 
   const showSnackbar = useCallback((message: string, tone: 'success' | 'danger' | 'info' = 'success') => setSnackbar({ message, tone }), [])
   useEffect(() => { if (!snackbar) return; const t = setTimeout(() => setSnackbar(null), 4000); return () => clearTimeout(t) }, [snackbar])
@@ -184,6 +185,32 @@ export default function InvoicesTab({ invoices, setInvoices, members, supabase, 
     setStripeActing(null)
   }
 
+  // R5: Alle offenen Stripe-Rechnungen (Rückstände) in einem Vorgang einziehen.
+  const collectAllOverdue = async () => {
+    if (!confirm('Alle offenen Stripe-Rechnungen jetzt per SEPA einziehen?\n\nRechnungen, bei denen Stripe bereits selbst einzieht, werden automatisch übersprungen (kein Doppel-Einzug).')) return
+    setCollectingAll(true)
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData.session?.access_token
+      if (!token) { showSnackbar('Keine aktive Session. Bitte neu anmelden.', 'danger'); setCollectingAll(false); return }
+      const res = await fetch('/api/invoice/collect-all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({}),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || data.error) {
+        showSnackbar(data.error || 'Sammel-Einzug fehlgeschlagen', 'danger')
+      } else {
+        showSnackbar(`Einzug angestoßen: ${data.collected} eingezogen, ${data.skipped} übersprungen${data.failed ? `, ${data.failed} fehlgeschlagen` : ''}`, data.failed ? 'danger' : 'success')
+        onRefresh()
+      }
+    } catch {
+      showSnackbar('Verbindung fehlgeschlagen', 'danger')
+    }
+    setCollectingAll(false)
+  }
+
   // Hinweis: Stripe-Sync gibt es zentral im Abos-Tab. Hier wird er bewusst nicht angeboten,
   // um Doppelung und Verwirrung zu vermeiden.
   void onRefresh
@@ -199,6 +226,13 @@ export default function InvoicesTab({ invoices, setInvoices, members, supabase, 
           <p className="admin-body mt-1">Stripe-Rechnungen + manuelle Belege an einem Ort. Mit Steuer-Export für den Berater.</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          {stats.overdue > 0 && (
+            <Button variant="danger" onClick={collectAllOverdue} disabled={collectingAll}
+              icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 9v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>}
+            >
+              {collectingAll ? 'Ziehe ein…' : 'Rückstände einziehen'}
+            </Button>
+          )}
           <Button variant="outline" onClick={() => setShowExportModal(true)}
             icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>}
           >
