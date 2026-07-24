@@ -668,12 +668,15 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
                       </td>
                       <td>
                         <div className="flex items-center justify-end gap-1">
-                          {/* Reaktivieren - nur bei cancelled / expired */}
-                          {(sub.status === 'cancelled' || sub.status === 'expired') && (
+                          {/* Reaktivieren (cancelled/expired) ODER Zahlung/Mandat erneuern
+                              (aktives Abo, aber Zahlung fehlgeschlagen — z.B. SEPA-Mandat weg).
+                              reactivate() cancelt das kaputte Stripe-Abo und schickt einen frischen
+                              Checkout-Link, über den der Kunde ein neues Mandat bestätigt. */}
+                          {(sub.status === 'cancelled' || sub.status === 'expired' || (sub.status === 'active' && sub.payment_status === 'failed')) && (
                             <Button size="sm" variant="success" onClick={() => reactivate(sub)} disabled={reactivating === sub.id}
                               icon={<svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>}
                             >
-                              {reactivating === sub.id ? 'Sendet…' : 'Reaktivieren'}
+                              {reactivating === sub.id ? 'Sendet…' : (sub.status === 'cancelled' || sub.status === 'expired') ? 'Reaktivieren' : 'Zahlung erneuern'}
                             </Button>
                           )}
                           {isAwaitingReminder(sub) && (
