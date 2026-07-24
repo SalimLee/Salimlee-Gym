@@ -382,7 +382,21 @@ export async function POST(request: NextRequest) {
 
       case 'customer.subscription.deleted': {
         const subscription = event.data.object as Stripe.Subscription
-        const subId = subscription.metadata?.subscription_id
+        // R7 (Sync-Drift): subscription_id kommt normalerweise aus den Metadaten.
+        // Fehlt sie (ältere Abos), matchen wir die lokale Sub über die stripe_subscription_id,
+        // damit gelöschte Stripe-Abos IMMER lokal reflektiert werden (Stripe = Wahrheit).
+        let subId = subscription.metadata?.subscription_id
+        if (!subId) {
+          const { data: byStripeId } = await supabaseAdmin
+            .from('subscriptions')
+            .select('id')
+            .eq('stripe_subscription_id', subscription.id)
+            .maybeSingle()
+          if (byStripeId?.id) {
+            subId = byStripeId.id
+            console.log(`Sub-Deletion ohne Metadata → lokal via stripe_subscription_id ${subscription.id} gematcht (${subId})`)
+          }
+        }
 
         if (subId) {
           const { data: existing } = await supabaseAdmin
