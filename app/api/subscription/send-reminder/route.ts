@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { stripe, getOrCreateStripePrice, getOrCreateStripeCustomer, getOrCreateTaxRate, MEMBERSHIP_STRIPE_MAP } from '@/lib/stripe'
+import { stripe, getOrCreateStripePrice, getOrCreateStripeCustomer, getOrCreateTaxRate, getOrCreateActionCoupon, MEMBERSHIP_STRIPE_MAP } from '@/lib/stripe'
 import { computeProratedFirstMonth, upsertFirstMonthInvoiceItem } from '@/lib/stripe-billing'
 import { createClient } from '@supabase/supabase-js'
 
@@ -55,6 +55,26 @@ export async function POST(request: NextRequest) {
     }
 
     const config = MEMBERSHIP_STRIPE_MAP[membershipId]
+
+    // ─── R3: Sondervertrag/Aktion erkennen ──────────────────────────────────
+    // Abo-Name-Format bei Aktionen: "Aktion: <Text> – <Tarif> (XX€ für Y Monate, danach ZZ€)".
+    // Der AKTIONSBETRAG muss an Stripe (anteilige Erstrechnung + repeating Coupon), NICHT der
+    // Normaltarif. Sonst zahlt ein reaktivierter/erinnerter Aktionskunde den vollen Preis.
+    let actionCouponId: string | null = null
+    let effectiveMonthlyCents = config.unitAmount
+    const actionMatch = subscriptionName.match(/Aktion:.*\((\d+(?:[.,]\d+)?)\s*€\s*für\s*(\d+)\s*Monate/i)
+    if (actionMatch) {
+      const aktionsPreis = Number(actionMatch[1].replace(',', '.'))
+      const aktionsMonate = parseInt(actionMatch[2], 10)
+      if (aktionsPreis > 0 && aktionsMonate > 0 && aktionsPreis < config.unitAmount / 100) {
+        effectiveMonthlyCents = Math.round(aktionsPreis * 100)
+        try {
+          actionCouponId = await getOrCreateActionCoupon(membershipId, aktionsPreis, aktionsMonate)
+        } catch (e) {
+          console.warn('Aktions-Coupon konnte nicht erstellt werden:', e)
+        }
+      }
+    }
 
     // Create new Stripe checkout session
     const [priceId, customerId, taxRateId] = await Promise.all([
@@ -142,8 +162,8 @@ export async function POST(request: NextRequest) {
         }
         // Bewusst KEIN upsertFirstMonthInvoiceItem — keine anteilige Berechnung.
       } else {
-        // Stripe-native Auto-Proration ab Klickdatum bis 1. nächsten Monats.
-        const plan = computeProratedFirstMonth(signupDate, config.unitAmount)
+        // Anteilige Erstrechnung ab Vertragsbeginn — bei Aktionen mit dem AKTIONSPREIS.
+        const plan = computeProratedFirstMonth(signupDate, effectiveMonthlyCents)
 
         // Betrag EXPLIZIT ab Vertragsbeginn anhängen (nicht ab Klickdatum).
         // Räumt alte pending Items vorher auf → keine Doppelbelastung.
@@ -167,6 +187,12 @@ export async function POST(request: NextRequest) {
             ...(config.intervalCount ? { cancel_after_months: String(config.intervalCount) } : {}),
           },
         }
+      }
+
+      // R3: Aktionsrabatt als repeating Coupon — gilt für die ersten Aktionsmonate,
+      // danach entfernt Stripe ihn selbst und die Sub läuft zum Basispreis weiter.
+      if (actionCouponId) {
+        sessionParams.discounts = [{ coupon: actionCouponId }]
       }
     } else {
       sessionParams.mode = 'payment'
