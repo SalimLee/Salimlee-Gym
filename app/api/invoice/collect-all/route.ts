@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
     let skippedCustomers = 0
     const errors: string[] = []
 
-    for (const [, e] of byCustomer) {
+    for (const e of Array.from(byCustomer.values())) {
       // KUNDEN-GUARD: läuft beim Kunden etwas → GAR NICHTS anfassen.
       if (e.busy) {
         skipped += e.ids.length
