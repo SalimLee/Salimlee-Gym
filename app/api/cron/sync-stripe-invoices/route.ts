@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 import { syncStripeInvoices } from '@/lib/stripe-invoice-sync'
 import { stripe, DUNNING_FEE, getOrCreateDunningFeeProduct, getOrCreateTaxRate } from '@/lib/stripe'
+import { buildContractReminderEmail } from '@/lib/contract-reminder-email'
 
 /**
  * Mahngebühr-Pass: addiert €4 pro ÜBERFÄLLIGER Abo-Rechnung (Rückstand), dedupliziert
@@ -73,6 +75,55 @@ async function applyOverdueDunningFees() {
   return { added, skipped }
 }
 
+/**
+ * Vertrags-Erinnerungen: informiert Kunden automatisch, deren MINDESTLAUFZEIT in den
+ * nächsten 30 Tagen endet — Mitgliedschaft läuft danach monatlich kündbar weiter.
+ *
+ * WICHTIG: fasst STRIPE NICHT an, ändert KEIN Abo. Nur E-Mail. Dedup über
+ * subscriptions.contract_reminder_sent_at → jedes Abo bekommt die Mail nur EINMAL,
+ * egal wie oft der Cron läuft. Fehlt Migration 010, liefert die Query einen Fehler,
+ * der abgefangen wird — nichts bricht.
+ */
+async function sendDueContractReminders() {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  )
+  const now = new Date()
+  const today = now.toISOString().slice(0, 10)
+  const in30 = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+
+  const { data: subs, error } = await supabase
+    .from('subscriptions')
+    .select('id, name, end_date, type, contract_reminder_sent_at, members:member_id(name,email)')
+    .eq('status', 'active')
+    .not('end_date', 'is', null)
+    .gte('end_date', today)
+    .lte('end_date', in30)
+  if (error) return { sent: 0, note: 'Migration 010 evtl. fehlt: ' + error.message }
+  if (!process.env.RESEND_API_KEY) return { sent: 0, note: 'RESEND fehlt' }
+
+  const { Resend } = await import('resend')
+  const resend = new Resend(process.env.RESEND_API_KEY)
+  const FROM = process.env.EMAIL_FROM || 'Salim Lee Gym <noreply@salimlee-gym.de>'
+
+  let sent = 0
+  for (const s of (subs || []) as Array<Record<string, unknown> & { members?: { name?: string; email?: string } | { name?: string; email?: string }[] }>) {
+    if (s.type === 'punch_card' || s.contract_reminder_sent_at) continue // Mehrfachkarte / schon erinnert
+    const m = Array.isArray(s.members) ? s.members[0] : s.members
+    if (!m?.email) continue
+    try {
+      const { subject, html } = buildContractReminderEmail({ memberName: m.name || 'Mitglied', subscriptionName: s.name as string, endDate: s.end_date as string })
+      const { error: e } = await resend.emails.send({ from: FROM, to: m.email, subject, html })
+      if (e) continue
+      await supabase.from('subscriptions').update({ contract_reminder_sent_at: new Date().toISOString() }).eq('id', s.id as string)
+      sent++
+    } catch { /* einzelnen Fehler überspringen */ }
+  }
+  return { sent }
+}
+
 export async function GET(request: NextRequest) {
   // Vercel Cron Auth
   const authHeader = request.headers.get('authorization')
@@ -88,8 +139,14 @@ export async function GET(request: NextRequest) {
     } catch (e) {
       console.warn('Mahngebühr-Pass fehlgeschlagen:', e)
     }
-    console.log('Cron Sync + Mahngebühr:', { result, dunning })
-    return NextResponse.json({ ...result, dunning })
+    let contractReminders: { sent: number; note?: string } = { sent: 0 }
+    try {
+      contractReminders = await sendDueContractReminders()
+    } catch (e) {
+      console.warn('Vertrags-Erinnerungs-Pass fehlgeschlagen:', e)
+    }
+    console.log('Cron Sync + Mahngebühr + Vertrags-Erinnerung:', { result, dunning, contractReminders })
+    return NextResponse.json({ ...result, dunning, contractReminders })
   } catch (error) {
     console.error('Cron Sync fehlgeschlagen:', error)
     return NextResponse.json({ error: 'Sync fehlgeschlagen' }, { status: 500 })
