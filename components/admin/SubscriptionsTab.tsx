@@ -38,6 +38,15 @@ function isInBindingPeriod(sub: Subscription): boolean {
   return new Date(sub.end_date).getTime() > new Date().getTime()
 }
 
+// Mindestlaufzeit endet in den nächsten 45 Tagen (oder ist gerade abgelaufen) → Vertrags-
+// Erinnerung sinnvoll: läuft danach automatisch monatlich kündbar weiter. Nur aktive Monatsabos.
+function isContractExpiringSoon(sub: Subscription): boolean {
+  if (!sub.end_date || sub.type === 'punch_card' || sub.status !== 'active') return false
+  const end = new Date(sub.end_date).getTime()
+  const now = Date.now()
+  return end <= now + 45 * 24 * 60 * 60 * 1000 && end >= now - 30 * 24 * 60 * 60 * 1000
+}
+
 const STATUS_META: Record<SubStatus, { label: string; tone: BadgeTone; description: string }> = {
   active:    { label: 'Aktiv',              tone: 'success',  description: 'Abo läuft regulär' },
   pending:   { label: 'Zahlung ausstehend', tone: 'warning',  description: 'Wartet auf erste Zahlung' },
@@ -91,6 +100,8 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
 
   const [sendingReminder, setSendingReminder] = useState<string | null>(null)
   const [reactivating, setReactivating] = useState<string | null>(null)
+  const [sendingContract, setSendingContract] = useState<string | null>(null)
+  const [contractBulkRunning, setContractBulkRunning] = useState(false)
 
   const [snackbar, setSnackbar] = useState<{ message: string; tone: 'success' | 'danger' | 'info' } | null>(null)
 
@@ -313,6 +324,45 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
     setSendingReminder(null)
   }
 
+  // Vertrags-Erinnerung (Mindestlaufzeit endet bald → läuft monatlich kündbar weiter).
+  // NUR E-Mail — kein Stripe-Eingriff, das Abo bleibt unverändert aktiv.
+  const sendContractReminder = async (sub: Subscription) => {
+    setSendingContract(sub.id)
+    const member = getMember(sub.member_id)
+    if (!member?.email) { showSnackbar('Keine E-Mail hinterlegt', 'danger'); setSendingContract(null); return }
+    try {
+      const res = await fetch('/api/subscription/contract-reminder', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ memberEmail: member.email, memberName: member.name, subscriptionName: sub.name, endDate: sub.end_date }),
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) showSnackbar(data.error || 'Vertrags-Erinnerung fehlgeschlagen', 'danger')
+      else showSnackbar(`Vertrags-Erinnerung an ${member.name} versendet`)
+    } catch { showSnackbar('Verbindung fehlgeschlagen', 'danger') }
+    setSendingContract(null)
+  }
+
+  const expiringContractSubs = subscriptions.filter(isContractExpiringSoon)
+  const sendAllContractReminders = async () => {
+    if (!confirm(`Vertrags-Erinnerung an ${expiringContractSubs.length} Mitglied(er) senden?\n\nEs wird NUR eine E-Mail verschickt — keine Änderung an Stripe/Abos.`)) return
+    setContractBulkRunning(true)
+    let sent = 0, failed = 0
+    for (const s of expiringContractSubs) {
+      const member = getMember(s.member_id)
+      if (!member?.email) { failed++; continue }
+      try {
+        const r = await fetch('/api/subscription/contract-reminder', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ memberEmail: member.email, memberName: member.name, subscriptionName: s.name, endDate: s.end_date }),
+        })
+        const d = await r.json().catch(() => ({}))
+        if (r.ok && !d.error) sent++; else failed++
+      } catch { failed++ }
+    }
+    showSnackbar(`${sent} Vertrags-Erinnerung(en) versendet${failed ? `, ${failed} fehlgeschlagen` : ''}`, failed ? 'danger' : 'success')
+    setContractBulkRunning(false)
+  }
+
   // Nur Subs die wirklich eine Erinnerung brauchen — SEPA-in-Bearbeitung NICHT.
   const pendingSubs = subscriptions.filter(isAwaitingReminder)
   const sepaProcessingSubs = subscriptions.filter(isSepaInProgress)
@@ -410,7 +460,15 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
           <h1 className="admin-h1 mt-1">Abos verwalten</h1>
           <p className="admin-body mt-1">Aktivieren, pausieren, kündigen, reaktivieren — alles ein Klick weit weg.</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {expiringContractSubs.length > 0 && (
+            <Button variant="outline" onClick={sendAllContractReminders} disabled={contractBulkRunning}
+              icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>}
+              title="Vertrags-Erinnerung (Mindestlaufzeit endet bald → monatlich kündbar) an alle betroffenen Mitglieder. NUR E-Mail, kein Stripe-Eingriff."
+            >
+              {contractBulkRunning ? 'Sendet…' : `Verträge erinnern (${expiringContractSubs.length})`}
+            </Button>
+          )}
           <Button variant="outline" onClick={runStripeResync} disabled={resyncing}
             icon={<svg className={`w-4 h-4 ${resyncing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>}
           >
@@ -682,6 +740,13 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
                           {isAwaitingReminder(sub) && (
                             <Button size="sm" variant="outline" onClick={() => sendReminder(sub)} disabled={sendingReminder === sub.id}>
                               {sendingReminder === sub.id ? 'Sendet…' : 'Erinnern'}
+                            </Button>
+                          )}
+                          {/* Vertrags-Erinnerung: Mindestlaufzeit endet bald → läuft monatlich
+                              kündbar weiter. NUR E-Mail, kein Stripe-Eingriff. */}
+                          {isContractExpiringSoon(sub) && (
+                            <Button size="sm" variant="outline" onClick={() => sendContractReminder(sub)} disabled={sendingContract === sub.id} title="Vertrags-Erinnerung senden (läuft monatlich kündbar weiter)">
+                              {sendingContract === sub.id ? 'Sendet…' : 'Vertrag erinnern'}
                             </Button>
                           )}
                           {/* 10er-Karte ist Einmalzahlung — wenn pending UND Coach weiß
