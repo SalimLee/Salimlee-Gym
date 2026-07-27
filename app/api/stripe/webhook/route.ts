@@ -81,17 +81,9 @@ export async function POST(request: NextRequest) {
             // weiter, bis der Coach sie im Dashboard manuell kündigt. Die Mindestlaufzeit
             // wird nur über subscriptions.end_date (Bindungs-Badge) im Dashboard getrackt.
 
-            // Defensive: alle Stripe-Invoices dieser Sub auch direkt syncen.
-            // Schützt vor dem Fall, dass invoice.paid Webhook später verpasst wird und
-            // die initiale Invoice als "open" mit altem due_date in der DB hängen bleibt.
-            try {
-              const subInvoices = await stripe.invoices.list({ subscription: stripeSubId, limit: 20 })
-              for (const subInv of subInvoices.data) {
-                await upsertStripeInvoice(subInv.id)
-              }
-            } catch (e) {
-              console.warn('Konnte Sub-Invoices nach Checkout nicht resyncen:', e)
-            }
+            // (Kein direkter Invoice-Resync mehr hier — das machte den Webhook langsam/
+            //  timeout-anfällig. invoice.paid/finalized-Events + der 3x-tägliche Cron halten
+            //  die Rechnungen ohnehin aktuell.)
           }
         }
 
@@ -412,16 +404,12 @@ export async function POST(request: NextRequest) {
           // hält als die gerade gelöschte, ignorieren wir das Event.
           if (existing?.stripe_subscription_id && existing.stripe_subscription_id !== subscription.id) {
             console.log(`Sub ${subId}: ignore deletion of obsolete Stripe sub ${subscription.id} (current: ${existing.stripe_subscription_id})`)
-            // Trotzdem deren Invoices voidieren, damit sie nicht als "open/überfällig" rumstehen
+            // (Kein Invoice-Resync-Loop mehr hier — zu langsam für den Webhook. Der 3x-tägliche
+            //  Cron gleicht die Rechnungen der obsoleten Sub ohnehin ab.)
             try {
-              const obsoleteInvs = await stripe.invoices.list({ subscription: subscription.id, limit: 50 })
-              for (const obsInv of obsoleteInvs.data) {
-                if (obsInv.status !== 'paid') {
-                  await upsertStripeInvoice(obsInv.id)
-                }
-              }
+              // absichtlich leer gelassen
             } catch (e) {
-              console.warn('Konnte Invoices der obsoleten Sub nicht resyncen:', e)
+              console.warn('obsolete Sub:', e)
             }
             break
           }
@@ -447,10 +435,11 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ received: true })
   } catch (error) {
-    console.error('Webhook Verarbeitung fehlgeschlagen:', error)
-    return NextResponse.json(
-      { error: 'Webhook Verarbeitung fehlgeschlagen' },
-      { status: 500 }
-    )
+    // WICHTIG: Das Event ist zu diesem Zeitpunkt bereits signatur-verifiziert und angenommen.
+    // Wir antworten BEWUSST mit 200, auch wenn die interne Verarbeitung einen Fehler wirft —
+    // sonst wertet Stripe das als Fehlschlag und deaktiviert nach vielen Fehlern den Webhook.
+    // Verarbeitungsfehler werden geloggt; der 3x-tägliche Cron + manueller Resync gleichen ab.
+    console.error('Webhook Verarbeitung fehlgeschlagen (trotzdem 200 an Stripe):', error)
+    return NextResponse.json({ received: true, warning: 'processing_error_logged' })
   }
 }
