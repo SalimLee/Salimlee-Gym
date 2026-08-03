@@ -129,15 +129,18 @@ export function computeProratedFirstMonth(
   // Abschluss, "schenken" wir diese 5 Tage. Bewusst akzeptiert für eine
   // saubere Stripe-Checkout-UI-Erfahrung.
   // ─────────────────────────────────────────────────────────────────────────
-  // WICHTIG (Vertragsbeginn hat Priorität):
-  // 'create_prorations' würde Stripe ab `subscription.created` (= Klickdatum) rechnen
-  // lassen. Klickt der Kunde erst 10 Tage nach Vertragsbeginn, zahlt er dann nur den
-  // Rest — falsch. Deshalb 'none': Stripe legt KEINE eigene Proration an, stattdessen
-  // hängt der Aufrufer den exakt ab `signupDate` berechneten Betrag als Invoice-Item an
-  // (upsertFirstMonthInvoiceItem). Damit ist immer der Vertragsbeginn die Rechenbasis.
+  // Vertragsbeginn liegt HEUTE oder in der Vergangenheit → Stripes eingebaute
+  // `create_prorations` rechnet den anteiligen Erstmonat (subscription.created → anchor)
+  // und belastet ihn SOFORT beim Checkout. Das ist der zuverlässige Weg:
+  //   - Anteilig heute fällig (z.B. 03.08 → 01.09), danach voller Monatspreis ab dem 1.
+  //   - `subscription_data.add_invoice_items` (unser früherer Ansatz für exakt-ab-start_date)
+  //     wird von der aktuellen Stripe-API NICHT akzeptiert; `proration_behavior:'none'` +
+  //     Zukunfts-Anchor erzeugte HEUTE gar keine Rechnung (Bug: 0 € statt anteilig).
+  // Der Aufrufer MUSS vorher alte pending 'first_month_prorated' Items entfernen, sonst
+  // kommt zusätzlich zur Stripe-Proration noch ein Alt-Item auf die Rechnung (Doppel-Charge).
   const billing: SubscriptionBillingParams = {
     billing_cycle_anchor: anchorUnix,
-    proration_behavior: 'none',
+    proration_behavior: 'create_prorations',
   }
 
   return {

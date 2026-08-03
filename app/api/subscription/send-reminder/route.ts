@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { stripe, getOrCreateStripePrice, getOrCreateStripeCustomer, getOrCreateTaxRate, getOrCreateActionCoupon, MEMBERSHIP_STRIPE_MAP } from '@/lib/stripe'
-import { computeProratedFirstMonth, upsertFirstMonthInvoiceItem } from '@/lib/stripe-billing'
+import { computeProratedFirstMonth } from '@/lib/stripe-billing'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseAdmin = createClient(
@@ -162,22 +162,28 @@ export async function POST(request: NextRequest) {
         }
         // Bewusst KEIN upsertFirstMonthInvoiceItem — keine anteilige Berechnung.
       } else {
-        // Anteilige Erstrechnung ab Vertragsbeginn — bei Aktionen mit dem AKTIONSPREIS.
         const plan = computeProratedFirstMonth(signupDate, effectiveMonthlyCents)
 
-        // Betrag EXPLIZIT ab Vertragsbeginn anhängen (nicht ab Klickdatum).
-        // Räumt alte pending Items vorher auf → keine Doppelbelastung.
-        await upsertFirstMonthInvoiceItem({
-          stripe,
-          customerId,
-          subscriptionId,
-          membershipId,
-          taxRateId,
-          plan,
-        })
+        // create_prorations (plan.billing) belastet den anteiligen Erstmonat sofort beim
+        // Checkout. Alte pending 'first_month_prorated' Items (Reste) vorher weg → keine
+        // Doppelbelastung.
+        try {
+          const existing = await stripe.invoiceItems.list({ customer: customerId, limit: 100, pending: true })
+          for (const item of existing.data) {
+            if (item.metadata?.type === 'first_month_prorated') await stripe.invoiceItems.del(item.id)
+          }
+        } catch (e) {
+          console.warn('Cleanup alter first_month_prorated Items fehlgeschlagen:', e)
+        }
+
+        // Aktions-Coupons (amount_off) sind NICHT mit create_prorations + billing_cycle_anchor
+        // kombinierbar (Stripe lehnt ab). Bei Aktion daher 'none' (heute 0 €, Coupon ab 1. Rechnung).
+        const billingParams = actionCouponId
+          ? { billing_cycle_anchor: plan.billing.billing_cycle_anchor, proration_behavior: 'none' as const }
+          : plan.billing
 
         sessionParams.subscription_data = {
-          ...plan.billing,
+          ...billingParams,
           default_tax_rates: [taxRateId],
           metadata: {
             subscription_id: subscriptionId,
