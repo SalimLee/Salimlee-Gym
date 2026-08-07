@@ -116,6 +116,12 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
   const [changingPlan, setChangingPlan] = useState(false)
   const [changePlanError, setChangePlanError] = useState<string | null>(null)
 
+  const [discountSub, setDiscountSub] = useState<Subscription | null>(null)
+  const [discountPreis, setDiscountPreis] = useState<string>('')
+  const [discountMonate, setDiscountMonate] = useState<string>('')
+  const [applyingDiscount, setApplyingDiscount] = useState(false)
+  const [discountError, setDiscountError] = useState<string | null>(null)
+
   const showSnackbar = useCallback((message: string, tone: 'success' | 'danger' | 'info' = 'success') => setSnackbar({ message, tone }), [])
   useEffect(() => {
     if (!snackbar) return
@@ -403,6 +409,28 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
       setChangePlan(null); setSelectedPlanId('')
     } catch { setChangePlanError('Verbindung fehlgeschlagen') }
     setChangingPlan(false)
+  }
+
+  const confirmApplyDiscount = async () => {
+    if (!discountSub) return
+    const preis = Number(discountPreis)
+    const monate = Number(discountMonate)
+    if (!(preis > 0)) { setDiscountError('Aktionspreis (€/Monat) angeben'); return }
+    if (!(monate >= 1)) { setDiscountError('Aktionsdauer (Monate) angeben'); return }
+    if (preis >= Number(discountSub.price)) { setDiscountError(`Aktionspreis muss unter dem Tarifpreis (${Number(discountSub.price).toFixed(2)}€) liegen`); return }
+    setApplyingDiscount(true); setDiscountError(null)
+    try {
+      const res = await fetch('/api/subscription/apply-discount', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subscriptionId: discountSub.id, aktionsPreis: preis, aktionsMonate: monate }),
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) { setDiscountError(data.error || 'Rabatt anwenden fehlgeschlagen'); setApplyingDiscount(false); return }
+      setSubscriptions(prev => prev.map(s => s.id === discountSub.id ? { ...s, price: preis } : s))
+      showSnackbar(`Sonderangebot angewendet: ${preis}€ für ${monate} Monate`)
+      setDiscountSub(null); setDiscountPreis(''); setDiscountMonate('')
+    } catch { setDiscountError('Verbindung fehlgeschlagen') }
+    setApplyingDiscount(false)
   }
 
   const deleteSub = async (id: string) => {
@@ -783,6 +811,11 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
                             </IconButton>
                           )}
+                          {(sub.status === 'active' || sub.status === 'paused') && sub.stripe_subscription_id && sub.type !== 'punch_card' && (
+                            <IconButton onClick={() => { setDiscountSub(sub); setDiscountPreis(''); setDiscountMonate(''); setDiscountError(null) }} title="Sonderangebot / Rabatt anwenden (Aktionspreis für N Monate, danach wieder regulär)">
+                              <svg className="w-4 h-4 text-status-success" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M7 7h.01M7 3h5a1.99 1.99 0 011.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.99 1.99 0 013 12V7a4 4 0 014-4z" /></svg>
+                            </IconButton>
+                          )}
                           {(sub.status === 'active' || sub.status === 'paused') && (
                             <IconButton onClick={() => { setStatusModal({ sub, newStatus: 'cancelled' }); setPersonalMessage(''); setEmailError(null) }} title={inBinding ? 'Sonderkündigung' : 'Kündigen'}>
                               <svg className="w-4 h-4 text-status-danger" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>
@@ -943,6 +976,49 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
             <Button variant="ghost" onClick={() => setChangePlan(null)} disabled={changingPlan}>Abbrechen</Button>
             <Button variant="primary" onClick={confirmChangePlan} disabled={changingPlan || !selectedPlanId}>
               {changingPlan ? 'Wechselt…' : 'Wechseln'}
+            </Button>
+          </div>
+        </Modal>
+      )}
+
+      {/* ─── Sonderangebot / Rabatt anwenden Modal ──────────────────────── */}
+      {discountSub && (
+        <Modal onClose={() => !applyingDiscount && setDiscountSub(null)}>
+          <div className="p-5 border-b border-admin-hairline">
+            <h3 className="admin-h2">Sonderangebot anwenden</h3>
+            <p className="admin-caption mt-1">{getMember(discountSub.member_id)?.name} · {discountSub.name} · aktuell {Number(discountSub.price).toFixed(2)} €/Monat</p>
+          </div>
+          <div className="p-5 space-y-3">
+            <p className="text-[12px] text-admin-mute">
+              Der Aktionspreis wird als Stripe-Gutschein direkt auf das laufende Abo angewendet. Nach Ablauf der Aktionsdauer gilt automatisch wieder der reguläre Tarifpreis. Kein neuer Checkout, keine Kündigung.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="admin-caption block mb-1">Aktionspreis (€/Monat)</span>
+                <Input type="number" step="0.01" min="0" value={discountPreis} onChange={e => setDiscountPreis(e.target.value)} placeholder="z.B. 60" />
+              </label>
+              <label className="block">
+                <span className="admin-caption block mb-1">Aktionsdauer (Monate)</span>
+                <Input type="number" min="1" value={discountMonate} onChange={e => setDiscountMonate(e.target.value)} placeholder="z.B. 12" />
+              </label>
+            </div>
+            {Number(discountPreis) > 0 && Number(discountMonate) >= 1 && Number(discountPreis) < Number(discountSub.price) && (
+              <div className="p-2.5 bg-status-success-soft border border-status-success-border rounded-btn">
+                <p className="text-[12px] text-status-success">
+                  {Number(discountMonate)} Monate {Number(discountPreis).toFixed(2)} €/Monat (statt {Number(discountSub.price).toFixed(2)} €), danach wieder {Number(discountSub.price).toFixed(2)} €.
+                </p>
+              </div>
+            )}
+            {discountError && (
+              <div className="p-2.5 bg-status-danger-soft border border-status-danger-border rounded-btn">
+                <p className="text-[12px] text-status-danger">{discountError}</p>
+              </div>
+            )}
+          </div>
+          <div className="p-5 border-t border-admin-hairline flex gap-2 justify-end">
+            <Button variant="ghost" onClick={() => setDiscountSub(null)} disabled={applyingDiscount}>Abbrechen</Button>
+            <Button variant="primary" onClick={confirmApplyDiscount} disabled={applyingDiscount || !(Number(discountPreis) > 0) || !(Number(discountMonate) >= 1)}>
+              {applyingDiscount ? 'Wird angewendet…' : 'Anwenden'}
             </Button>
           </div>
         </Modal>
