@@ -221,9 +221,15 @@ export async function getOrCreateStripePrice(membershipId: string): Promise<stri
 }
 
 /**
- * Finds or creates a Stripe Coupon for a custom action (e.g. "first 3 months 65€ on erwachsene_12").
- * The coupon applies a fixed `amount_off` for `duration_in_months`. After that Stripe stops applying it
+ * Finds or creates a Stripe Coupon for a custom action (e.g. "first 12 months 60€ on erwachsene_12").
+ * Uses `percent_off` (NOT amount_off) for `duration_in_months`. After that Stripe stops applying it
  * automatically and the subscription bills at the regular price — no cron, no price switch needed.
+ *
+ * WARUM percent_off statt amount_off: Stripe VERBIETET amount_off-Coupons in Kombination mit
+ * `billing_cycle_anchor` + `proration_behavior: 'create_prorations'`. Damit ein Aktions-Vertrag
+ * bei Vertragsbeginn = heute den anteiligen (rabattierten) Erstmonat SOFORT belastet — genau wie
+ * ein normaler Vertrag — muss der Rabatt als percent_off laufen (das erlaubt Stripe mit Proration).
+ * Für die runden Tarif-/Aktionspreise (z.B. 80→60 = 25%) trifft percent_off den Zielpreis exakt.
  *
  * Coupons are de-duplicated via metadata, so the same action (basis + discount + months) reuses the
  * same coupon across contracts.
@@ -242,8 +248,7 @@ export async function getOrCreateActionCoupon(
   }
 
   const basisPreis = config.unitAmount / 100
-  const amountOffEuro = basisPreis - aktionsPreis
-  if (amountOffEuro <= 0) {
+  if (basisPreis - aktionsPreis <= 0) {
     throw new Error(
       `Aktionspreis (${aktionsPreis}€) muss kleiner sein als der reguläre Tarifpreis (${basisPreis}€)`
     )
@@ -251,7 +256,9 @@ export async function getOrCreateActionCoupon(
   if (aktionsMonate < 1) {
     throw new Error(`aktionsMonate muss mindestens 1 sein (erhalten: ${aktionsMonate})`)
   }
-  const amountOffCents = Math.round(amountOffEuro * 100)
+  // percent_off auf 2 Nachkommastellen (Stripe-Limit). Für runde Preise exakt:
+  // 80→60 = 25%, 90→65 = 27,78% → 90·0,2778 = 25,00 → 65,00 €.
+  const percentOff = Math.round(((basisPreis - aktionsPreis) / basisPreis) * 10000) / 100
 
   // Look up existing coupons by metadata — no stripe.coupons.search; we list and filter.
   const existing = await stripe.coupons.list({ limit: 100 })
@@ -260,33 +267,28 @@ export async function getOrCreateActionCoupon(
       c.valid &&
       c.metadata?.type === 'custom_action' &&
       c.metadata?.basis_id === basisId &&
-      c.metadata?.amount_off_cents === String(amountOffCents) &&
+      c.metadata?.percent_off === String(percentOff) &&
       c.metadata?.duration_in_months === String(aktionsMonate) &&
-      c.amount_off === amountOffCents &&
-      c.currency === 'eur' &&
+      c.percent_off === percentOff &&
       c.duration === 'repeating' &&
       c.duration_in_months === aktionsMonate
   )
   if (match) return match.id
 
-  // WICHTIG: Stripe erlaubt für Coupon.name max. 40 Zeichen. Der frühere Name
-  // hängte zusätzlich `config.name` (Basis-Tarif) an und sprengte das Limit fast
-  // immer → "Field must be at most 40 characters", kein Checkout-Link.
-  // Der Name ist reines Anzeige-Label; die vollständige Info (Basis-Tarif,
-  // Bezeichnung) steckt in den Metadaten hier + in der Checkout-Session-Metadata.
+  // WICHTIG: Stripe erlaubt für Coupon.name max. 40 Zeichen. Der Name ist reines
+  // Anzeige-Label; die vollständige Info steckt in den Metadaten + Session-Metadata.
   // Dedup läuft über Metadaten, nicht über den Namen — Kürzung ist unkritisch.
   const couponName = `Aktion: ${aktionsPreis}€ statt ${basisPreis}€ (${aktionsMonate} Mon.)`.slice(0, 40)
 
   const coupon = await stripe.coupons.create({
-    amount_off: amountOffCents,
-    currency: 'eur',
+    percent_off: percentOff,
     duration: 'repeating',
     duration_in_months: aktionsMonate,
     name: couponName,
     metadata: {
       type: 'custom_action',
       basis_id: basisId,
-      amount_off_cents: String(amountOffCents),
+      percent_off: String(percentOff),
       duration_in_months: String(aktionsMonate),
       aktions_preis_euro: String(aktionsPreis),
       basis_preis_euro: String(basisPreis),

@@ -176,14 +176,11 @@ export async function POST(request: NextRequest) {
           console.warn('Cleanup alter first_month_prorated Items fehlgeschlagen:', e)
         }
 
-        // Aktions-Coupons (amount_off) sind NICHT mit create_prorations + billing_cycle_anchor
-        // kombinierbar (Stripe lehnt ab). Bei Aktion daher 'none' (heute 0 €, Coupon ab 1. Rechnung).
-        const billingParams = actionCouponId
-          ? { billing_cycle_anchor: plan.billing.billing_cycle_anchor, proration_behavior: 'none' as const }
-          : plan.billing
-
+        // Aktions-Coupons laufen jetzt als percent_off → mit create_prorations kombinierbar.
+        // Aktion wird daher wie ein Normaltarif behandelt: anteiliger (rabattierter) Erstmonat
+        // wird sofort belastet. Kein 'none'-Sonderfall mehr.
         sessionParams.subscription_data = {
-          ...billingParams,
+          ...plan.billing,
           default_tax_rates: [taxRateId],
           metadata: {
             subscription_id: subscriptionId,

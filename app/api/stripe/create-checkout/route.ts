@@ -209,28 +209,19 @@ export async function POST(request: NextRequest) {
           console.warn('Cleanup alter first_month_prorated Items fehlgeschlagen:', e)
         }
 
-        // ─────────────────────────────────────────────────────────────────────
-        // AKTIONEN (amount_off Coupon): Stripe verbietet `amount_off`-Coupons in
-        // Kombination mit `billing_cycle_anchor` + `proration_behavior:
-        // 'create_prorations'` ("You cannot use amount_off coupons with
-        // subscriptions that are passed a billing_cycle_anchor and a default
-        // proration_behavior of create_prorations"). Für Aktionen daher KEINE
-        // anteilige Auto-Proration: Anchor bleibt der 1. (des Folgemonats bzw. der
-        // zukünftige Vertragsbeginn), proration_behavior 'none'. Der Zeitraum bis
-        // zum Anchor ist beitragsfrei (Onboarding/Testzeit), der Aktionsrabatt greift
-        // ab der ersten vollen Rechnung am Anchor — heute 0 €, Zahlungsmethode wird
-        // trotzdem erfasst. Standard-Tarife behalten die faire Auto-Proration.
-        const billingParams = isCustomAction
-          ? { billing_cycle_anchor: plan.billing.billing_cycle_anchor, proration_behavior: 'none' as const }
-          : plan.billing
-
+        // AKTIONEN laufen jetzt über einen `percent_off`-Coupon (siehe
+        // getOrCreateActionCoupon) — der ist mit `create_prorations` kombinierbar.
+        // Dadurch werden Aktions-Verträge GENAUSO behandelt wie normale: der
+        // anteilige (rabattierte) Erstmonat wird bei Vertragsbeginn = heute SOFORT
+        // belastet, ab dem Anchor läuft das Abo zum Aktionspreis, nach `aktionsMonate`
+        // automatisch wieder zum Basis-Tarif. Kein Sonderfall mehr.
         sessionParams.subscription_data = {
-          ...billingParams,
+          ...plan.billing,
           default_tax_rates: [taxRateId],
           metadata: {
             ...baseMetadata,
             signup_date: dbSub?.start_date || new Date().toISOString().split('T')[0],
-            first_month_prorated_cents: String(isCustomAction ? 0 : plan.proratedCents),
+            first_month_prorated_cents: String(plan.proratedCents),
             ...(config.intervalCount ? { cancel_after_months: String(config.intervalCount) } : {}),
           },
         }
