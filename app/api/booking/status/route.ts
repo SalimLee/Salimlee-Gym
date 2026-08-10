@@ -122,7 +122,7 @@ export async function PATCH(request: NextRequest) {
                     Leider müssen wir dir mitteilen, dass deine Buchungsanfrage für <strong style="color: #f59e0b;">${booking.service}</strong> am <strong style="color: #fafafa;">${formattedDate}</strong> leider nicht wahrgenommen werden kann.</p>
                     <p style="color: #a1a1aa; line-height: 1.8;">Gerne kannst du eine neue Anfrage stellen oder uns direkt kontaktieren, damit wir einen passenden Termin für dich finden.</p>
                     <div style="margin-top: 30px; text-align: center;">
-                      <a href="https://salimlee-gym.de" style="display: inline-block; padding: 14px 28px; background: linear-gradient(to right, #f59e0b, #d97706); color: #18181b; text-decoration: none; border-radius: 8px; font-weight: bold;">Neue Anfrage stellen</a>
+                      <a href="https://www.salimlee-gym.de" style="display: inline-block; padding: 14px 28px; background: linear-gradient(to right, #f59e0b, #d97706); color: #18181b; text-decoration: none; border-radius: 8px; font-weight: bold;">Neue Anfrage stellen</a>
                     </div>
                     <p style="color: #a1a1aa; margin-top: 30px; line-height: 1.8;">Sportliche Grüße,<br><strong style="color: #f59e0b;">Dein Salim Lee Team</strong></p>
                   </div>
