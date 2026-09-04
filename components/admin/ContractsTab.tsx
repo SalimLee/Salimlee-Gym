@@ -78,8 +78,6 @@ const CUSTOM_ACTION_BASIS_OPTIONS = [
   { id: 'erwachsene_12', label: 'Erwachsene & Jugendliche – 12 Monate (80 €/Monat)', preis: 80 },
   { id: 'kinder_12', label: 'Kinder (3–14 Jahre) – 12 Monate (50 €/Monat)', preis: 50 },
   { id: 'monatlich', label: 'Monatlich kündbar (120 €/Monat)', preis: 120 },
-  { id: 'schueler_6', label: 'Schüler / Azubi / Student – 6 Monate (65 €/Monat)', preis: 65 },
-  { id: 'schueler_12', label: 'Schüler / Azubi / Student – 12 Monate (55 €/Monat)', preis: 55 },
 ]
 
 export function ContractsTab({ members, supabase, onRefresh }: ContractsTabProps) {

@@ -13,8 +13,6 @@ const PLAN_OPTIONS: { id: string; label: string; price: number }[] = [
   { id: 'erwachsene_12', label: 'Erwachsene & Jugendliche – 12 Monate', price: 80 },
   { id: 'kinder_12', label: 'Kinder (3–14 Jahre) – 12 Monate', price: 50 },
   { id: 'monatlich', label: 'Monatlich kündbar', price: 120 },
-  { id: 'schueler_6', label: 'Schüler/Azubi/Student – 6 Monate', price: 65 },
-  { id: 'schueler_12', label: 'Schüler/Azubi/Student – 12 Monate', price: 55 },
 ]
 
 interface Member { id: string; name: string; email: string; phone: string | null; active: boolean; created_at: string; updated_at: string; notes: string | null; photo_url?: string | null }
@@ -121,6 +119,8 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
   const [discountMonate, setDiscountMonate] = useState<string>('')
   const [applyingDiscount, setApplyingDiscount] = useState(false)
   const [discountError, setDiscountError] = useState<string | null>(null)
+
+  const [updatingPm, setUpdatingPm] = useState<string | null>(null)
 
   const showSnackbar = useCallback((message: string, tone: 'success' | 'danger' | 'info' = 'success') => setSnackbar({ message, tone }), [])
   useEffect(() => {
@@ -431,6 +431,25 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
       setDiscountSub(null); setDiscountPreis(''); setDiscountMonate('')
     } catch { setDiscountError('Verbindung fehlgeschlagen') }
     setApplyingDiscount(false)
+  }
+
+  // Schickt dem Mitglied einen Link, um NUR die Zahlungsmethode (SEPA-Mandat) zu
+  // erneuern. Legt bewusst KEIN neues Abo an — ein zweiter Checkout-Link würde in
+  // Stripe ein zweites Abo erzeugen und doppelt abbuchen.
+  const sendPaymentMethodLink = async (sub: Subscription) => {
+    const member = getMember(sub.member_id)
+    if (!member) return
+    setUpdatingPm(sub.id)
+    try {
+      const res = await fetch('/api/subscription/update-payment-method', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subscriptionId: sub.id, memberEmail: member.email, memberName: member.name, sendMail: true }),
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) showSnackbar(data.error || 'Link fehlgeschlagen', 'danger')
+      else showSnackbar(data.mailed ? `Link an ${member.email} gesendet` : 'Link erstellt')
+    } catch { showSnackbar('Verbindung fehlgeschlagen', 'danger') }
+    setUpdatingPm(null)
   }
 
   const deleteSub = async (id: string) => {
@@ -809,6 +828,11 @@ export default function SubscriptionsTab({ subscriptions, setSubscriptions, memb
                           {(sub.status === 'active' || sub.status === 'paused') && (
                             <IconButton onClick={() => { setChangePlan(sub); setSelectedPlanId(''); setChangePlanError(null) }} title="Tarif wechseln">
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
+                            </IconButton>
+                          )}
+                          {(sub.status === 'active' || sub.status === 'pending' || sub.status === 'paused') && sub.stripe_subscription_id && sub.type !== 'punch_card' && (
+                            <IconButton onClick={() => sendPaymentMethodLink(sub)} disabled={updatingPm === sub.id} title="Zahlungsmethode aktualisieren — schickt dem Mitglied einen Link für ein neues SEPA-Mandat. Legt KEIN neues Abo an (keine Doppelabbuchung).">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 10h18M7 15h2m4 0h4M5 6h14a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2z" /></svg>
                             </IconButton>
                           )}
                           {(sub.status === 'active' || sub.status === 'paused') && sub.stripe_subscription_id && sub.type !== 'punch_card' && (

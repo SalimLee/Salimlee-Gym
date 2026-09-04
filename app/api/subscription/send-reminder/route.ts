@@ -83,6 +83,38 @@ export async function POST(request: NextRequest) {
       getOrCreateTaxRate(),
     ])
 
+    // DOPPEL-ABO-SCHUTZ: Ein erneut verschickter Erinnerungs-/Reaktivierungs-Link
+    // erzeugt beim Einlösen ein NEUES Stripe-Abo. Hat der Kunde bereits ein lebendes
+    // Abo, entstünden zwei Rechnungen + doppelte SEPA-Abbuchungen pro Monat (real
+    // aufgetreten). Bei Zahlungsproblemen ist "Zahlungsmethode aktualisieren" der
+    // richtige Weg (mode 'setup' — legt kein Abo an).
+    if (config.recurring) {
+      const live = await stripe.subscriptions.list({ customer: customerId, status: 'all', limit: 20 })
+      // WICHTIG: NICHT jedes zweite Abo ist ein Fehler — Familien teilen sich eine
+      // E-Mail (= ein Stripe-Kunde) und haben legitim mehrere Mitgliedschaften.
+      // Blockiert wird nur der ECHTE Duplikat-Fall: gleicher lokaler Abo-Datensatz
+      // oder derselbe Tarif nochmal.
+      const blocking = live.data.filter(s => {
+        if (!['active', 'past_due', 'unpaid', 'trialing', 'incomplete'].includes(s.status)) return false
+        return s.metadata?.subscription_id === subscriptionId
+          || s.metadata?.membership_id === membershipId
+      })
+      if (blocking.length > 0) {
+        const list = blocking.map(s => `${s.id} (${s.status})`).join(', ')
+        return NextResponse.json(
+          {
+            error:
+              `Für diesen Tarif läuft bereits ein Stripe-Abo: ${list}. ` +
+              `Es wurde KEIN neuer Zahlungslink erzeugt (das würde ein zweites Abo und doppelte Abbuchungen anlegen). ` +
+              `Bei Zahlungsproblemen bitte "Zahlungsmethode aktualisieren" nutzen.`,
+            code: 'duplicate_subscription',
+            existing: blocking.map(s => ({ id: s.id, status: s.status })),
+          },
+          { status: 409 }
+        )
+      }
+    }
+
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
 
     const sessionParams: Parameters<typeof stripe.checkout.sessions.create>[0] = {

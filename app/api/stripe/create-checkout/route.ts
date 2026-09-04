@@ -67,6 +67,41 @@ export async function POST(request: NextRequest) {
         : Promise.resolve(null as string | null),
     ])
 
+    // ─────────────────────────────────────────────────────────────────────
+    // DOPPEL-ABO-SCHUTZ (kritisch!)
+    // Jeder abgeschlossene Checkout erzeugt in Stripe ein NEUES Abo. Wurde einem
+    // Kunden bei Zahlungsproblemen erneut ein Checkout-Link geschickt, entstand ein
+    // ZWEITES aktives Abo -> zwei Rechnungen + mehrfache SEPA-Abbuchungen pro Monat.
+    // Genau dieser Fall ist real aufgetreten. Deshalb: hat der Kunde bereits ein
+    // lebendes Abo, wird hier abgebrochen. Für Zahlungsprobleme ist der richtige Weg
+    // "Zahlungsmethode aktualisieren" (mode 'setup', legt kein neues Abo an).
+    if (config.recurring) {
+      const live = await stripe.subscriptions.list({ customer: customerId, status: 'all', limit: 20 })
+      // WICHTIG: NICHT jedes zweite Abo ist ein Fehler — Familien teilen sich eine
+      // E-Mail (= ein Stripe-Kunde) und haben legitim mehrere Mitgliedschaften
+      // (z.B. Kind + Jugendlicher). Blockiert wird deshalb nur der ECHTE Duplikat-
+      // Fall: gleicher lokaler Abo-Datensatz oder derselbe Tarif nochmal.
+      const blocking = live.data.filter(s => {
+        if (!['active', 'past_due', 'unpaid', 'trialing', 'incomplete'].includes(s.status)) return false
+        return s.metadata?.subscription_id === subscriptionId
+          || s.metadata?.membership_id === effectiveMembershipId
+      })
+      if (blocking.length > 0) {
+        const list = blocking.map(s => `${s.id} (${s.status})`).join(', ')
+        return NextResponse.json(
+          {
+            error:
+              `Für diesen Tarif läuft bereits ein Stripe-Abo: ${list}. ` +
+              `Es wurde KEIN zweites Abo angelegt (das würde zu doppelten Abbuchungen führen). ` +
+              `Bei Zahlungsproblemen bitte "Zahlungsmethode aktualisieren" nutzen — oder das alte Abo zuerst kündigen.`,
+            code: 'duplicate_subscription',
+            existing: blocking.map(s => ({ id: s.id, status: s.status })),
+          },
+          { status: 409 }
+        )
+      }
+    }
+
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
 
     // Build checkout session params

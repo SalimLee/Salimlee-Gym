@@ -42,6 +42,38 @@ export async function POST(request: NextRequest) {
       case 'checkout.session.async_payment_succeeded':
       case 'checkout.session.async_payment_failed': {
         const session = event.data.object as Stripe.Checkout.Session
+
+        // ── Zahlungsmethoden-Update (mode: 'setup') ────────────────────────
+        // Kunde hat über den "Zahlungsmethode aktualisieren"-Link ein NEUES SEPA-
+        // Mandat erteilt. Hier entsteht bewusst KEIN neues Abo — die neue Methode
+        // wird am BESTEHENDEN Abo + am Kunden als Standard gesetzt. Genau das
+        // verhindert Doppel-Abos (früher: neuer Checkout-Link => zweites Abo =>
+        // doppelte Abbuchung).
+        if (session.mode === 'setup') {
+          const setupIntentId = typeof session.setup_intent === 'string' ? session.setup_intent : session.setup_intent?.id
+          const customerId = typeof session.customer === 'string' ? session.customer : session.customer?.id
+          if (setupIntentId && customerId) {
+            const si = await stripe.setupIntents.retrieve(setupIntentId)
+            const pmId = typeof si.payment_method === 'string' ? si.payment_method : si.payment_method?.id
+            if (pmId) {
+              await stripe.customers.update(customerId, { invoice_settings: { default_payment_method: pmId } })
+              const targetSub = session.metadata?.stripe_subscription_id
+              if (targetSub) {
+                await stripe.subscriptions.update(targetSub, { default_payment_method: pmId })
+              }
+              const localSubId = session.metadata?.subscription_id
+              if (localSubId) {
+                await supabaseAdmin
+                  .from('subscriptions')
+                  .update({ payment_status: 'pending' })
+                  .eq('id', localSubId)
+              }
+              console.log(`Zahlungsmethode aktualisiert: ${pmId} (Kunde ${customerId}${targetSub ? `, Abo ${targetSub}` : ''})`)
+            }
+          }
+          break
+        }
+
         const subscriptionId = session.metadata?.subscription_id
 
         if (!subscriptionId) {
