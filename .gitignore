@@ -29,6 +29,14 @@ yarn-error.log*
 # vercel
 .vercel
 
+# cinematic: heavy source media (raw clips, 4K generations, references) stay local
+assets/content/raw/
+assets/content/keyframes/
+assets/content/reference/
+assets/content/omni-input/
+assets/content/generated/
+docs/referenz/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
