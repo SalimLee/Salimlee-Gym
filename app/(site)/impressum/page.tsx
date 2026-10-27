@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { LegalShell } from '@/components/site/LegalShell'
 
 export const metadata: Metadata = {
   title: 'Impressum',
@@ -7,21 +8,9 @@ export const metadata: Metadata = {
 
 export default function ImpressumPage() {
   return (
-    <div className="min-h-screen bg-dark-950 text-dark-50">
-      {/* Header */}
-      <header className="border-b border-dark-800 bg-dark-900/80">
-        <div className="max-w-4xl mx-auto px-4 py-6 flex items-center justify-between">
-          <Link href="/" className="text-xl font-black">
-            <span className="bg-gradient-to-r from-brand-400 to-brand-600 bg-clip-text text-transparent">SALIM LEE</span>
-            <span className="text-dark-400 text-sm ml-2 font-normal">GYM</span>
-          </Link>
-          <Link href="/" className="text-sm text-dark-400 hover:text-brand-500 transition-colors">
-            Zurück zur Startseite
-          </Link>
-        </div>
-      </header>
+    <LegalShell>
 
-      <main className="max-w-4xl mx-auto px-4 py-16">
+      <main className="sl-legal sl-wrap">
         <h1 className="text-3xl font-black mb-8">Impressum</h1>
 
         <div className="space-y-8 text-dark-300 leading-relaxed">
@@ -108,6 +97,6 @@ export default function ImpressumPage() {
           </section>
         </div>
       </main>
-    </div>
+    </LegalShell>
   )
 }

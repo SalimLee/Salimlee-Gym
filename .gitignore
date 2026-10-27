@@ -40,3 +40,7 @@ docs/referenz/
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Lighthouse-Rohreports (base64-Screenshots, ~1 MB je Datei) bleiben lokal
+docs/qa/lighthouse/*.report.html
+docs/qa/lighthouse/*.report.json

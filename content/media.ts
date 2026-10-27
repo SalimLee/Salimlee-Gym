@@ -3,16 +3,16 @@
 
 export const MEDIA = {
   "hero": {
-    "video": "/media/hero/hero-16x9-1080.273d9cc4.mp4",
+    "video": "/media/hero/hero-16x9-1080.0388ff53.mp4",
     "videoAv1": null,
     "uRest": [
       0.6,
       0.37
     ],
     "poster": {
-      "w2560": "/media/hero/poster-16x9-2560.66e546b9.avif",
-      "w1920": "/media/hero/poster-16x9-1920.68e44b21.avif",
-      "w1280": "/media/hero/poster-16x9-1280.befbf38f.avif"
+      "w2560": "/media/hero/poster-16x9-2560.925e7a1c.avif",
+      "w1920": "/media/hero/poster-16x9-1920.c1d9efa2.avif",
+      "w1280": "/media/hero/poster-16x9-1280.b11296b3.avif"
     },
     "og": "/media/hero/og-1200x630.aacc1887.avif"
   },
@@ -20,12 +20,12 @@ export const MEDIA = {
     "video": null,
     "poster": {
       "w1080": "/media/hero/poster-9x16-1080.3f8753c1.avif",
-      "w750": "/media/hero/poster-9x16-750.11fe56c5.avif"
+      "w750": "/media/hero/poster-9x16-750.01385555.avif"
     },
     "fallback": "poster-zoom"
   },
   "haltung": {
-    "video": "/media/haltung/haltung-16x9-1080.91aaa9e7.mp4",
+    "video": "/media/haltung/haltung-16x9-1080.9b96a4ba.mp4",
     "videoAv1": null,
     "poster": "/media/haltung/poster-16x9-1920.6718de42.avif",
     "posterBlur": "/media/haltung/poster-blur-640.0cfa77b4.avif"
@@ -43,15 +43,15 @@ export const MEDIA = {
     "video": "/media/start/start-16x9-1080.02c3343c.mp4",
     "videoAv1": null,
     "poster": "/media/start/poster-16x9-1920.79987431.avif",
-    "posterMobile": "/media/start/poster-9x16-1080.e5cb5446.avif",
+    "posterMobile": "/media/start/poster-9x16-1080.4441fb70.avif",
     "videoMobile": "/media/start/start-9x16-720.18a5a36e.mp4"
   },
   "coach": {
-    "w21x9": "/media/coach/coach-21x9-2560.3b372710.avif",
+    "w21x9": "/media/coach/coach-21x9-2560.3da47cd8.avif",
     "w4x5": "/media/coach/coach-4x5-1200.6ea44297.avif"
   },
   "gym": {
-    "w16x9": "/media/gym/gym-16x9-2560.4a0c2e54.avif",
+    "w16x9": "/media/gym/gym-16x9-2560.28251d69.avif",
     "hexagons": [
       [
         0.46,
@@ -69,8 +69,8 @@ export const MEDIA = {
     "w4x5": "/media/gym/gym-4x5-1200.337a5a40.avif"
   },
   "details": {
-    "kinder": "/media/kurse/detail-kinder-9x16.b2dd26ee.avif",
-    "frauen": "/media/kurse/detail-frauen-9x16.743c79a1.avif",
+    "kinder": "/media/kurse/detail-kinder-9x16.2b9349d5.avif",
+    "frauen": "/media/kurse/detail-frauen-9x16.025a933d.avif",
     "preise": "/media/preise/detail-hintergrund-21x9.d0d053ce.avif"
   },
   "reel": {

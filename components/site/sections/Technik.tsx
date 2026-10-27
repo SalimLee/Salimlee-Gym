@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ROUNDS, TECHNIK } from "@/content/site";
 import { MEDIA } from "@/content/media";
 import { gsap, ScrollTrigger, prefersReducedMotion } from "../motion/gsap";
+import { useHeavyVideo } from "../motion/useInView";
 import { RoundMark } from "../ui/RoundMark";
 
 const media = MEDIA as Record<string, any>;
@@ -17,6 +18,7 @@ const media = MEDIA as Record<string, any>;
 export function Technik() {
   const rootRef = useRef<HTMLElement>(null);
   const [beat, setBeat] = useState(0);
+  const [frameRef, near] = useHeavyVideo<HTMLDivElement>();
 
   // Takt der Schlagnamen – nur solange sichtbar
   useEffect(() => {
@@ -95,7 +97,7 @@ export function Technik() {
     >
       <div className="sl-technik-stage" data-stage>
         <div className="sl-wrap sl-technik-grid">
-          <div className="sl-technik-frame sl-glass">
+          <div className="sl-technik-frame sl-glass" ref={frameRef}>
             {t.poster ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
@@ -103,9 +105,11 @@ export function Technik() {
                 alt=""
                 aria-hidden="true"
                 className="sl-video-layer"
+              loading="lazy"
+              decoding="async"
               />
             ) : null}
-            {t.video ? (
+            {t.video && near ? (
               <video
                 className="sl-video-layer"
                 muted

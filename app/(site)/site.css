@@ -447,7 +447,7 @@ html:has(.sl-site) body {
 .sl-technik-frame { position: relative; aspect-ratio: 9 / 16; max-height: 78svh; overflow: hidden; }
 .sl-technik-lead { margin: 8px 0 24px; }
 .sl-punches { list-style: none; margin: 0 0 32px; padding: 0; }
-.sl-punch { color: rgba(255,255,255,.25); transition: color 240ms ease-out; position: relative; display: block; width: fit-content; }
+.sl-punch { color: rgba(255,255,255,.46); transition: color 240ms ease-out; position: relative; display: block; width: fit-content; }
 .sl-punch.is-active { color: var(--sl-ink); }
 .sl-punch.is-active::after { content: ''; position: absolute; left: 0; bottom: -2px; width: 44px; height: 3px; background: var(--sl-signal-500); }
 .sl-pillars { list-style: none; margin: 0; padding-top: 16px; display: flex; flex-wrap: wrap; gap: 12px 32px; }
@@ -611,3 +611,43 @@ textarea.sl-input { resize: vertical; }
 .sl-reel-hit { position: absolute; top: 0; bottom: 0; width: 35%; background: transparent; border: 0; cursor: pointer; }
 .sl-reel-prev { left: 0; }
 .sl-reel-next { right: 0; }
+
+/* ==========================  Rechts- und Zahlungsseiten (B.6.12)  ==========================
+   Text und Markup der Seiten bleiben unveraendert – hier wird nur umgefaerbt,
+   indem die alten Utility-Klassen im .sl-legal-Kontext ueberschrieben werden. */
+.sl-legal-page { padding-top: 72px; }
+.sl-legal { padding-block: 64px 96px; }
+.sl-legal.sl-legal-card { padding: 0; overflow: hidden; }
+.sl-legal-center { min-height: calc(100svh - 72px); display: flex; align-items: center; justify-content: center; padding: 48px 24px; }
+.sl-legal h1 { font-size: clamp(32px, 4vw, 56px); font-weight: 700; text-transform: uppercase; letter-spacing: -0.03em; line-height: 0.95; color: var(--sl-ink); margin-bottom: 32px; }
+.sl-legal h2 { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; color: var(--sl-ink); margin-bottom: 10px; }
+.sl-legal p, .sl-legal li { color: var(--sl-body); }
+.sl-legal a { color: var(--sl-signal-300); }
+.sl-legal a:hover { text-decoration: underline; }
+/* Alte Farb-Utilities im Legal-Kontext neutralisieren (hoehere Spezifitaet) */
+.sl-legal .text-dark-300, .sl-legal .text-dark-200 { color: var(--sl-body); }
+.sl-legal .text-dark-100, .sl-legal .text-white { color: var(--sl-ink); }
+.sl-legal .text-dark-400, .sl-legal .text-dark-500 { color: var(--sl-mute); }
+.sl-legal .text-brand-500, .sl-legal .text-brand-400, .sl-legal .text-brand-300 { color: var(--sl-signal-300); }
+.sl-legal .bg-dark-900, .sl-legal .bg-dark-800 { background-color: transparent; }
+.sl-legal .border-dark-800, .sl-legal .border-dark-700 { border-color: var(--sl-line); }
+.sl-legal .bg-gradient-to-r { background-image: none !important; background-color: rgba(255,255,255,.04); }
+.sl-legal .bg-brand-500 { background-color: var(--sl-ink); color: var(--sl-night-950); }
+.sl-legal .bg-brand-500:hover { background-color: var(--sl-mist-100, #f2f5f8); }
+.sl-legal .rounded-lg, .sl-legal .rounded-2xl { border-radius: 2px; }
+
+/* ==========================  Mobil: Hero (B.7)  ==========================
+   Kein FocusField, kein 16:9-Video – nur das 9:16-Poster mit langsamem Zoom,
+   weil gen_v01m (Veo) fehlt. */
+@media (max-width: 1023px) {
+  .sl-hero-video,
+  .sl-hero-canvas { display: none !important; }
+  .sl-hero-poster-mobile { animation: sl-slow-zoom 12s ease-in-out infinite alternate; }
+}
+@keyframes sl-slow-zoom {
+  from { transform: scale(1); }
+  to { transform: scale(1.06); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sl-hero-poster-mobile { animation: none !important; }
+}

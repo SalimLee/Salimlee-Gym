@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { LegalShell } from '@/components/site/LegalShell'
 
 export const metadata = {
   title: 'Zahlung erfolgreich – Salim Lee Boxing & Fitness Gym',
@@ -6,8 +7,9 @@ export const metadata = {
 
 export default function ZahlungErfolgreichPage() {
   return (
-    <div className="min-h-screen bg-dark-950 flex items-center justify-center p-6">
-      <div className="max-w-md w-full bg-dark-900 rounded-2xl border border-dark-800 overflow-hidden">
+    <LegalShell>
+      <div className="sl-legal-center">
+      <div className="sl-legal sl-glass sl-legal-card">
         <div className="bg-gradient-to-r from-green-600 to-green-500 p-8 text-center">
           <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4">
             <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -31,6 +33,7 @@ export default function ZahlungErfolgreichPage() {
           </Link>
         </div>
       </div>
-    </div>
+      </div>
+    </LegalShell>
   )
 }

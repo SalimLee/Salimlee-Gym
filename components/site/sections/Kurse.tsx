@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { KURSE, ROUNDS } from "@/content/site";
 import { MEDIA } from "@/content/media";
 import { gsap, prefersReducedMotion } from "../motion/gsap";
+import { useAfterLoad } from "../motion/useInView";
 import { RoundMark } from "../ui/RoundMark";
 import type { BookingPreset } from "../SiteShell";
 
@@ -39,6 +40,7 @@ function laneMedia(id: string): {
 export function Kurse({ onBook }: { onBook: (p: BookingPreset) => void }) {
   const rootRef = useRef<HTMLElement>(null);
   const [active, setActive] = useState(0);
+  const afterLoad = useAfterLoad();
 
   useEffect(() => {
     const root = rootRef.current;
@@ -88,6 +90,7 @@ export function Kurse({ onBook }: { onBook: (p: BookingPreset) => void }) {
                 <button
                   type="button"
                   className="sl-lane-trigger"
+                  aria-label={lane.label}
                   aria-expanded={open}
                   onFocus={() => setActive(i)}
                   onClick={() => setActive(i)}
@@ -98,7 +101,7 @@ export function Kurse({ onBook }: { onBook: (p: BookingPreset) => void }) {
                 <div className="sl-lane-media" aria-hidden="true">
                   {m.video ? (
                     <video
-                      src={open ? m.video : undefined}
+                      src={open && afterLoad ? m.video : undefined}
                       muted
                       playsInline
                       loop

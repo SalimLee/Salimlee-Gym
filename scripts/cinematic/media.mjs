@@ -325,11 +325,11 @@ function main() {
   if (S.b01) {
     registry.hero ??= {};
     registry.hero.poster = {
-      w2560: encAvif(S.b01, "hero/poster-16x9-2560.avif", { w: 2560, crf: 30 })
+      w2560: encAvif(S.b01, "hero/poster-16x9-2560.avif", { w: 2560, crf: 36 })
         .src,
-      w1920: encAvif(S.b01, "hero/poster-16x9-1920.avif", { w: 1920, crf: 30 })
+      w1920: encAvif(S.b01, "hero/poster-16x9-1920.avif", { w: 1920, crf: 36 })
         .src,
-      w1280: encAvif(S.b01, "hero/poster-16x9-1280.avif", { w: 1280, crf: 30 })
+      w1280: encAvif(S.b01, "hero/poster-16x9-1280.avif", { w: 1280, crf: 36 })
         .src,
     };
     registry.hero.og = encAvif(S.b01, "hero/og-1200x630.avif", {
@@ -356,7 +356,7 @@ function main() {
           w: 1080,
           crf: 30,
         }).src,
-        w750: encAvif(S.b01m, "hero/poster-9x16-750.avif", { w: 750, crf: 30 })
+        w750: encAvif(S.b01m, "hero/poster-9x16-750.avif", { w: 750, crf: 36 })
           .src,
       },
       fallback: exists(S.v01m) ? null : "poster-zoom",
@@ -459,7 +459,7 @@ function main() {
     registry.start.posterMobile = encAvif(
       S.b08m,
       "start/poster-9x16-1080.avif",
-      { w: 1080, crf: 30 },
+      { w: 1080, crf: 36 },
     ).src;
   }
   if (S.raw03 && lutNebel) {
@@ -480,7 +480,7 @@ function main() {
   // 05 COACH (AVIF q60 ~ crf 26)
   if (S.b05)
     registry.coach = {
-      w21x9: encAvif(S.b05, "coach/coach-21x9-2560.avif", { w: 2560, crf: 26 })
+      w21x9: encAvif(S.b05, "coach/coach-21x9-2560.avif", { w: 2560, crf: 32 })
         .src,
     };
   if (S.refCoach) {
@@ -494,7 +494,7 @@ function main() {
   // 06 GYM
   if (S.b06)
     registry.gym = {
-      w16x9: encAvif(S.b06, "gym/gym-16x9-2560.avif", { w: 2560, crf: 26 }).src,
+      w16x9: encAvif(S.b06, "gym/gym-16x9-2560.avif", { w: 2560, crf: 32 }).src,
       hexagons: GYM_HEXAGONS,
     };
   if (S.boxring) {
@@ -511,13 +511,13 @@ function main() {
     registry.details.kinder = encAvif(
       S.detailKinder,
       "kurse/detail-kinder-9x16.avif",
-      { w: 720, crf: 30 },
+      { w: 720, crf: 36 },
     ).src;
   if (S.detailFrauen)
     registry.details.frauen = encAvif(
       S.detailFrauen,
       "kurse/detail-frauen-9x16.avif",
-      { w: 720, crf: 30 },
+      { w: 720, crf: 36 },
     ).src;
   if (S.detailPreise)
     registry.details.preise = encAvif(

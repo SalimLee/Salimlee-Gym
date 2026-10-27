@@ -22,6 +22,10 @@ export function Hero({ onBook, onReel }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [glReady, setGlReady] = useState(false);
   const [touch, setTouch] = useState(false);
+  const [wideReady, setWideReady] = useState(false);
+  useEffect(() => {
+    setWideReady(!window.matchMedia("(max-width: 1023px)").matches);
+  }, []);
 
   const hero = media.hero ?? {};
   const heroMobile = media.heroMobile ?? {};
@@ -170,34 +174,33 @@ export function Hero({ onBook, onReel }: Props) {
     >
       {/* Medien */}
       <div className="sl-hero-media" data-anim="media">
-        {poster ? (
-          // eslint-disable-next-line @next/next/no-img-element
+        <picture>
+          {heroMobile.poster ? (
+            <source
+              media="(max-width: 1023px)"
+              srcSet={`${heroMobile.poster.w750} 750w, ${heroMobile.poster.w1080} 1080w`}
+              sizes="100vw"
+            />
+          ) : null}
+          {hero.poster ? (
+            <source
+              media="(min-width: 1024px)"
+              srcSet={`${hero.poster.w1280} 1280w, ${hero.poster.w1920} 1920w, ${hero.poster.w2560} 2560w`}
+              sizes="100vw"
+            />
+          ) : null}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={poster}
-            srcSet={
-              hero.poster
-                ? `${hero.poster.w1280} 1280w, ${hero.poster.w1920} 1920w, ${hero.poster.w2560} 2560w`
-                : undefined
-            }
-            sizes="100vw"
+            src={poster ?? posterMobile}
             alt={HERO.alt}
-            className="sl-video-layer sl-hero-poster-desktop"
+            className="sl-video-layer"
             // @ts-expect-error fetchpriority ist (noch) nicht typisiert
             fetchpriority="high"
             decoding="async"
           />
-        ) : null}
-        {posterMobile ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={posterMobile}
-            alt={HERO.alt}
-            className="sl-video-layer sl-hero-poster-mobile"
-            decoding="async"
-          />
-        ) : null}
+        </picture>
 
-        {hero.video ? (
+        {hero.video && wideReady ? (
           <video
             ref={videoRef}
             className="sl-video-layer sl-hero-video"

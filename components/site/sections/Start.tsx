@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { KONTAKT, ROUNDS, START } from "@/content/site";
 import { MEDIA } from "@/content/media";
 import { gsap, ScrollTrigger, prefersReducedMotion } from "../motion/gsap";
+import { useHeavyVideo, useMediaQuery, useNearViewport } from "../motion/useInView";
 import { RoundMark } from "../ui/RoundMark";
 import { KiChip } from "../ui/KiChip";
 import type { BookingPreset } from "../SiteShell";
@@ -18,6 +19,8 @@ const media = MEDIA as Record<string, any>;
 export function Start({ onBook }: { onBook: (p: BookingPreset) => void }) {
   const rootRef = useRef<HTMLElement>(null);
   const tel = KONTAKT.info.phone.replace(/\s/g, "");
+  const [mediaRef, near] = useHeavyVideo<HTMLDivElement>();
+  const narrow = useMediaQuery("(max-width: 1023px)");
 
   useEffect(() => {
     const root = rootRef.current;
@@ -59,7 +62,7 @@ export function Start({ onBook }: { onBook: (p: BookingPreset) => void }) {
       aria-labelledby="sl-start-h2"
     >
       <div className="sl-start-stage" data-stage>
-        <div className="sl-start-media">
+        <div className="sl-start-media" ref={mediaRef}>
           {s.poster ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -67,6 +70,8 @@ export function Start({ onBook }: { onBook: (p: BookingPreset) => void }) {
               alt=""
               aria-hidden="true"
               className="sl-video-layer sl-start-wide"
+              loading="lazy"
+              decoding="async"
             />
           ) : null}
           {s.posterMobile ? (
@@ -76,9 +81,11 @@ export function Start({ onBook }: { onBook: (p: BookingPreset) => void }) {
               alt=""
               aria-hidden="true"
               className="sl-video-layer sl-start-portrait"
+              loading="lazy"
+              decoding="async"
             />
           ) : null}
-          {s.video ? (
+          {s.video && near && !narrow ? (
             <video
               className="sl-video-layer sl-start-wide"
               muted
@@ -92,7 +99,7 @@ export function Start({ onBook }: { onBook: (p: BookingPreset) => void }) {
               <source src={s.video} type="video/mp4" />
             </video>
           ) : null}
-          {s.videoMobile ? (
+          {s.videoMobile && near && narrow ? (
             <video
               className="sl-video-layer sl-start-portrait"
               muted

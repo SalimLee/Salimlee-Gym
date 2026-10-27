@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { LIVE } from "@/content/site";
 import { MEDIA } from "@/content/media";
+import { useAfterLoad } from "../motion/useInView";
 import { getLiveState, type LiveState } from "./schedule";
 
 /**
@@ -13,6 +14,7 @@ import { getLiveState, type LiveState } from "./schedule";
 export function LiveCard({ onExpand }: { onExpand?: () => void }) {
   // Serverseitig neutral rendern, im Client aktualisieren (keine Hydration-Diffs).
   const [state, setState] = useState<LiveState | null>(null);
+  const afterLoad = useAfterLoad();
 
   useEffect(() => {
     const update = () => setState(getLiveState());
@@ -59,7 +61,7 @@ export function LiveCard({ onExpand }: { onExpand?: () => void }) {
       </div>
 
       <div className="sl-live-media">
-        {mini ? (
+        {mini && afterLoad ? (
           <video
             src={mini}
             muted

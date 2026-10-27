@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { HALTUNG, ROUNDS } from "@/content/site";
 import { MEDIA } from "@/content/media";
 import { gsap, ScrollTrigger, prefersReducedMotion } from "../motion/gsap";
+import { useHeavyVideo } from "../motion/useInView";
 import { RoundMark } from "../ui/RoundMark";
 import { KiChip } from "../ui/KiChip";
 
@@ -16,6 +17,7 @@ const media = MEDIA as Record<string, any>;
  */
 export function Haltung() {
   const rootRef = useRef<HTMLElement>(null);
+  const [mediaRef, near] = useHeavyVideo<HTMLDivElement>();
 
   useEffect(() => {
     const root = rootRef.current;
@@ -79,7 +81,7 @@ export function Haltung() {
       aria-labelledby="sl-haltung-h2"
     >
       <div className="sl-haltung-stage" data-stage>
-        <div className="sl-haltung-media">
+        <div className="sl-haltung-media" ref={mediaRef}>
           {h.poster ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -87,9 +89,11 @@ export function Haltung() {
               alt=""
               aria-hidden="true"
               className="sl-video-layer"
+              loading="lazy"
+              decoding="async"
             />
           ) : null}
-          {h.video ? (
+          {h.video && near ? (
             <video
               className="sl-video-layer"
               muted
