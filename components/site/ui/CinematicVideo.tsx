@@ -108,8 +108,7 @@ export function CinematicVideo({
         className="sl-video-layer"
         style={{ objectPosition }}
         loading={priority ? "eager" : "lazy"}
-        // @ts-expect-error fetchpriority ist (noch) nicht typisiert
-        fetchpriority={priority ? "high" : undefined}
+        fetchPriority={priority ? "high" : undefined}
         decoding="async"
       />
 
