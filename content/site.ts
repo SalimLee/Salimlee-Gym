@@ -252,6 +252,9 @@ export const FOOTER = {
 export const UI = {
   skip: "Zum Inhalt springen",
   aiChip: "KI-bearbeitet",
+  /** Art. 13 DSGVO: Hinweis an der Stelle, an der die Daten erhoben werden. */
+  privacyNote: "Wie wir deine Daten verarbeiten, steht in der",
+  privacyLink: "Datenschutzerklärung",
 } as const;
 
 export const SERVICES_BY_ID = Object.fromEntries(

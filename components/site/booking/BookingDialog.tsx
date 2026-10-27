@@ -13,6 +13,7 @@ import {
   buildBookingPayload,
   courseValue,
 } from "./payload";
+import { UI } from "@/content/site";
 import type { BookingPreset } from "../SiteShell";
 
 const FOCUSABLE =
@@ -403,6 +404,14 @@ export function BookingDialog({
                 Abbrechen
               </button>
             </div>
+
+            <p className="sl-form-privacy">
+              {UI.privacyNote}{" "}
+              <a href="/datenschutz" target="_blank" rel="noopener noreferrer">
+                {UI.privacyLink}
+              </a>
+              .
+            </p>
           </form>
         )}
       </div>

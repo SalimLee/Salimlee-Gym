@@ -1705,6 +1705,20 @@ textarea.sl-input {
   gap: 12px;
   padding-top: 10px;
 }
+.sl-form-privacy {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--sl-mute);
+}
+.sl-form-privacy a {
+  color: var(--sl-body);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.sl-form-privacy a:hover {
+  color: var(--sl-ink);
+}
 @media (max-width: 560px) {
   .sl-field-row,
   .sl-choice-grid {
