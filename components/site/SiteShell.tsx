@@ -1,9 +1,17 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { KURSE, PREISE } from "@/content/site";
 import { Nav } from "./ui/Nav";
 import { Hero } from "./hero/Hero";
+import { Haltung } from "./sections/Haltung";
+import { Kurse } from "./sections/Kurse";
+import { Technik } from "./sections/Technik";
+import { Coach } from "./sections/Coach";
+import { Gym } from "./sections/Gym";
+import { Preise } from "./sections/Preise";
+import { Start } from "./sections/Start";
+import { Kontakt } from "./sections/Kontakt";
+import { Footer } from "./sections/Footer";
 
 /** Vorauswahl, die von außen ins Buchungsformular gereicht wird (B.1). */
 export type BookingPreset = {
@@ -13,10 +21,7 @@ export type BookingPreset = {
   message?: string;
 };
 
-/**
- * Orchestriert die öffentliche Seite: Runden 01–08, Kontakt, Footer und den
- * Buchungs-Dialog. Die Abschnitte werden in den Schritten aus B.13 gefüllt.
- */
+/** Orchestriert die öffentliche Seite: Runden 01–08, Kontakt, Footer, Dialoge. */
 export function SiteShell() {
   const [, setBooking] = useState<BookingPreset | null>(null);
   const [, setReel] = useState(false);
@@ -33,20 +38,17 @@ export function SiteShell() {
 
       <main id="inhalt">
         <Hero onBook={() => openBooking()} onReel={openReel} />
-
-        <section id="haltung" className="sl-section sl-wrap" data-round="02" />
-        <section id="angebote" className="sl-section sl-wrap" data-round="03">
-          <h2 className="sl-display-lg">{KURSE.h2}</h2>
-        </section>
-        <section id="technik" className="sl-section sl-wrap" data-round="04" />
-        <section id="about" className="sl-section sl-wrap" data-round="05" />
-        <section id="gym" className="sl-section sl-wrap" data-round="06" />
-        <section id="preise" className="sl-section sl-wrap" data-round="07">
-          <h2 className="sl-display-lg">{PREISE.h2}</h2>
-        </section>
-        <section id="start" className="sl-section sl-wrap" data-round="08" />
-        <section id="kontakt" className="sl-section sl-wrap" />
+        <Haltung />
+        <Kurse onBook={openBooking} />
+        <Technik />
+        <Coach />
+        <Gym />
+        <Preise onBook={openBooking} />
+        <Start onBook={openBooking} />
+        <Kontakt />
       </main>
+
+      <Footer />
     </>
   );
 }
