@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import dynamic from "next/dynamic";
 import { Nav } from "./ui/Nav";
 import { Hero } from "./hero/Hero";
 import { Haltung } from "./sections/Haltung";
@@ -12,8 +13,16 @@ import { Preise } from "./sections/Preise";
 import { Start } from "./sections/Start";
 import { Kontakt } from "./sections/Kontakt";
 import { Footer } from "./sections/Footer";
-import { BookingDialog } from "./booking/BookingDialog";
 import { ReelLightbox } from "./ui/ReelLightbox";
+
+/**
+ * Das Formular kommt erst auf Klick — so bleiben zod und react-hook-form
+ * aus dem ersten Ladepaket (B.9: < 180 kB ohne OGL).
+ */
+const BookingDialog = dynamic(
+  () => import("./booking/BookingDialog").then((m) => m.BookingDialog),
+  { ssr: false },
+);
 
 /** Vorauswahl, die von außen ins Buchungsformular gereicht wird (B.1). */
 export type BookingPreset = {
@@ -54,7 +63,9 @@ export function SiteShell() {
 
       <Footer />
 
-      <BookingDialog preset={booking} onClose={closeBooking} />
+      {booking ? (
+        <BookingDialog preset={booking} onClose={closeBooking} />
+      ) : null}
       <ReelLightbox open={reel} onClose={closeReel} />
     </>
   );

@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { COACH, ROUNDS } from "@/content/site";
+import { COACH } from "@/content/site";
 import { MEDIA } from "@/content/media";
 import { gsap, prefersReducedMotion } from "../motion/gsap";
-import { RoundMark } from "../ui/RoundMark";
 import { KiChip } from "../ui/KiChip";
 
 const media = MEDIA as Record<string, any>;
@@ -82,7 +81,7 @@ export function Coach() {
       className="sl-coach"
       aria-labelledby="sl-coach-h2"
     >
-      <div className="sl-coach-media">
+      <div className="sl-coach-media" data-zoom-out>
         {c.w21x9 ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -113,7 +112,6 @@ export function Coach() {
 
       <div className="sl-wrap sl-coach-content">
         <div className="sl-coach-card sl-glass">
-          <RoundMark label={ROUNDS.coach} />
           <p className="sl-readout sl-coach-eyebrow">{COACH.eyebrow}</p>
           <h2 id="sl-coach-h2" className="sl-display-lg">
             {COACH.h2}

@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { HERO, ROUNDS } from "@/content/site";
+import { HERO } from "@/content/site";
 import { MEDIA } from "@/content/media";
 import { gsap, prefersReducedMotion } from "../motion/gsap";
-import { RoundMark } from "../ui/RoundMark";
 import { KiChip } from "../ui/KiChip";
 import { LiveCard } from "./LiveCard";
 
@@ -53,30 +52,12 @@ export function Hero({ onBook, onReel }: Props) {
       const tl = gsap.timeline({ defaults: { ease: "expo.out" } });
 
       tl.from(
-        '[data-anim="media"]',
-        { scale: 1.06, duration: 1.6, ease: "power3.out" },
-        0,
-      )
-        .from(
-          '[data-anim="line"] > span',
-          { yPercent: 105, duration: 1.0, stagger: 0.08 },
-          0.15,
-        )
-        .from(
-          '[data-anim="rule"]',
+        '[data-anim="rule"]',
           { scaleX: 0, duration: 0.6, stagger: 0.08 },
           0.3,
         )
-        .from(
-          '[data-anim="eyebrow"]',
-          { opacity: 0, y: 12, duration: 0.8 },
-          0.1,
-        )
-        .from(
-          '[data-anim="fade"]',
-          { opacity: 0, y: 16, duration: 0.9, stagger: 0.06 },
-          0.5,
-        )
+        // Eyebrow, Lead, Buttons und Fakten steigen per CSS auf (sl-rise):
+        // der Lead ist das LCP-Element und darf nicht auf das JS warten.
         .from(
           '[data-anim="live"]',
           { opacity: 0, x: 24, filter: "blur(8px)", duration: 0.9 },
@@ -296,7 +277,6 @@ export function Hero({ onBook, onReel }: Props) {
         </div>
       </div>
 
-      <RoundMark label={ROUNDS.hero} className="sl-hero-round" />
       <KiChip className="sl-hero-ki" />
     </section>
   );

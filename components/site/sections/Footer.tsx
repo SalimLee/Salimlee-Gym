@@ -76,8 +76,8 @@ export function Footer() {
               src={logo}
               alt="Salim Lee"
               className="sl-footer-logo"
-              width={160}
-              height={36}
+              width={280}
+              height={58}
             />
           ) : null}
           <p className="sl-readout sl-footer-motto">

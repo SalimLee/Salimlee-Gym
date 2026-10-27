@@ -37,7 +37,9 @@ export const MEDIA = {
   },
   "kurse": {
     "personal": "/media/kurse/personal-speedball-4x5.dc5aa014.mp4",
-    "erwachsene": "/media/kurse/erwachsene-shadowboxing-9x16.a4256b28.mp4"
+    "personalPoster": "/media/kurse/poster-personal.4e7ae187.avif",
+    "erwachsene": "/media/kurse/erwachsene-shadowboxing-9x16.a4256b28.mp4",
+    "erwachsenePoster": "/media/kurse/poster-erwachsene.5f3b82c4.avif"
   },
   "start": {
     "video": "/media/start/start-16x9-1080.02c3343c.mp4",
@@ -79,7 +81,7 @@ export const MEDIA = {
     "weggehen": "/media/reel/weggehen-9x16-720.49fd4177.mp4"
   },
   "brand": {
-    "logo280": "/brand/logo-white-280.8803ffd9.png",
-    "logo560": "/brand/logo-white-560.0752f188.png"
+    "logo280": "/brand/logo-white-280.a060dd60.png",
+    "logo560": "/brand/logo-white-560.982a8dcf.png"
   }
 } as const;

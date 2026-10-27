@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { HALTUNG, ROUNDS } from "@/content/site";
+import { HALTUNG } from "@/content/site";
 import { MEDIA } from "@/content/media";
 import { gsap, ScrollTrigger, prefersReducedMotion } from "../motion/gsap";
 import { useHeavyVideo } from "../motion/useInView";
-import { RoundMark } from "../ui/RoundMark";
 import { KiChip } from "../ui/KiChip";
 
 const media = MEDIA as Record<string, any>;
@@ -133,7 +132,6 @@ export function Haltung() {
           </p>
         </div>
 
-        <RoundMark label={ROUNDS.haltung} className="sl-haltung-round" />
         <KiChip className="sl-haltung-ki" />
       </div>
     </section>

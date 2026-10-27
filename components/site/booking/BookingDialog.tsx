@@ -127,6 +127,21 @@ export function BookingDialog({
 
   if (!open) return null;
 
+  /**
+   * Bei ungültigem Absenden den Fokus auf die erste fehlerhafte Gruppe setzen.
+   * react-hook-form fokussiert sonst das versteckte Feld hinter den Knopfgruppen
+   * (Anliegen, Kurs, Mitgliedschaft) — und das kann keinen Fokus annehmen.
+   */
+  const onInvalid = (invalid: Record<string, unknown>) => {
+    const names = new Set(Object.keys(invalid));
+    // Reihenfolge im Dokument, nicht im Schema — sonst springt der Fokus
+    // am „Anliegen" vorbei nach unten zum Namen.
+    const groups = Array.from(
+      dialogRef.current?.querySelectorAll<HTMLElement>("[data-f]") ?? [],
+    );
+    groups.find((el) => names.has(el.dataset.f ?? ""))?.focus();
+  };
+
   const onSubmit = async (data: BookingFormValues) => {
     setError(null);
     try {
@@ -187,7 +202,7 @@ export function BookingDialog({
         ) : (
           <form
             className="sl-form"
-            onSubmit={handleSubmit(onSubmit)}
+            onSubmit={handleSubmit(onSubmit, onInvalid)}
             noValidate
           >
             {error ? (
@@ -196,7 +211,7 @@ export function BookingDialog({
               </p>
             ) : null}
 
-            <fieldset className="sl-field">
+            <fieldset className="sl-field" data-f="intent" tabIndex={-1}>
               <legend className="sl-readout">Anliegen *</legend>
               <div className="sl-choice-grid">
                 {[
@@ -229,12 +244,14 @@ export function BookingDialog({
               </div>
               <input type="hidden" {...register("intent")} />
               {errors.intent ? (
-                <p className="sl-field-error">{errors.intent.message}</p>
+                <p className="sl-field-error" role="alert">
+                  {errors.intent.message}
+                </p>
               ) : null}
             </fieldset>
 
             {intent ? (
-              <fieldset className="sl-field">
+              <fieldset className="sl-field" data-f="course" tabIndex={-1}>
                 <legend className="sl-readout">Kurs *</legend>
                 <div className="sl-chips">
                   {courseOptions.map((c) => {
@@ -257,13 +274,15 @@ export function BookingDialog({
                 </div>
                 <input type="hidden" {...register("course")} />
                 {errors.course ? (
-                  <p className="sl-field-error">{errors.course.message}</p>
+                  <p className="sl-field-error" role="alert">
+                    {errors.course.message}
+                  </p>
                 ) : null}
               </fieldset>
             ) : null}
 
             {memberships.length ? (
-              <fieldset className="sl-field">
+              <fieldset className="sl-field" data-f="membership" tabIndex={-1}>
                 <legend className="sl-readout">Mitgliedschaft *</legend>
                 <div className="sl-chips">
                   {memberships.map((m) => (
@@ -286,7 +305,9 @@ export function BookingDialog({
                 </div>
                 <input type="hidden" {...register("membership")} />
                 {errors.membership ? (
-                  <p className="sl-field-error">{errors.membership.message}</p>
+                  <p className="sl-field-error" role="alert">
+                    {errors.membership.message}
+                  </p>
                 ) : null}
               </fieldset>
             ) : null}
@@ -296,23 +317,43 @@ export function BookingDialog({
                 <span className="sl-readout">Name *</span>
                 <input
                   className="sl-input"
+                  data-f="name"
                   {...register("name")}
                   autoComplete="name"
+                  aria-required="true"
+                  aria-invalid={errors.name ? true : undefined}
+                  aria-describedby={errors.name ? "sl-err-name" : undefined}
                 />
                 {errors.name ? (
-                  <span className="sl-field-error">{errors.name.message}</span>
+                  <span
+                    id="sl-err-name"
+                    className="sl-field-error"
+                    role="alert"
+                  >
+                    {errors.name.message}
+                  </span>
                 ) : null}
               </label>
               <label className="sl-field">
                 <span className="sl-readout">E-Mail *</span>
                 <input
                   className="sl-input"
+                  data-f="email"
                   type="email"
                   {...register("email")}
                   autoComplete="email"
+                  aria-required="true"
+                  aria-invalid={errors.email ? true : undefined}
+                  aria-describedby={errors.email ? "sl-err-email" : undefined}
                 />
                 {errors.email ? (
-                  <span className="sl-field-error">{errors.email.message}</span>
+                  <span
+                    id="sl-err-email"
+                    className="sl-field-error"
+                    role="alert"
+                  >
+                    {errors.email.message}
+                  </span>
                 ) : null}
               </label>
             </div>

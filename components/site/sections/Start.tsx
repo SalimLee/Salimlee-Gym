@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { KONTAKT, ROUNDS, START } from "@/content/site";
+import { KONTAKT, START } from "@/content/site";
 import { MEDIA } from "@/content/media";
 import { gsap, ScrollTrigger, prefersReducedMotion } from "../motion/gsap";
 import { useHeavyVideo, useMediaQuery, useNearViewport } from "../motion/useInView";
-import { RoundMark } from "../ui/RoundMark";
 import { KiChip } from "../ui/KiChip";
 import type { BookingPreset } from "../SiteShell";
 
@@ -117,7 +116,6 @@ export function Start({ onBook }: { onBook: (p: BookingPreset) => void }) {
         </div>
 
         <div className="sl-wrap sl-start-content">
-          <RoundMark label={ROUNDS.start} />
           <h2 id="sl-start-h2" className="sl-display-xl sl-start-h2">
             {START.h1.map((line) => (
               <span key={line} className="sl-line-mask" data-startline>

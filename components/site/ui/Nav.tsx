@@ -2,11 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { NAV, ROUNDS } from "@/content/site";
+import { NAV } from "@/content/site";
 import { MEDIA } from "@/content/media";
 import { scrollToAnchor } from "../motion/SmoothScroll";
-
-const ROUND_LABELS = Object.values(ROUNDS);
 
 /**
  * Navigation (B.5.1): 72 px, transparent über dem Hero, ab 80 vh Glasleiste.
@@ -16,7 +14,6 @@ const ROUND_LABELS = Object.values(ROUNDS);
 export function Nav({ onBook }: { onBook: () => void }) {
   const [solid, setSolid] = useState(false);
   const [open, setOpen] = useState(false);
-  const [clock, setClock] = useState({ round: 1, time: "0:00" });
   const ticking = useRef(false);
 
   useEffect(() => {
@@ -24,23 +21,7 @@ export function Nav({ onBook }: { onBook: () => void }) {
       if (ticking.current) return;
       ticking.current = true;
       requestAnimationFrame(() => {
-        const y = window.scrollY;
-        setSolid(y > window.innerHeight * 0.8);
-
-        const max = Math.max(
-          1,
-          document.body.scrollHeight - window.innerHeight,
-        );
-        const p = Math.min(1, Math.max(0, y / max));
-        const round = Math.min(
-          ROUND_LABELS.length,
-          Math.floor(p * ROUND_LABELS.length) + 1,
-        );
-        const total = Math.round(p * 180); // 0:00 – 3:00
-        setClock({
-          round,
-          time: `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`,
-        });
+        setSolid(window.scrollY > window.innerHeight * 0.8);
         ticking.current = false;
       });
     };
@@ -77,7 +58,7 @@ export function Nav({ onBook }: { onBook: () => void }) {
         >
           {logo ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={logo} alt="Salim Lee" width={120} height={28} />
+            <img src={logo} alt="Salim Lee" width={280} height={58} />
           ) : (
             <span className="sl-ui">SALIM LEE</span>
           )}
@@ -97,13 +78,6 @@ export function Nav({ onBook }: { onBook: () => void }) {
         </nav>
 
         <div className="sl-nav-right">
-          {NAV.roundClock ? (
-            <span className="sl-readout sl-roundclock" aria-hidden="true">
-              <span className="sl-roundclock-dot" />
-              Runde {String(clock.round).padStart(2, "0")} · {clock.time}
-            </span>
-          ) : null}
-
           <button
             type="button"
             className="sl-btn sl-btn-primary sl-nav-cta"

@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { KURSE, ROUNDS } from "@/content/site";
+import { KURSE } from "@/content/site";
 import { MEDIA } from "@/content/media";
 import { gsap, prefersReducedMotion } from "../motion/gsap";
-import { useAfterLoad } from "../motion/useInView";
-import { RoundMark } from "../ui/RoundMark";
+import { useAfterLoad, useMediaQuery } from "../motion/useInView";
 import type { BookingPreset } from "../SiteShell";
 
 const media = MEDIA as Record<string, any>;
@@ -13,20 +12,29 @@ const media = MEDIA as Record<string, any>;
 /** Medium je Bahn: echte Clips wo vorhanden, sonst personenfreies Detailbild. */
 function laneMedia(id: string): {
   video?: string;
+  poster?: string;
   image?: string;
   ki: boolean;
 } {
   switch (id) {
     case "erwachsene":
-      return { video: media.kurse?.erwachsene, ki: false };
+      return {
+        video: media.kurse?.erwachsene,
+        poster: media.kurse?.erwachsenePoster,
+        ki: false,
+      };
     case "frauen":
       return { image: media.details?.frauen, ki: true };
     case "kinder":
       return { image: media.details?.kinder, ki: true };
     case "boxtraining":
-      return { video: media.technik?.video, ki: false };
+      return { video: media.technik?.video, poster: media.technik?.poster, ki: false };
     case "personal":
-      return { video: media.kurse?.personal, ki: false };
+      return {
+        video: media.kurse?.personal,
+        poster: media.kurse?.personalPoster,
+        ki: false,
+      };
     default:
       return { ki: false };
   }
@@ -41,6 +49,9 @@ export function Kurse({ onBook }: { onBook: (p: BookingPreset) => void }) {
   const rootRef = useRef<HTMLElement>(null);
   const [active, setActive] = useState(0);
   const afterLoad = useAfterLoad();
+  // Mobil bleibt es beim Standbild: das Bahnen-Video sind 266 KB auf dem
+  // kritischen Pfad, und auf Mobil ist ohnehin jede Bahn offen.
+  const wide = useMediaQuery("(min-width: 1024px)");
 
   useEffect(() => {
     const root = rootRef.current;
@@ -67,7 +78,6 @@ export function Kurse({ onBook }: { onBook: (p: BookingPreset) => void }) {
       aria-labelledby="sl-kurse-h2"
     >
       <div className="sl-wrap">
-        <RoundMark label={ROUNDS.kurse} />
         <h2 id="sl-kurse-h2" className="sl-display-lg sl-kurse-h2">
           {KURSE.h2}
         </h2>
@@ -90,8 +100,11 @@ export function Kurse({ onBook }: { onBook: (p: BookingPreset) => void }) {
                 <button
                   type="button"
                   className="sl-lane-trigger"
+                  // Der sichtbare Text ist auf Mobil ausgeblendet — ohne
+                  // aria-label hätte der Knopf dort keinen Namen.
                   aria-label={lane.label}
                   aria-expanded={open}
+                  aria-controls={`sl-lane-${lane.id}`}
                   onFocus={() => setActive(i)}
                   onClick={() => setActive(i)}
                 >
@@ -101,7 +114,8 @@ export function Kurse({ onBook }: { onBook: (p: BookingPreset) => void }) {
                 <div className="sl-lane-media" aria-hidden="true">
                   {m.video ? (
                     <video
-                      src={open && afterLoad ? m.video : undefined}
+                      src={open && afterLoad && wide ? m.video : undefined}
+                      poster={m.poster}
                       muted
                       playsInline
                       loop
@@ -114,7 +128,10 @@ export function Kurse({ onBook }: { onBook: (p: BookingPreset) => void }) {
                   ) : null}
                 </div>
 
-                <div className="sl-lane-card sl-glass">
+                <div
+                  id={`sl-lane-${lane.id}`}
+                  className="sl-lane-card sl-glass"
+                >
                   <h3 className="sl-lane-title">{lane.label}</h3>
                   <p className="sl-readout sl-lane-times">{lane.times}</p>
                   {lane.price ? (

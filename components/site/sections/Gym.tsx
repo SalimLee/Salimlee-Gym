@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { GYM, ROUNDS } from "@/content/site";
+import { GYM } from "@/content/site";
 import { MEDIA } from "@/content/media";
 import { gsap, prefersReducedMotion } from "../motion/gsap";
-import { RoundMark } from "../ui/RoundMark";
 import { KiChip } from "../ui/KiChip";
 
 const media = MEDIA as Record<string, any>;
@@ -47,6 +46,39 @@ export function Gym() {
           },
         },
       );
+      // Übergang Coach -> Gym: die Halle kommt auf den Betrachter zu, während
+      // das Coach-Bild zurückweicht. Erzählt den Schritt von der Person in den
+      // Raum — und verklebt die beiden Sektionen, statt sie aneinanderzustoßen.
+      gsap.fromTo(
+        "[data-zoom-in]",
+        { scale: 1.22 },
+        {
+          scale: 1,
+          ease: "none",
+          scrollTrigger: {
+            trigger: root,
+            start: "top bottom",
+            end: "top top",
+            scrub: true,
+          },
+        },
+      );
+      const prev =
+        root.previousElementSibling?.querySelector("[data-zoom-out]");
+      if (prev) {
+        gsap.to(prev, {
+          scale: 1.12,
+          filter: "brightness(0.45)",
+          ease: "none",
+          scrollTrigger: {
+            trigger: root,
+            start: "top bottom",
+            end: "top top",
+            scrub: true,
+          },
+        });
+      }
+
       gsap.to("[data-hex]", {
         strokeDashoffset: 0,
         duration: 1.6,
@@ -75,7 +107,7 @@ export function Gym() {
       aria-labelledby="sl-gym-h2"
     >
       <div className="sl-gym-media">
-        <div className="sl-gym-parallax" data-parallax>
+        <div className="sl-gym-parallax" data-parallax data-zoom-in>
           {g.w16x9 ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -123,7 +155,6 @@ export function Gym() {
       </div>
 
       <div className="sl-wrap sl-gym-content">
-        <RoundMark label={ROUNDS.gym} />
         <h2 id="sl-gym-h2" className="sl-display-lg">
           {GYM.h2}
         </h2>

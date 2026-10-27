@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ROUNDS, TECHNIK } from "@/content/site";
+import { TECHNIK } from "@/content/site";
 import { MEDIA } from "@/content/media";
 import { gsap, ScrollTrigger, prefersReducedMotion } from "../motion/gsap";
 import { useHeavyVideo } from "../motion/useInView";
-import { RoundMark } from "../ui/RoundMark";
 
 const media = MEDIA as Record<string, any>;
 
@@ -126,7 +125,6 @@ export function Technik() {
           </div>
 
           <div className="sl-technik-text">
-            <RoundMark label={ROUNDS.technik} />
             <h2 id="sl-technik-h2" className="sl-display-lg">
               {TECHNIK.h2}
             </h2>

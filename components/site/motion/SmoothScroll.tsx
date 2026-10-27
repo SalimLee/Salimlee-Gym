@@ -15,7 +15,8 @@ export function getLenis(): Lenis | null {
 export function scrollToAnchor(hash: string) {
   const el = document.querySelector(hash);
   if (!el) return;
-  if (lenisInstance) lenisInstance.scrollTo(el as HTMLElement, { offset: 0 });
+  // -96 px: so viel, wie die fixe Nav verdeckt (= scroll-padding-top in site.css)
+  if (lenisInstance) lenisInstance.scrollTo(el as HTMLElement, { offset: -96 });
   else el.scrollIntoView({ behavior: "smooth" });
 }
 

@@ -1,9 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { PREISE, ROUNDS } from "@/content/site";
+import { PREISE } from "@/content/site";
 import { MEDIA } from "@/content/media";
-import { RoundMark } from "../ui/RoundMark";
 import type { BookingPreset } from "../SiteShell";
 
 const media = MEDIA as Record<string, any>;
@@ -21,6 +20,30 @@ function courseFor(tab: string, name: string): string {
  */
 export function Preise({ onBook }: { onBook: (p: BookingPreset) => void }) {
   const [tab, setTab] = useState<string>(PREISE.tabs[0].id);
+
+  /** Pfeile, Home und Ende wechseln den Tab und nehmen den Fokus mit (WAI-ARIA). */
+  const onTabKey = (e: React.KeyboardEvent<HTMLButtonElement>, i: number) => {
+    const last = PREISE.tabs.length - 1;
+    const next =
+      e.key === "ArrowRight"
+        ? i === last
+          ? 0
+          : i + 1
+        : e.key === "ArrowLeft"
+          ? i === 0
+            ? last
+            : i - 1
+          : e.key === "Home"
+            ? 0
+            : e.key === "End"
+              ? last
+              : -1;
+    if (next < 0) return;
+    e.preventDefault();
+    const id = PREISE.tabs[next].id;
+    setTab(id);
+    document.getElementById(`sl-tab-${id}`)?.focus();
+  };
 
   const rows = PREISE.items.filter((p) => p.category === tab);
   const serviceItem = PREISE.items.find((p) => p.category === "service");
@@ -44,14 +67,13 @@ export function Preise({ onBook }: { onBook: (p: BookingPreset) => void }) {
       ) : null}
 
       <div className="sl-wrap">
-        <RoundMark label={ROUNDS.preise} />
         <h2 id="sl-preise-h2" className="sl-display-lg">
           {PREISE.h2}
         </h2>
         <p className="sl-lead sl-preise-lead">{PREISE.lead}</p>
 
         <div className="sl-tabs" role="tablist" aria-label="Preiskategorien">
-          {PREISE.tabs.map((t) => (
+          {PREISE.tabs.map((t, i) => (
             <button
               key={t.id}
               role="tab"
@@ -59,8 +81,11 @@ export function Preise({ onBook }: { onBook: (p: BookingPreset) => void }) {
               id={`sl-tab-${t.id}`}
               aria-selected={tab === t.id}
               aria-controls={`sl-panel-${t.id}`}
+              // Roving Tabindex: Tab springt in die Leiste, Pfeile wechseln.
+              tabIndex={tab === t.id ? 0 : -1}
               className={`sl-tab sl-ui${tab === t.id ? " is-active" : ""}`}
               onClick={() => setTab(t.id)}
+              onKeyDown={(e) => onTabKey(e, i)}
             >
               {t.label}
             </button>
@@ -79,13 +104,8 @@ export function Preise({ onBook }: { onBook: (p: BookingPreset) => void }) {
                 <span className="sl-price-name">{p.name}</span>
                 <span className="sl-price-meta">
                   {p.discount ? (
-                    <span
-                      className={`sl-chip sl-readout ${
-                        p.discount === "Beste Ersparnis"
-                          ? "sl-badge-signal"
-                          : "sl-badge-glass"
-                      }`}
-                    >
+                    // Alle Rabatt-Hinweise ruhig in Glas — keine Signalfarbe.
+                    <span className="sl-chip sl-readout sl-badge-glass">
                       {p.discount}
                     </span>
                   ) : null}
