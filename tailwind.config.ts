@@ -8,6 +8,13 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        // Cinematic (öffentliche Seite) – Namensraum sl, siehe docs/DESIGN-CINEMATIC.md
+        sl: {
+          night: { 950: '#07131F', 900: '#0E273D', 800: '#132E48' },
+          cobalt: { 600: '#224565', 400: '#436886' },
+          mist: { 50: '#FFFFFF', 100: '#F2F5F8', 200: '#D5DEE7', 400: '#A9B8C6', 600: '#74879A' },
+          signal: { 300: '#F28A55', 500: '#E0622C', 600: '#B8461C' },
+        },
         // Salim Lee Brand – dunkelrot
         brand: {
           50: '#ffe5e5',
@@ -69,6 +76,8 @@ const config: Config = {
         },
       },
       fontFamily: {
+        sl: ['var(--font-sl)', 'system-ui', '-apple-system', 'sans-serif'],
+        'sl-mono': ['var(--font-sl-mono)', 'ui-monospace', 'SFMono-Regular', 'monospace'],
         sans: ['Inter', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
         display: ['Barlow', 'Inter', 'sans-serif'], // Hero/Logo bleibt Barlow
         mono: ['SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'Liberation Mono', 'monospace'],

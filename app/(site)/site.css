@@ -1,0 +1,305 @@
+/* ==========================================================================
+   Salim Lee Cinematic – Basis der öffentlichen Seite.
+   Alles unter .sl-site, damit die globale Admin-Basis aus globals.css
+   (Barlow, rote Scrollbar) hier überschrieben wird, ohne den Admin zu ändern.
+   Tokens: docs/DESIGN-CINEMATIC.md
+   ========================================================================== */
+
+:root {
+  --sl-night-950: #07131f;
+  --sl-night-900: #0e273d;
+  --sl-night-800: #132e48;
+  --sl-cobalt-600: #224565;
+  --sl-cobalt-400: #436886;
+  --sl-ink: #ffffff;
+  --sl-body: #d5dee7;
+  --sl-mute: #a9b8c6;
+  --sl-faint: #74879a;
+  --sl-signal-300: #f28a55;
+  --sl-signal-500: #e0622c;
+
+  --sl-line: rgba(255, 255, 255, 0.14);
+  --sl-line-strong: rgba(255, 255, 255, 0.24);
+  --sl-glass-light: rgba(255, 255, 255, 0.14);
+  --sl-glass-dark: rgba(7, 19, 31, 0.45);
+  --sl-glass-border: rgba(255, 255, 255, 0.1);
+
+  --sl-gutter: clamp(20px, 3.9vw, 56px);
+  --sl-section: 160px;
+  --sl-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Scrollbar der Seite neutralisieren (globals.css färbt sie rot) */
+html:has(.sl-site) ::-webkit-scrollbar-thumb {
+  background-color: #1d3449;
+  border-radius: 0;
+}
+html:has(.sl-site) ::-webkit-scrollbar-track {
+  background-color: var(--sl-night-950);
+}
+html:has(.sl-site) {
+  scroll-behavior: auto; /* Lenis übernimmt */
+  background-color: var(--sl-night-950);
+}
+html:has(.sl-site) body {
+  background-color: var(--sl-night-950);
+}
+
+.sl-site {
+  font-family:
+    var(--font-sl),
+    system-ui,
+    -apple-system,
+    sans-serif;
+  background-color: var(--sl-night-950);
+  color: var(--sl-body);
+  font-size: 17px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: clip;
+}
+
+.sl-site ::selection {
+  background: var(--sl-signal-500);
+  color: var(--sl-night-950);
+}
+
+/* ---------- Typo-Rollen ---------- */
+.sl-display-xl {
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: clamp(52px, 6.4vw, 118px);
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+  color: var(--sl-ink);
+}
+.sl-display-lg {
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: clamp(34px, 4.6vw, 64px);
+  line-height: 0.92;
+  letter-spacing: -0.03em;
+  color: var(--sl-ink);
+}
+.sl-display-words {
+  font-weight: 800;
+  text-transform: uppercase;
+  font-size: clamp(56px, 12vw, 200px);
+  line-height: 0.86;
+  letter-spacing: -0.045em;
+  color: var(--sl-ink);
+}
+.sl-lead {
+  font-size: clamp(17px, 1.3vw, 19px);
+  line-height: 1.45;
+  letter-spacing: -0.01em;
+  color: var(--sl-body);
+}
+.sl-ui {
+  font-weight: 500;
+  font-size: 15px;
+  line-height: 1;
+  letter-spacing: -0.005em;
+}
+/* Mono-Readout: Rundenuhr, LIVE-Werte, Standort/Öffnungszeiten, Captions, KI-Chip */
+.sl-readout {
+  font-family: var(--font-sl-mono), ui-monospace, SFMono-Regular, monospace;
+  font-weight: 500;
+  font-size: 12px;
+  line-height: 1.35;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  text-transform: uppercase;
+  color: var(--sl-mute);
+}
+.sl-num {
+  font-family: var(--font-sl-mono), ui-monospace, monospace;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  color: var(--sl-ink);
+}
+
+/* ---------- Layout ---------- */
+.sl-wrap {
+  width: 100%;
+  margin-inline: auto;
+  padding-inline: var(--sl-gutter);
+  max-width: 1600px;
+}
+.sl-section {
+  padding-block: var(--sl-section);
+}
+@media (max-width: 767px) {
+  .sl-section {
+    padding-block: 96px;
+  }
+}
+
+/* ---------- Bausteine ---------- */
+.sl-hairline {
+  border-top: 1px solid var(--sl-line);
+}
+.sl-glass {
+  background: var(--sl-glass-dark);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid var(--sl-glass-border);
+  border-radius: 6px;
+}
+.sl-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 56px;
+  padding-inline: 28px;
+  border-radius: 2px;
+  font-weight: 500;
+  font-size: 15px;
+  line-height: 1;
+  letter-spacing: -0.005em;
+  transition:
+    filter 160ms ease-out,
+    background-color 160ms ease-out;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sl-btn-primary {
+  background: var(--sl-ink);
+  color: var(--sl-night-950);
+}
+.sl-btn-primary:hover {
+  filter: brightness(0.94);
+}
+.sl-btn-glass {
+  background: var(--sl-glass-light);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: var(--sl-ink);
+}
+.sl-btn-glass:hover {
+  filter: brightness(1.06);
+}
+.sl-btn .sl-arrow {
+  transition: transform 160ms ease-out;
+}
+.sl-btn:hover .sl-arrow {
+  transform: translate(2px, -2px);
+}
+.sl-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 11px;
+}
+
+/* Verlauf für Text über Video */
+.sl-scrim-left {
+  background: linear-gradient(
+    90deg,
+    rgba(7, 19, 31, 0.62) 0%,
+    rgba(7, 19, 31, 0.18) 48%,
+    transparent 72%
+  );
+}
+.sl-scrim-top {
+  background: linear-gradient(
+    180deg,
+    rgba(7, 19, 31, 0.5) 0%,
+    transparent 100%
+  );
+}
+
+/* ---------- Zeilen-Reveal (Signatur) ---------- */
+.sl-line-mask {
+  display: block;
+  overflow: hidden;
+}
+.sl-line-mask > span {
+  display: block;
+}
+
+/* ---------- A11y ---------- */
+.sl-skip {
+  position: fixed;
+  top: -200px;
+  left: 16px;
+  z-index: 200;
+  background: var(--sl-ink);
+  color: var(--sl-night-950);
+  padding: 12px 18px;
+  border-radius: 2px;
+  font-weight: 500;
+  transition: top 160ms ease-out;
+}
+.sl-skip:focus {
+  top: 16px;
+}
+.sl-site :focus-visible {
+  outline: 2px solid var(--sl-ink);
+  outline-offset: 2px;
+}
+
+/* ---------- Reduzierte Bewegung ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .sl-site *,
+  .sl-site *::before,
+  .sl-site *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 200ms !important;
+  }
+  .sl-grain,
+  .sl-cursor-dot {
+    display: none !important;
+  }
+}
+
+/* ---------- Korn ---------- */
+.sl-grain {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  opacity: 0.04;
+  mix-blend-mode: overlay;
+  animation: sl-grain-shift 1s steps(8) infinite;
+}
+.sl-grain svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+@keyframes sl-grain-shift {
+  0% { transform: translate3d(0, 0, 0); }
+  12.5% { transform: translate3d(-2%, 1%, 0); }
+  25% { transform: translate3d(1%, -2%, 0); }
+  37.5% { transform: translate3d(-1%, 2%, 0); }
+  50% { transform: translate3d(2%, 1%, 0); }
+  62.5% { transform: translate3d(-2%, -1%, 0); }
+  75% { transform: translate3d(1%, 2%, 0); }
+  87.5% { transform: translate3d(-1%, -2%, 0); }
+  100% { transform: translate3d(0, 0, 0); }
+}
+
+/* ---------- Cursor-Punkt ---------- */
+.sl-cursor-dot {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: #fff;
+  mix-blend-mode: difference;
+  pointer-events: none;
+  z-index: 70;
+  opacity: 0;
+  transition: opacity 160ms ease-out;
+  will-change: transform;
+}
+@media (pointer: coarse) {
+  .sl-cursor-dot { display: none; }
+}
