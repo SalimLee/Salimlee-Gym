@@ -95,3 +95,12 @@ Abgleich B.11 / CONTENT-PRODUKTION.md gegen vorhandene Dateien.
 | `detail-preise-hintergrund` (21:9)             | Preise-Hintergrund             | Wird in **Phase 4** erzeugt.                                                                                                                  |
 
 Alle übrigen in B.11 referenzierten Medien (echte Clips aus `raw/`, Keyframes, Referenzen) liegen lokal vor und sind seit Phase 0 in `.gitignore`.
+
+---
+
+## 5 · Phase-3-Entscheidungen (Karahan, 27.10.2026)
+
+- **Hero-Variante:** **Weit** (B.6.1 Variante 1).
+- **Rundenuhr:** **Ja**, aber als dezenter **Status-Readout** im selben Stil wie „Läuft gerade", die Standort-Anzeige und die Öffnungszeiten (Geist-Mono-Readout, `RUNDE 03 · 1:12`, läuft mit dem Scroll). Kein auffälliges Extra-Element.
+- **Readout-Schrift:** **Geist Mono** (lokal, aus dem `geist`-Paket, OFL) für alle technischen Anzeigen (LIVE-Werte, Rundenuhr, Standort/Öffnungszeiten, Captions, KI-Chip). Headlines/Text/UI bleiben Geist Sans.
+- **Schriften strikt lokal:** Geist Sans **und** Geist Mono nur als lokale woff2 via `next/font/local` — nie Google Fonts, kein CDN, sauber umgesetzt (keine Vibe-Coding-Approximation). Details in [DESIGN-CINEMATIC.md](DESIGN-CINEMATIC.md) → „Update (27.10.2026)".

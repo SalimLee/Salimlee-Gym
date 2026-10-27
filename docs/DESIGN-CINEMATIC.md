@@ -294,3 +294,17 @@ Buttons `{rounded.button}` (2px), cards & video frames `{rounded.card}` (6px), c
 - Don't bring back the old red `#b00000` or any neon glow on the public site.
 - Don't touch the admin's palette or the root `DESIGN.md`.
 - Don't make buttons rounded, don't add shadows (except the modal), don't let type glow or use italics.
+
+---
+
+## Update (27.10.2026) — Hero-Wahl, Readout-Schrift & Rundenuhr
+
+**Hero-Variante gewählt:** **Weit** (B.6.1 Variante 1) — Vollbild-Footage, Headline unten links, LIVE-Karte unten rechts.
+
+**Readout-Schrift = Geist Mono (lokal).** Die technischen „Anzeigen" bekommen eine eigene, monospace Lesart: **Geist Mono** (variabel, aus dem offiziellen Vercel-`geist`-npm-Paket, OFL, **lokale woff2** — `node_modules/geist/dist/fonts/geist-mono/GeistMono-Variable.woff2`, in Phase 5 nach `app/(site)/fonts/` kopieren). Genutzt für die **Readouts/Status-Anzeigen**: LIVE-Karten-Werte, die **Rundenuhr**, die Standort- und Öffnungszeiten-Zeile (Hairline-Readouts), Medien-Dateinamen-Captions und den KI-Chip. Fließtext, Headlines und UI bleiben **Geist Sans**.
+
+- Typo-Rolle neu: `mono-readout` — Geist Mono, 12–13px, weight 500, letterSpacing +0.02em, tabular; für Label/Wert-Readouts.
+
+**Rundenuhr:** **Ja**, aber als **Status-Readout im gleichen Stil wie „Läuft gerade", die Standort-Anzeige und die Öffnungszeiten** — Geist-Mono-Readout, dezent zwischen Nav-Links und Button (`RUNDE 03 · 1:12`, läuft mit dem Scrollfortschritt 0:00 → 3:00). Kein auffälliges Extra-Element; visuell derselbe ruhige Readout wie die anderen Status-Anzeigen, Signal-Orange nur als kleiner Punkt.
+
+**Schriften-Regel (verschärft, Karahan 27.10.2026):** Beide Familien (Geist Sans + Geist Mono) werden **ausschließlich als lokale Dateien** im Repo ausgeliefert, eingebunden mit `next/font/local` und echten woff2 — **nie** Google Fonts, **nie** `next/font/google`, kein CDN. Sauber umsetzen, nicht „vibe-coded" approximieren: echte Font-Files, korrekte `@font-face`/`next/font/local`, variable Achsen genutzt.
