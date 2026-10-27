@@ -2,6 +2,8 @@
 
 import { useCallback, useState } from "react";
 import { KURSE, PREISE } from "@/content/site";
+import { Nav } from "./ui/Nav";
+import { Hero } from "./hero/Hero";
 
 /** Vorauswahl, die von außen ins Buchungsformular gereicht wird (B.1). */
 export type BookingPreset = {
@@ -16,20 +18,21 @@ export type BookingPreset = {
  * Buchungs-Dialog. Die Abschnitte werden in den Schritten aus B.13 gefüllt.
  */
 export function SiteShell() {
-  const [booking, setBooking] = useState<BookingPreset | null>(null);
+  const [, setBooking] = useState<BookingPreset | null>(null);
+  const [, setReel] = useState(false);
 
-  const openBooking = useCallback((preset: BookingPreset = {}) => {
-    setBooking(preset);
-  }, []);
+  const openBooking = useCallback(
+    (preset: BookingPreset = {}) => setBooking(preset),
+    [],
+  );
+  const openReel = useCallback(() => setReel(true), []);
 
-  // Platzhalter bis Schritt 3–7 – IDs stehen bereits (alte Anker bleiben gültig).
   return (
     <>
+      <Nav onBook={() => openBooking()} />
+
       <main id="inhalt">
-        <section id="hero" className="sl-section sl-wrap" data-round="01">
-          <p className="sl-readout">Runde 01 — Fokus</p>
-          <h1 className="sl-display-xl">Dein Ring.</h1>
-        </section>
+        <Hero onBook={() => openBooking()} onReel={openReel} />
 
         <section id="haltung" className="sl-section sl-wrap" data-round="02" />
         <section id="angebote" className="sl-section sl-wrap" data-round="03">
@@ -44,10 +47,6 @@ export function SiteShell() {
         <section id="start" className="sl-section sl-wrap" data-round="08" />
         <section id="kontakt" className="sl-section sl-wrap" />
       </main>
-
-      {booking ? (
-        <div hidden aria-hidden="true" onClick={() => openBooking()} />
-      ) : null}
     </>
   );
 }

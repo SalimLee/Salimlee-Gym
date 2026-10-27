@@ -303,3 +303,91 @@ html:has(.sl-site) body {
 @media (pointer: coarse) {
   .sl-cursor-dot { display: none; }
 }
+
+/* ==========================  Video-Baustein  ========================== */
+.sl-video { position: relative; overflow: hidden; border-radius: 6px; background: var(--sl-night-900); }
+.sl-video-layer { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.sl-video-blur { transition: opacity 1.2s var(--sl-ease-out); }
+
+/* ==========================  Rundenmarke / Chip  ========================== */
+.sl-roundmark { display: inline-flex; align-items: center; gap: 8px; }
+.sl-roundmark-dot { width: 6px; height: 6px; border-radius: 999px; background: var(--sl-signal-500); flex: none; }
+.sl-ki-chip {
+  background: var(--sl-glass-dark);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--sl-glass-border);
+  color: var(--sl-mist-200, #d5dee7);
+  font-size: 11px;
+}
+
+/* ==========================  Navigation  ========================== */
+.sl-nav { position: fixed; top: 0; left: 0; right: 0; z-index: 50; transition: background-color 200ms ease-out, backdrop-filter 200ms ease-out, border-color 200ms ease-out; border-bottom: 1px solid transparent; }
+.sl-nav.is-solid { background: rgba(7, 19, 31, 0.55); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-bottom-color: var(--sl-line); }
+.sl-nav-inner { height: 72px; display: flex; align-items: center; gap: 24px; padding-inline: var(--sl-gutter); max-width: 1600px; margin-inline: auto; }
+.sl-nav-logo { display: flex; align-items: center; color: var(--sl-ink); font-weight: 700; letter-spacing: 0.06em; }
+.sl-nav-logo img { height: 28px; width: auto; }
+.sl-nav-links { display: flex; align-items: center; gap: 28px; margin-left: auto; }
+.sl-nav-links a { color: var(--sl-body); transition: color 160ms ease-out; }
+.sl-nav-links a:hover { color: var(--sl-ink); }
+.sl-nav-right { display: flex; align-items: center; gap: 16px; }
+.sl-roundclock { display: inline-flex; align-items: center; gap: 8px; color: var(--sl-mute); white-space: nowrap; }
+.sl-roundclock-dot { width: 5px; height: 5px; border-radius: 999px; background: var(--sl-signal-500); flex: none; }
+.sl-nav-cta { height: 40px; padding-inline: 18px; }
+.sl-nav-burger { display: none; background: none; color: var(--sl-ink); padding: 8px; }
+.sl-nav-mobile { display: none; }
+@media (max-width: 1023px) {
+  .sl-nav-links, .sl-roundclock { display: none; }
+  .sl-nav-burger { display: inline-block; }
+  .sl-nav-right { margin-left: auto; }
+  .sl-nav-mobile { display: flex; flex-direction: column; gap: 20px; padding: 32px var(--sl-gutter) 48px; background: var(--sl-night-950); border-top: 1px solid var(--sl-line); }
+  .sl-nav-mobile-link { color: var(--sl-ink); }
+}
+@media (max-width: 480px) { .sl-nav-cta { display: none; } }
+
+/* ==========================  Hero (Variante „Weit")  ========================== */
+.sl-hero { position: relative; min-height: 100svh; display: flex; align-items: flex-end; overflow: hidden; isolation: isolate; }
+.sl-hero-media { position: absolute; inset: 0; z-index: -1; will-change: transform, clip-path; }
+.sl-hero-video, .sl-hero-canvas { transition: opacity 600ms var(--sl-ease-out); }
+.sl-hero-poster-mobile { display: none; }
+.sl-hero-scrim-top { position: absolute; top: 0; left: 0; right: 0; height: 160px; }
+.sl-hero-content { position: relative; width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 32px; padding-block: 96px 64px; }
+.sl-hero-text { max-width: min(760px, 60vw); }
+.sl-hero-eyebrow { margin-bottom: 20px; color: var(--sl-mist-200, #d5dee7); }
+.sl-hero-h1 { margin: 0 0 24px; }
+.sl-line-wrap { display: block; position: relative; }
+.sl-line-rule { display: block; height: 1px; background: var(--sl-line-strong); transform-origin: left center; margin-block: 2px 6px; }
+.sl-hero-lead { max-width: 520px; margin: 0 0 32px; }
+.sl-hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 40px; }
+.sl-hero-facts { display: flex; flex-wrap: wrap; gap: 32px; list-style: none; margin: 0; padding-top: 16px; }
+.sl-hero-facts li { display: inline-flex; align-items: center; gap: 8px; }
+.sl-hero-live { width: 260px; flex: none; }
+.sl-hero-round { position: absolute; left: var(--sl-gutter); bottom: 24px; }
+.sl-hero-ki { position: absolute; right: var(--sl-gutter); bottom: 24px; }
+@media (max-width: 1023px) {
+  .sl-hero-content { grid-template-columns: 1fr; padding-block: 120px 96px; }
+  .sl-hero-text { max-width: none; }
+  .sl-hero-live { width: 100%; }
+  .sl-hero-poster-desktop { display: none; }
+  .sl-hero-poster-mobile { display: block; }
+  .sl-hero-actions .sl-btn { flex: 1 1 100%; justify-content: center; }
+  .sl-hero-round, .sl-hero-ki { display: none; }
+}
+
+/* ==========================  LIVE-Karte  ========================== */
+.sl-live { padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.sl-live-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.sl-live-title { display: inline-flex; align-items: center; gap: 8px; color: var(--sl-ink); }
+.sl-live-dot { width: 7px; height: 7px; border-radius: 999px; background: var(--sl-faint); flex: none; }
+.sl-live-dot.is-running { background: var(--sl-signal-500); animation: sl-pulse 1.8s ease-in-out infinite; }
+@keyframes sl-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+.sl-live-expand { color: var(--sl-mute); background: none; padding: 4px; line-height: 0; }
+.sl-live-expand:hover { color: var(--sl-ink); }
+.sl-live-media { position: relative; aspect-ratio: 16 / 10; border-radius: 4px; overflow: hidden; background: var(--sl-night-800); }
+.sl-live-media video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.sl-live-rows { margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.sl-live-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.sl-live-row dt { margin: 0; }
+.sl-live-value { margin: 0; font-size: 14px; text-align: right; }
+.sl-live-chip { display: flex; justify-content: flex-end; }
+@media (max-width: 1023px) { .sl-live-chip { justify-content: flex-start; } }
