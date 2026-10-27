@@ -12,6 +12,8 @@ import { Preise } from "./sections/Preise";
 import { Start } from "./sections/Start";
 import { Kontakt } from "./sections/Kontakt";
 import { Footer } from "./sections/Footer";
+import { BookingDialog } from "./booking/BookingDialog";
+import { ReelLightbox } from "./ui/ReelLightbox";
 
 /** Vorauswahl, die von außen ins Buchungsformular gereicht wird (B.1). */
 export type BookingPreset = {
@@ -23,14 +25,16 @@ export type BookingPreset = {
 
 /** Orchestriert die öffentliche Seite: Runden 01–08, Kontakt, Footer, Dialoge. */
 export function SiteShell() {
-  const [, setBooking] = useState<BookingPreset | null>(null);
-  const [, setReel] = useState(false);
+  const [booking, setBooking] = useState<BookingPreset | null>(null);
+  const [reel, setReel] = useState(false);
 
   const openBooking = useCallback(
     (preset: BookingPreset = {}) => setBooking(preset),
     [],
   );
+  const closeBooking = useCallback(() => setBooking(null), []);
   const openReel = useCallback(() => setReel(true), []);
+  const closeReel = useCallback(() => setReel(false), []);
 
   return (
     <>
@@ -49,6 +53,9 @@ export function SiteShell() {
       </main>
 
       <Footer />
+
+      <BookingDialog preset={booking} onClose={closeBooking} />
+      <ReelLightbox open={reel} onClose={closeReel} />
     </>
   );
 }
