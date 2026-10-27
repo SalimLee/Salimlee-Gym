@@ -213,3 +213,28 @@ MIT License - siehe [LICENSE](LICENSE) Datei.
 ---
 
 Made with ❤️ für Salim Lee Boxing & Fitness Gym
+
+## Cinematic-Landingpage (Phase 4/5)
+
+Die oeffentliche Seite liegt in der Route-Group `app/(site)/`, die Bausteine in
+`components/site/`. Inhalte: `content/site.ts`, Medien-Registry: `content/media.ts`
+(generiert). Spezifikation: `docs/CINEMATIC.md`, Design-System: `docs/DESIGN-CINEMATIC.md`.
+
+### Skripte
+
+```bash
+# Farb-LUTs (Sonne/Nebel) aus Keyframe->graded-Paaren berechnen
+python3 scripts/cinematic/lut.py
+
+# Medien aufbereiten -> public/media + content/media.ts
+node scripts/cinematic/media.mjs            # H.264 + AVIF
+node scripts/cinematic/media.mjs --av1      # zusaetzlich AV1 (langsam)
+node scripts/cinematic/media.mjs --clean    # public/media vorher leeren
+
+# Tests (u.a. Buchungs-Payload)
+npm test
+```
+
+Schriften liegen ausschliesslich lokal im Repo (Geist/Geist Mono in
+`app/(site)/fonts/`, Barlow/Inter in `public/fonts/`). Es gibt keine Anfrage an
+Google Fonts – auch nicht im Admin.

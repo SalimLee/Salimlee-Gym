@@ -29,6 +29,18 @@ yarn-error.log*
 # vercel
 .vercel
 
+# cinematic: heavy source media (raw clips, 4K generations, references) stay local
+assets/content/raw/
+assets/content/keyframes/
+assets/content/reference/
+assets/content/omni-input/
+assets/content/generated/
+docs/referenz/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Lighthouse-Rohreports (base64-Screenshots, ~1 MB je Datei) bleiben lokal
+docs/qa/lighthouse/*.report.html
+docs/qa/lighthouse/*.report.json

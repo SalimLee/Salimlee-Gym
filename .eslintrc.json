@@ -1,0 +1,15 @@
+{
+  "extends": "next/core-web-vitals",
+  "ignorePatterns": [
+    "app/admin/**",
+    "app/api/**",
+    "components/admin/**",
+    "components/sections/**",
+    "components/ui/**",
+    "lib/**",
+    "scripts/**",
+    "types/**",
+    "public/**",
+    ".next/**"
+  ]
+}
