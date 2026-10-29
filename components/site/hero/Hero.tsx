@@ -53,9 +53,9 @@ export function Hero({ onBook, onReel }: Props) {
 
       tl.from(
         '[data-anim="rule"]',
-          { scaleX: 0, duration: 0.6, stagger: 0.08 },
-          0.3,
-        )
+        { scaleX: 0, duration: 0.6, stagger: 0.08 },
+        0.3,
+      )
         // Eyebrow, Lead, Buttons und Fakten steigen per CSS auf (sl-rise):
         // der Lead ist das LCP-Element und darf nicht auf das JS warten.
         .from(
@@ -90,16 +90,24 @@ export function Hero({ onBook, onReel }: Props) {
           scrub: true,
         },
       });
-      gsap.to('[data-anim="live"]', {
-        opacity: 0,
-        ease: "none",
-        scrollTrigger: {
-          trigger: root,
-          start: "top top",
-          end: "center top",
-          scrub: true,
+      // fromTo mit immediateRender: false — ein blankes to() würde seinen
+      // Startwert beim Anlegen lesen, und da steht durch das Intro-from()
+      // noch opacity 0. Die Karte käme beim Hochscrollen nie zurück.
+      gsap.fromTo(
+        '[data-anim="live"]',
+        { opacity: 1 },
+        {
+          opacity: 0,
+          ease: "none",
+          immediateRender: false,
+          scrollTrigger: {
+            trigger: root,
+            start: "top top",
+            end: "center top",
+            scrub: true,
+          },
         },
-      });
+      );
     }, root);
 
     return () => ctx.revert();
@@ -175,8 +183,7 @@ export function Hero({ onBook, onReel }: Props) {
             src={poster ?? posterMobile}
             alt={HERO.alt}
             className="sl-video-layer"
-            // @ts-expect-error fetchpriority ist (noch) nicht typisiert
-            fetchpriority="high"
+            fetchPriority="high"
             decoding="async"
           />
         </picture>
